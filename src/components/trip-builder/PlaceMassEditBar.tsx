@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Layers, X, Star, EyeOff, CheckCircle2, Trash2 } from "lucide-react";
+import { Layers, X, Star, EyeOff, CheckCircle2, Trash2, CalendarDays } from "lucide-react";
 import type { DayRangeConstraint } from "../../types";
+import { formatDayIndexLabel } from "../../utils/dayRangeUtils";
 
 export interface PlaceMassEditBarProps {
   showMassEditBar: boolean;
@@ -8,6 +9,7 @@ export interface PlaceMassEditBarProps {
   searchQuery: string;
   days: number;
   dayTitles?: Record<number, string>;
+  startDate?: string;
   allFilteredStarred: boolean;
   onMassStar: () => void;
   allFilteredDisabled: boolean;
@@ -25,6 +27,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
     searchQuery,
     days,
     dayTitles,
+    startDate,
     allFilteredStarred,
     onMassStar,
     allFilteredDisabled,
@@ -34,29 +37,35 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
     onMassDelete,
     onClose,
   }) => {
-    const [showCustomRangePicker, setShowCustomRangePicker] = useState(false);
-    const [customRangeStart, setCustomRangeStart] = useState(0);
-    const [customRangeEnd, setCustomRangeEnd] = useState(Math.max(0, days - 1));
+    const [showDateRangePicker, setShowDateRangePicker] = useState(false);
+    const [rangeStart, setRangeStart] = useState(0);
+    const [rangeEnd, setRangeEnd] = useState(Math.max(0, days - 1));
 
     if (!showMassEditBar) return null;
 
     const isSearching = searchQuery.trim().length > 0;
     const dayIndices = Array.from({ length: days }, (_, i) => i);
 
-    const handleApplyCustomRange = () => {
-      const start = Math.min(customRangeStart, customRangeEnd);
-      const end = Math.max(customRangeStart, customRangeEnd);
+    const handleApplyRange = () => {
+      const start = Math.min(rangeStart, rangeEnd);
+      const end = Math.max(rangeStart, rangeEnd);
       onApplyDayRestriction({ startDay: start, endDay: end });
-      setShowCustomRangePicker(false);
+      setShowDateRangePicker(false);
+    };
+
+    const handleClearRestriction = () => {
+      onApplyDayRestriction(null);
+      setShowDateRangePicker(false);
     };
 
     const handleClose = () => {
-      setShowCustomRangePicker(false);
+      setShowDateRangePicker(false);
       onClose();
     };
 
     return (
       <div className="bg-primary-50/90 dark:bg-primary-950/40 border border-primary-200 dark:border-primary-800/80 rounded-xl p-3 mb-3 text-xs shadow-2xs animate-in fade-in slide-in-from-top-1 duration-150">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-primary-200/60 dark:border-primary-800/50">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary-100 dark:bg-primary-900/70 flex items-center justify-center text-primary-700 dark:text-primary-300 shrink-0">
@@ -93,83 +102,22 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
           </button>
         </div>
 
+        {/* Action Buttons Row */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Day Restriction Selector */}
-          <select
-            defaultValue=""
-            onChange={(e) => {
-              const val = e.target.value;
-              if (!val) return;
-              if (val === "clear") {
-                onApplyDayRestriction(null);
-              } else if (val === "first-half") {
-                const halfEnd = Math.ceil(days / 2) - 1;
-                onApplyDayRestriction({ startDay: 0, endDay: Math.max(0, halfEnd) });
-              } else if (val === "second-half") {
-                const halfStart = Math.ceil(days / 2);
-                onApplyDayRestriction({
-                  startDay: Math.min(days - 1, halfStart),
-                  endDay: days - 1,
-                });
-              } else if (val === "custom") {
-                setShowCustomRangePicker(true);
-              } else if (val.startsWith("day-")) {
-                const dayIdx = parseInt(val.replace("day-", ""), 10);
-                onApplyDayRestriction({ startDay: dayIdx, endDay: dayIdx });
-              }
-              e.target.value = "";
-            }}
-            className="h-8 text-xs font-semibold bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 hover:bg-surface-50 dark:hover:bg-surface-700 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer shadow-2xs"
-            style={{ colorScheme: "dark light" }}
-            title="Restrict all results to specific days"
+          {/* Restrict to Date / Day Range Button */}
+          <button
+            type="button"
+            onClick={() => setShowDateRangePicker((prev) => !prev)}
+            className={`h-8 px-2.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+              showDateRangePicker
+                ? "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 border-indigo-300 dark:border-indigo-700 shadow-xs"
+                : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
+            }`}
+            title="Restrict all results to a specific date or day range (e.g., Days 2–4)"
           >
-            <option value="" className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100">
-              📅 Restrict to Days...
-            </option>
-            <option value="clear" className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100">
-              ❌ Clear Day Restriction
-            </option>
-            <optgroup
-              label="Single Day Only"
-              className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 font-bold"
-            >
-              {dayIndices.map((i) => {
-                const title = dayTitles?.[i]?.trim();
-                return (
-                  <option
-                    key={i}
-                    value={`day-${i}`}
-                    className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 font-normal"
-                  >
-                    Day {i + 1}
-                    {title ? `: ${title}` : ""}
-                  </option>
-                );
-              })}
-            </optgroup>
-            {days > 2 && (
-              <optgroup
-                label="Multi-Day Ranges"
-                className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 font-bold"
-              >
-                <option
-                  value="first-half"
-                  className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 font-normal"
-                >
-                  Days 1–{Math.ceil(days / 2)} (First Half)
-                </option>
-                <option
-                  value="second-half"
-                  className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 font-normal"
-                >
-                  Days {Math.ceil(days / 2) + 1}–{days} (Second Half)
-                </option>
-              </optgroup>
-            )}
-            <option value="custom" className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100">
-              ⚙️ Custom Day Range...
-            </option>
-          </select>
+            <CalendarDays className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>Restrict Date Range</span>
+          </button>
 
           {/* Star All / Unstar All */}
           <button
@@ -222,7 +170,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
             )}
           </button>
 
-          {/* Assign to Day */}
+          {/* Hard Assign to Specific Day */}
           <select
             defaultValue=""
             onChange={(e) => {
@@ -238,7 +186,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
             }}
             className="h-8 text-xs font-semibold bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 hover:bg-surface-50 dark:hover:bg-surface-700 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer shadow-2xs"
             style={{ colorScheme: "dark light" }}
-            title="Assign all results directly to a day or unassign all"
+            title="Directly assign all results to a specific itinerary day (or unassign all)"
           >
             <option value="" className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100">
               📌 Assign to Day...
@@ -247,7 +195,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
               Unassign All
             </option>
             <optgroup
-              label="Assign to Day"
+              label="Assign to Specific Day"
               className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 font-bold"
             >
               {dayIndices.map((i) => {
@@ -278,58 +226,159 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
           </button>
         </div>
 
-        {/* Custom Day Range Inline Picker */}
-        {showCustomRangePicker && (
-          <div className="mt-2.5 pt-2.5 border-t border-primary-200/60 dark:border-primary-800/50 flex flex-wrap items-center gap-2 text-xs animate-in fade-in duration-150">
-            <span className="font-semibold text-surface-700 dark:text-surface-300">
-              Custom Day Range:
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-surface-500">From</span>
-              <select
-                value={customRangeStart}
-                onChange={(e) => setCustomRangeStart(parseInt(e.target.value, 10))}
-                className="h-7 text-xs bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded px-2 text-surface-800 dark:text-surface-200"
-                style={{ colorScheme: "dark light" }}
+        {/* Dedicated Date / Day Range Restriction Panel */}
+        {showDateRangePicker && (
+          <div className="mt-3 pt-3 border-t border-primary-200/60 dark:border-primary-800/50 space-y-3 bg-white/60 dark:bg-surface-900/40 rounded-lg p-3 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+              <div>
+                <span className="font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  Restrict {filteredPlacesCount} Place{filteredPlacesCount === 1 ? "" : "s"} to Date / Day Range
+                </span>
+                <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5">
+                  The optimizer will only schedule these places within your chosen start and end dates.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearRestriction}
+                className="text-[11px] font-semibold text-red-600 dark:text-red-400 hover:underline self-start sm:self-auto cursor-pointer"
+                title="Remove any date range constraints from all matching places"
               >
-                {dayIndices.map((i) => (
-                  <option key={i} value={i} className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100">
-                    Day {i + 1}
-                    {dayTitles?.[i]?.trim() ? `: ${dayTitles[i]}` : ""}
-                  </option>
-                ))}
-              </select>
+                Clear Day Restriction
+              </button>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-surface-500">To</span>
-              <select
-                value={customRangeEnd}
-                onChange={(e) => setCustomRangeEnd(parseInt(e.target.value, 10))}
-                className="h-7 text-xs bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded px-2 text-surface-800 dark:text-surface-200"
-                style={{ colorScheme: "dark light" }}
+
+            {/* Date Range Dropdowns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-1">
+                  From (Start Date / Day)
+                </label>
+                <select
+                  value={rangeStart}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setRangeStart(val);
+                    if (val > rangeEnd) setRangeEnd(val);
+                  }}
+                  className="w-full h-8 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer shadow-2xs"
+                  style={{ colorScheme: "dark light" }}
+                >
+                  {dayIndices.map((i) => (
+                    <option
+                      key={i}
+                      value={i}
+                      className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100"
+                    >
+                      {formatDayIndexLabel(i, startDate, dayTitles)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-1">
+                  To (End Date / Day)
+                </label>
+                <select
+                  value={rangeEnd}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setRangeEnd(val);
+                    if (val < rangeStart) setRangeStart(val);
+                  }}
+                  className="w-full h-8 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer shadow-2xs"
+                  style={{ colorScheme: "dark light" }}
+                >
+                  {dayIndices.map((i) => (
+                    <option
+                      key={i}
+                      value={i}
+                      className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100"
+                    >
+                      {formatDayIndexLabel(i, startDate, dayTitles)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Quick Range Presets */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              <span className="text-[10px] font-bold text-surface-400 uppercase tracking-wider">
+                Presets:
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRangeStart(0);
+                  setRangeEnd(days - 1);
+                }}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer border border-surface-200 dark:border-surface-700"
               >
-                {dayIndices.map((i) => (
-                  <option key={i} value={i} className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100">
-                    Day {i + 1}
-                    {dayTitles?.[i]?.trim() ? `: ${dayTitles[i]}` : ""}
-                  </option>
-                ))}
-              </select>
+                Full Trip
+              </button>
+              {days > 2 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRangeStart(0);
+                      setRangeEnd(Math.ceil(days / 2) - 1);
+                    }}
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer border border-surface-200 dark:border-surface-700"
+                  >
+                    First Half (Days 1–{Math.ceil(days / 2)})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRangeStart(Math.ceil(days / 2));
+                      setRangeEnd(days - 1);
+                    }}
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer border border-surface-200 dark:border-surface-700"
+                  >
+                    Second Half (Days {Math.ceil(days / 2) + 1}–{days})
+                  </button>
+                </>
+              )}
+              {dayIndices.map((i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setRangeStart(i);
+                    setRangeEnd(i);
+                  }}
+                  className={`text-[11px] font-medium px-1.5 py-0.5 rounded transition-colors cursor-pointer border ${
+                    rangeStart === i && rangeEnd === i
+                      ? "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 border-indigo-300 dark:border-indigo-700 font-bold"
+                      : "bg-surface-50 hover:bg-surface-100 dark:bg-surface-800/80 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 border-surface-200 dark:border-surface-700"
+                  }`}
+                >
+                  Day {i + 1}
+                </button>
+              ))}
             </div>
-            <button
-              type="button"
-              onClick={handleApplyCustomRange}
-              className="h-7 px-3 rounded-md bg-primary-600 hover:bg-primary-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
-            >
-              Apply Range
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCustomRangePicker(false)}
-              className="h-7 px-2.5 rounded-md bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-300 dark:hover:bg-surface-600 font-semibold cursor-pointer transition-colors"
-            >
-              Cancel
-            </button>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 pt-1 border-t border-surface-200/50 dark:border-surface-700/50">
+              <button
+                type="button"
+                onClick={handleApplyRange}
+                className="h-7 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
+              >
+                Apply Date Range
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDateRangePicker(false)}
+                className="h-7 px-2.5 rounded-lg bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-300 dark:hover:bg-surface-600 font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
       </div>

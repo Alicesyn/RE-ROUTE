@@ -524,6 +524,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           searchQuery={searchQuery}
           days={days}
           dayTitles={dayTitles}
+          startDate={startDate}
           allFilteredStarred={allFilteredStarred}
           onMassStar={handleMassStar}
           allFilteredDisabled={allFilteredDisabled}
