@@ -11,7 +11,7 @@ import { toast } from "./services/toastService";
 import { useRouteStore } from "./store/useRouteStore";
 import { solveTSP } from "./services/tspSolver";
 import { clearMapsCache, fetchFreshPhoto } from "./services/mapsService";
-import { Wand2, Sparkles, ChevronDown, ChevronUp, RefreshCw, Loader2, MapPin, RotateCcw, Trash2 } from "lucide-react";
+import { Wand2, Sparkles, RefreshCw, Loader2, MapPin, RotateCcw, Trash2 } from "lucide-react";
 
 const MapView = React.lazy(() =>
   import("./components/map/MapView").then((m) => ({ default: m.MapView }))
@@ -53,7 +53,6 @@ function App() {
     dayEndTime,
     categoryConfigs,
   } = useRouteStore();
-  const [isExpanded, setIsExpanded] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showMobileMap, setShowMobileMap] = useState(false);
@@ -743,26 +742,7 @@ function App() {
             <PlaceSearch />
 
             <div className="mt-4">
-              <PlaceList isExpanded={isExpanded} />
-
-              {places.length > 6 && (
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="w-full mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-surface-500 hover:text-surface-800 dark:text-surface-400 dark:hover:text-surface-200 bg-surface-100 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 py-2.5 rounded-lg transition-colors"
-                >
-                  {isExpanded ? (
-                    <>
-                      <ChevronUp className="w-4 h-4" /> Collapse Grid
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="w-4 h-4" /> Expand Grid to Show
-                      All {places.length} Places
-                    </>
-                  )}
-                </button>
-              )}
-              
+              <PlaceList />
               <SuggestedPlaces />
             </div>
           </div>

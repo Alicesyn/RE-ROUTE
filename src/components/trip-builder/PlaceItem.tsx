@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, MapPin, Pin, Clock, Timer, AlertCircle, Sparkles, Loader2, ExternalLink, Eye, EyeOff, Coins, Star } from "lucide-react";
+import { GripVertical, Trash2, MapPin, Pin, Clock, Timer, AlertCircle, Sparkles, Loader2, ExternalLink, Eye, EyeOff, Coins, Star, Copy, X, Check } from "lucide-react";
 import { Place, PlaceCategory } from "../../types";
 import { useRouteStore } from "../../store/useRouteStore";
+import { toast } from "../../services/toastService";
 import {
   getCategoryEmoji,
   getCategoryLabel,
@@ -40,9 +41,10 @@ const getBadgeColor = (dayIndex: number | null) => {
 
 interface PlaceItemProps {
   place: Place;
+  isDuplicate?: boolean;
 }
 
-export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place }) => {
+export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplicate }) => {
   const updatePlace = useRouteStore((s) => s.updatePlace);
   const removePlace = useRouteStore((s) => s.removePlace);
   const assignPlaceToDay = useRouteStore((s) => s.assignPlaceToDay);
@@ -62,11 +64,46 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const durationRef = useRef<HTMLInputElement>(null);
 
+  const [isEditingHighlight, setIsEditingHighlight] = useState(false);
+  const [highlightLabelVal, setHighlightLabelVal] = useState(
+    place.highlight?.label || (place.category === "restaurant" ? "Must-Try" : "Pro Tip"),
+  );
+  const [highlightTextVal, setHighlightTextVal] = useState(place.highlight?.text || "");
+
   // Sync local state if the place is updated externally (e.g. by AI generation)
   useEffect(() => {
     if (!isEditing) setDesc(place.description || "");
     if (!isEditingDuration) setDurationVal((place.estimatedDuration ?? 60).toString());
-  }, [place.description, place.estimatedDuration, isEditing, isEditingDuration]);
+    if (!isEditingHighlight) {
+      setHighlightLabelVal(
+        place.highlight?.label || (place.category === "restaurant" ? "Must-Try" : "Pro Tip"),
+      );
+      setHighlightTextVal(place.highlight?.text || "");
+    }
+  }, [place.description, place.estimatedDuration, place.highlight, place.category, isEditing, isEditingDuration, isEditingHighlight]);
+
+  const handleSaveHighlight = () => {
+    if (highlightTextVal.trim()) {
+      updatePlace(place.id, {
+        highlight: {
+          label: highlightLabelVal.trim() || (place.category === "restaurant" ? "Must-Try" : "Highlight"),
+          text: highlightTextVal.trim(),
+        },
+      });
+      toast.success(`Updated ${highlightLabelVal.trim() || "Must-Try"} for ${place.name}.`, "Highlight Saved");
+    } else {
+      updatePlace(place.id, { highlight: undefined });
+      toast.info(`Removed highlight from ${place.name}.`, "Highlight Removed");
+    }
+    setIsEditingHighlight(false);
+  };
+
+  const handleRemoveHighlight = () => {
+    updatePlace(place.id, { highlight: undefined });
+    setHighlightTextVal("");
+    setIsEditingHighlight(false);
+    toast.info(`Removed highlight from ${place.name}.`, "Highlight Removed");
+  };
 
   const {
     attributes,
@@ -254,6 +291,43 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place }) => {
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-300/80 dark:border-amber-800/80 ml-1.5 align-middle shrink-0">
                       <EyeOff className="w-2.5 h-2.5" /> Excluded
                     </span>
+                  )}
+                  {isDuplicate && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 ml-1.5 align-middle shrink-0 shadow-2xs"
+                      title="Duplicate place: This location appears multiple times in your trip. Click ✕ to remove the duplicate flag."
+                    >
+                      <Copy className="w-2.5 h-2.5" />
+                      <span>Duplicate</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updatePlace(place.id, { dismissedDuplicate: true });
+                          toast.info(`Removed duplicate flag from "${place.name}".`, "Duplicate Dismissed");
+                        }}
+                        className="hover:bg-rose-200/80 dark:hover:bg-rose-800/80 text-rose-600 hover:text-rose-900 dark:text-rose-400 dark:hover:text-rose-200 rounded p-0.5 ml-0.5 transition-colors cursor-pointer"
+                        title="Remove duplicate flag (this place is not a duplicate)"
+                        aria-label="Remove duplicate flag"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  )}
+                  {place.dismissedDuplicate && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updatePlace(place.id, { dismissedDuplicate: false });
+                        toast.info(`Restored duplicate check for "${place.name}".`, "Duplicate Flag Restored");
+                      }}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-500 dark:text-surface-400 border border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600 ml-1.5 align-middle shrink-0 transition-colors cursor-pointer"
+                      title="Duplicate flag was removed. Click to re-enable duplicate checking."
+                    >
+                      <Check className="w-2.5 h-2.5 text-emerald-500" />
+                      <span>Not Dup</span>
+                    </button>
                   )}
                 </h3>
                 <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5 truncate">
@@ -506,11 +580,111 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place }) => {
             )}
           </div>
 
-          {/* Contextual Highlight (Must-Try, Photo Spot, etc.) - Always visible, never cut off */}
-          {place.highlight && place.highlight.text && (
-            <div className="mt-2">
-              <PlaceHighlightBadge highlight={place.highlight} category={place.category} />
+          {/* Contextual Highlight (Must-Try, Photo Spot, etc.) */}
+          {isEditingHighlight ? (
+            <div className="mt-2 p-2.5 rounded-lg bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 space-y-2 text-xs animate-in fade-in duration-150">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <select
+                    value={
+                      ["Must-Try", "Best Photo Spot", "Pro Tip", "Best Time to Go", "What to Buy"].includes(highlightLabelVal)
+                        ? highlightLabelVal
+                        : "Custom"
+                    }
+                    onChange={(e) => {
+                      if (e.target.value !== "Custom") {
+                        setHighlightLabelVal(e.target.value);
+                      }
+                    }}
+                    className="text-[11px] font-bold bg-white dark:bg-surface-800 border border-amber-200 dark:border-amber-800 rounded px-1.5 py-0.5 text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                  >
+                    <option value="Must-Try">Must-Try</option>
+                    <option value="Best Photo Spot">Best Photo Spot</option>
+                    <option value="Pro Tip">Pro Tip</option>
+                    <option value="Best Time to Go">Best Time to Go</option>
+                    <option value="What to Buy">What to Buy</option>
+                    <option value="Custom">Custom Label...</option>
+                  </select>
+                  {!["Must-Try", "Best Photo Spot", "Pro Tip", "Best Time to Go", "What to Buy"].includes(highlightLabelVal) && (
+                    <input
+                      type="text"
+                      value={highlightLabelVal}
+                      onChange={(e) => setHighlightLabelVal(e.target.value)}
+                      placeholder="Label"
+                      className="text-[11px] font-bold bg-white dark:bg-surface-800 border border-amber-200 dark:border-amber-800 rounded px-1.5 py-0.5 text-amber-900 dark:text-amber-200 w-24 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  )}
+                </div>
+                {place.highlight?.text && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveHighlight}
+                    className="text-[10px] text-red-600 dark:text-red-400 hover:underline cursor-pointer"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={highlightTextVal}
+                onChange={(e) => setHighlightTextVal(e.target.value)}
+                placeholder={place.category === "restaurant" ? "e.g. Signature ramen dipping broth & gyoza" : "e.g. Sunset viewing spot from garden"}
+                rows={2}
+                autoFocus
+                className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-amber-300 dark:border-amber-700 rounded-md p-1.5 text-surface-900 dark:text-white placeholder:text-surface-400 focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSaveHighlight();
+                  }
+                  if (e.key === "Escape") {
+                    setIsEditingHighlight(false);
+                    setHighlightTextVal(place.highlight?.text || "");
+                  }
+                }}
+              />
+              <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingHighlight(false);
+                    setHighlightTextVal(place.highlight?.text || "");
+                  }}
+                  className="px-2 py-1 text-xs text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white rounded hover:bg-surface-200 dark:hover:bg-surface-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveHighlight}
+                  className="px-2.5 py-1 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors shadow-2xs cursor-pointer"
+                >
+                  Save
+                </button>
+              </div>
             </div>
+          ) : place.highlight && place.highlight.text ? (
+            <div className="mt-2">
+              <PlaceHighlightBadge
+                highlight={place.highlight}
+                category={place.category}
+                onEdit={() => setIsEditingHighlight(true)}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setHighlightLabelVal(place.category === "restaurant" ? "Must-Try" : "Pro Tip");
+                setIsEditingHighlight(true);
+              }}
+              className="mt-1.5 text-[11px] font-medium text-amber-700/80 dark:text-amber-400/80 hover:text-amber-800 dark:hover:text-amber-300 flex items-center gap-1 opacity-0 group-hover:opacity-100 hover:bg-amber-50/80 dark:hover:bg-amber-950/30 px-1.5 py-0.5 rounded transition-all cursor-pointer"
+              title={`Add ${place.category === "restaurant" ? "Must-Try" : "highlight"}`}
+            >
+              <Sparkles className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+              <span>+ Add {place.category === "restaurant" ? "Must-Try" : "Highlight"}</span>
+            </button>
           )}
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy } from "lucide-react";
 import { useRouteStore } from "../../store/useRouteStore";
 import { ALL_CATEGORIES, getCategoryEmoji, getCategoryLabel, getDefaultDuration } from "../../utils/categoryUtils";
 import { PlaceCategory, ReservationInfo, ReservationRequirement } from "../../types";
@@ -32,6 +32,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [reservationNotes, setReservationNotes] = useState("");
   const [customTimeVal, setCustomTimeVal] = useState("");
   const [isStarred, setIsStarred] = useState(false);
+  const [dismissedDuplicate, setDismissedDuplicate] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setReservationNotes(place.reservation?.notes || "");
       setCustomTimeVal(place.customTime || "");
       setIsStarred(!!place.isStarred);
+      setDismissedDuplicate(!!place.dismissedDuplicate);
     }
   }, [place]);
 
@@ -91,6 +93,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       customTime: trimmedCustomTime || undefined,
       pinnedToDay: trimmedCustomTime ? true : place.pinnedToDay,
       isStarred,
+      dismissedDuplicate,
     });
     onClose();
 
@@ -277,9 +280,22 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                 <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>Contextual Highlight (Must-Try, Photo Spot, Advice)</span>
               </label>
-              <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
-                Always shown on card
-              </span>
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                {["Must-Try", "Best Photo Spot", "Pro Tip", "Best Time to Go", "What to Buy"].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setHighlightLabel(preset)}
+                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                      highlightLabel === preset
+                        ? "bg-amber-200 dark:bg-amber-800/80 text-amber-900 dark:text-amber-100 font-bold shadow-2xs"
+                        : "bg-amber-100/60 dark:bg-amber-950/40 hover:bg-amber-200/80 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <input
@@ -390,6 +406,33 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                 aria-label="Must-visit place"
               />
               <div className="w-9 h-5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-700 peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          {/* Duplicate Detection Dismiss Override Toggle */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-surface-100/60 dark:bg-surface-800/40 border border-surface-200 dark:border-surface-700/80">
+            <div className="flex items-center gap-2.5">
+              <div className={`p-2 rounded-lg ${dismissedDuplicate ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400" : "bg-surface-200/60 dark:bg-surface-700 text-surface-400 dark:text-surface-500"}`}>
+                <Copy className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
+                  Dismiss Duplicate Flag
+                </span>
+                <p className="text-[10px] text-surface-500 dark:text-surface-400">
+                  Treat this place as a distinct location and ignore duplicate warnings.
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer ml-3 shrink-0">
+              <input
+                type="checkbox"
+                checked={dismissedDuplicate}
+                onChange={(e) => setDismissedDuplicate(e.target.checked)}
+                className="sr-only peer"
+                aria-label="Dismiss duplicate flag"
+              />
+              <div className="w-9 h-5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-700 peer-checked:bg-emerald-500"></div>
             </label>
           </div>
         </div>

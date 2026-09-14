@@ -905,7 +905,12 @@ const SortableStop: React.FC<SortableStopProps> = React.memo(
             {/* Contextual Highlight (Must-Try, Photo Spot, etc.) - Always visible, never cut off */}
             {stop.highlight && stop.highlight.text && (
               <div className="mt-2">
-                <PlaceHighlightBadge highlight={stop.highlight} category={stop.category} compact />
+                <PlaceHighlightBadge
+                  highlight={stop.highlight}
+                  category={stop.category}
+                  compact
+                  onEdit={() => onEdit(stop.id)}
+                />
               </div>
             )}
           </div>

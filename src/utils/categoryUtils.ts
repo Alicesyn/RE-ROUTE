@@ -6,20 +6,20 @@ import { CATEGORY_DEFAULTS, ALL_CATEGORIES } from "./categoryConstants";
 export { CATEGORY_DEFAULTS, ALL_CATEGORIES };
 
 export function getCategoryLabel(cat: PlaceCategory): string {
-  return CATEGORY_DEFAULTS[cat].label;
+  return CATEGORY_DEFAULTS[cat]?.label ?? "Other";
 }
 
 export function getCategoryFallbackImage(cat: PlaceCategory): string {
-  return CATEGORY_DEFAULTS[cat].fallbackImage;
+  return CATEGORY_DEFAULTS[cat]?.fallbackImage ?? CATEGORY_DEFAULTS.other.fallbackImage;
 }
 
 export function getCategoryEmoji(cat: PlaceCategory): string {
-  return CATEGORY_DEFAULTS[cat].emoji;
+  return CATEGORY_DEFAULTS[cat]?.emoji ?? "📍";
 }
 
 export function getDefaultDuration(cat: PlaceCategory): number {
   const customDurations = useRouteStore.getState().categoryDurations;
-  return customDurations?.[cat] ?? CATEGORY_DEFAULTS[cat].duration;
+  return customDurations?.[cat] ?? CATEGORY_DEFAULTS[cat]?.duration ?? 60;
 }
 
 export function getActivePhotoUrl(photoUrl: string | undefined): string | undefined {

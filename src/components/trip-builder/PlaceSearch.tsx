@@ -20,6 +20,7 @@ import {
   autoCategorize,
   getDefaultDuration,
 } from "../../utils/categoryUtils";
+import { toast } from "../../services/toastService";
 const ImportModal = React.lazy(() =>
   import("./ImportModal").then((m) => ({ default: m.ImportModal }))
 );
@@ -126,6 +127,21 @@ export const PlaceSearch: React.FC = () => {
   };
 
   const handleAdd = (place: any) => {
+    const existing = findExistingPlace(place);
+    if (existing) {
+      const confirmAdd = window.confirm(
+        `"${place.name}" is already in your Places To Visit (${
+          existing.isDisabled
+            ? "Excluded"
+            : existing.dayIndex !== null
+            ? `Day ${existing.dayIndex + 1}`
+            : "Unassigned"
+        }).\n\nDo you want to add a duplicate copy?`
+      );
+      if (!confirmAdd) return;
+      toast.warning(`Added duplicate copy of "${place.name}".`, "Duplicate Added");
+    }
+
     // For real places, we initialize them with limited data; Gemini will fill the rest
     const category =
       place.category || autoCategorize(place.name, place.description || "", place.types || []);

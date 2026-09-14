@@ -1,5 +1,5 @@
 import React from "react";
-import { Utensils, Camera, Sparkles, ShoppingBag, Lightbulb, Sun } from "lucide-react";
+import { Utensils, Camera, Sparkles, ShoppingBag, Lightbulb, Sun, Pencil } from "lucide-react";
 import { PlaceHighlight, PlaceCategory } from "../../types";
 
 interface PlaceHighlightBadgeProps {
@@ -7,6 +7,7 @@ interface PlaceHighlightBadgeProps {
   category?: PlaceCategory;
   className?: string;
   compact?: boolean;
+  onEdit?: () => void;
 }
 
 export const PlaceHighlightBadge: React.FC<PlaceHighlightBadgeProps> = ({
@@ -14,6 +15,7 @@ export const PlaceHighlightBadge: React.FC<PlaceHighlightBadgeProps> = ({
   category,
   className = "",
   compact = false,
+  onEdit,
 }) => {
   if (!highlight || !highlight.text?.trim()) return null;
 
@@ -44,7 +46,11 @@ export const PlaceHighlightBadge: React.FC<PlaceHighlightBadgeProps> = ({
 
   return (
     <div
-      className={`flex items-start gap-1.5 rounded-lg border ${
+      onClick={onEdit}
+      title={onEdit ? `Click to edit ${label}` : undefined}
+      className={`flex items-start gap-1.5 rounded-lg border transition-colors ${
+        onEdit ? "cursor-pointer hover:border-amber-400 dark:hover:border-amber-600 hover:bg-amber-100/70 dark:hover:bg-amber-900/40 group/badge" : ""
+      } ${
         compact
           ? "px-2 py-1 text-[11px] bg-amber-50/80 dark:bg-amber-950/25 border-amber-200/60 dark:border-amber-800/40 text-amber-950 dark:text-amber-100"
           : "px-2.5 py-1.5 text-xs bg-amber-50/90 dark:bg-amber-950/30 border-amber-200/70 dark:border-amber-800/50 text-amber-950 dark:text-amber-100 shadow-sm"
@@ -59,6 +65,9 @@ export const PlaceHighlightBadge: React.FC<PlaceHighlightBadgeProps> = ({
           {highlight.text}
         </span>
       </div>
+      {onEdit && (
+        <Pencil className="w-3 h-3 text-amber-600 dark:text-amber-400 opacity-0 group-hover/badge:opacity-100 transition-opacity shrink-0 mt-0.5 ml-0.5" />
+      )}
     </div>
   );
 };
