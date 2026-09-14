@@ -15,6 +15,7 @@ import {
   Calendar,
   Plus,
   Trash2,
+  Utensils,
 } from "lucide-react";
 import { format, addDays, parseISO } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
@@ -49,6 +50,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [localFirstMax, setLocalFirstMax] = useState<Record<string, string>>({});
   const [localLastMin, setLocalLastMin] = useState<Record<string, string>>({});
   const [localLastMax, setLocalLastMax] = useState<Record<string, string>>({});
+  const [localMinSpacing, setLocalMinSpacing] = useState<Record<string, string>>({});
   const [localCustomMin, setLocalCustomMin] = useState<Record<string, string>>({});
   const [localCustomMax, setLocalCustomMax] = useState<Record<string, string>>({});
   const [newDaySelect, setNewDaySelect] = useState<Record<string, string>>({});
@@ -65,6 +67,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
       setLocalFirstMax({});
       setLocalLastMin({});
       setLocalLastMax({});
+      setLocalMinSpacing({});
       setLocalCustomMin({});
       setLocalCustomMax({});
       setNewDaySelect({});
@@ -108,6 +111,16 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } else {
       const max = parseInt(value, 10);
       if (!isNaN(max) && max >= 0) setCategoryConfig(category, { maxPerDay: max });
+    }
+  };
+
+  const handleMinSpacingChange = (category: PlaceCategory, value: string) => {
+    setLocalMinSpacing((prev) => ({ ...prev, [category]: value }));
+    if (value === "") {
+      setCategoryConfig(category, { minTimeBetween: null });
+    } else {
+      const spacing = parseInt(value, 10);
+      if (!isNaN(spacing) && spacing >= 0) setCategoryConfig(category, { minTimeBetween: spacing });
     }
   };
 
@@ -203,7 +216,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
 
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-900/50">
@@ -235,134 +248,139 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Appearance / Theme */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider">
-                  Appearance
-                </label>
-                <div className="flex bg-surface-100 dark:bg-surface-900 p-1 rounded-lg">
+              <div className="p-3 bg-surface-50 dark:bg-surface-700/30 rounded-xl border border-surface-200 dark:border-surface-700/50 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-surface-700 dark:text-surface-300 block">Appearance</span>
+                  <span className="text-[10px] text-surface-400">Theme mode</span>
+                </div>
+                <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setTheme("light")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       theme === "light"
-                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    <Sun className="w-4 h-4 text-amber-500" />
-                    Light Mode
+                    <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    Light
                   </button>
                   <button
                     onClick={() => setTheme("dark")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       theme === "dark"
-                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    <Moon className="w-4 h-4 text-surface-400" />
-                    Dark Mode
+                    <Moon className="w-3.5 h-3.5 text-surface-400" />
+                    Dark
                   </button>
                 </div>
               </div>
 
-              {/* Place Images */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider">
-                  Place Photos
-                </label>
-                <div className="flex bg-surface-100 dark:bg-surface-900 p-1 rounded-lg">
+              {/* Photo Previews */}
+              <div className="p-3 bg-surface-50 dark:bg-surface-700/30 rounded-xl border border-surface-200 dark:border-surface-700/50 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-surface-700 dark:text-surface-300 block">Place Photos</span>
+                  <span className="text-[10px] text-surface-400">Display location preview cards</span>
+                </div>
+                <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setShowImages(true)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       showImages
-                        ? "bg-white dark:bg-surface-700 text-emerald-600 dark:text-emerald-400 shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    <Image className="w-4 h-4 text-emerald-500" />
-                    Photos On
+                    <Image className="w-3.5 h-3.5" />
+                    On
                   </button>
                   <button
                     onClick={() => setShowImages(false)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       !showImages
-                        ? "bg-white dark:bg-surface-700 text-surface-800 dark:text-white shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-surface-900 dark:text-white shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    <ImageOff className="w-4 h-4 text-surface-400" />
-                    Photos Off
+                    <ImageOff className="w-3.5 h-3.5" />
+                    Off
                   </button>
                 </div>
               </div>
 
               {/* Distance Unit */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider">
-                  Distance Unit
-                </label>
-                <div className="flex bg-surface-100 dark:bg-surface-900 p-1 rounded-lg">
+              <div className="p-3 bg-surface-50 dark:bg-surface-700/30 rounded-xl border border-surface-200 dark:border-surface-700/50 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-surface-700 dark:text-surface-300 block">Distance Format</span>
+                  <span className="text-[10px] text-surface-400">Kilometers vs. Miles</span>
+                </div>
+                <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setDistanceUnit("metric")}
-                    className={`flex-1 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       distanceUnit === "metric"
-                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    Metric (km, m)
+                    km
                   </button>
                   <button
                     onClick={() => setDistanceUnit("imperial")}
-                    className={`flex-1 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       distanceUnit === "imperial"
-                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    Imperial (mi, ft)
+                    miles
                   </button>
                 </div>
               </div>
 
               {/* Time Format */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider">
-                  Time Format
-                </label>
-                <div className="flex bg-surface-100 dark:bg-surface-900 p-1 rounded-lg">
+              <div className="p-3 bg-surface-50 dark:bg-surface-700/30 rounded-xl border border-surface-200 dark:border-surface-700/50 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-surface-700 dark:text-surface-300 block">Clock Format</span>
+                  <span className="text-[10px] text-surface-400">12-hour (AM/PM) vs. 24-hour</span>
+                </div>
+                <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setTimeFormat("12h")}
-                    className={`flex-1 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       timeFormat === "12h"
-                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    12-hour (AM/PM)
+                    12h (AM/PM)
                   </button>
                   <button
                     onClick={() => setTimeFormat("24h")}
-                    className={`flex-1 text-sm font-bold py-1.5 px-3 rounded-md transition-all ${
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
                       timeFormat === "24h"
-                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm border border-surface-200/60 dark:border-surface-600"
-                        : "text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white hover:bg-surface-200/80 dark:hover:bg-surface-800"
+                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
+                        : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
                     }`}
                   >
-                    24-hour (Military)
+                    24-hour
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-12 gap-4 pb-3 border-b border-surface-200 dark:border-surface-700 text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider sticky top-0 bg-white dark:bg-surface-800 z-10 pt-6 px-6">
+          <div className="grid grid-cols-12 gap-3 pb-3 border-b border-surface-200 dark:border-surface-700 text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider sticky top-0 bg-white dark:bg-surface-800 z-10 pt-6 px-6">
             <div className="col-span-4 flex flex-col">
               <span>Category Limits</span>
             </div>
-            <div className="col-span-3 text-center flex items-center justify-center gap-1"><Timer className="w-3 h-3"/> Default Duration</div>
+            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Timer className="w-3 h-3"/> Default Duration</div>
+            <div className="col-span-2 text-center flex items-center justify-center gap-1" title="Minimum minutes between visits of this category on the same day"><Utensils className="w-3 h-3"/> Min Spacing</div>
             <div className="col-span-2 text-center flex items-center justify-center gap-1"><Minimize2 className="w-3 h-3"/> Min/Day</div>
-            <div className="col-span-3 text-center flex items-center justify-center gap-1"><Maximize2 className="w-3 h-3"/> Max/Day</div>
+            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Maximize2 className="w-3 h-3"/> Max/Day</div>
           </div>
 
           <div className="mt-2 space-y-1 px-6 pb-6">
@@ -381,17 +399,17 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
               return (
                 <div key={category} className="rounded-xl overflow-hidden">
                   {/* Main category row */}
-                  <div className="grid grid-cols-12 gap-4 items-center p-3 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors group">
-                    <div className="col-span-4 flex items-center gap-2">
+                  <div className="grid grid-cols-12 gap-3 items-center p-3 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors group">
+                    <div className="col-span-4 flex items-center gap-2 min-w-0">
                       <button
                         onClick={() => toggleExpanded(category)}
-                        className="flex items-center gap-2 min-w-0"
+                        className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
                         title="Toggle day exceptions"
                       >
                         <div className="w-8 h-8 rounded-full bg-surface-100 dark:bg-surface-700 flex items-center justify-center text-sm shadow-sm group-hover:scale-110 transition-transform shrink-0">
                           {getCategoryEmoji(category)}
                         </div>
-                        <span className="text-sm font-semibold text-surface-700 dark:text-surface-200 truncate">
+                        <span className="text-sm font-semibold text-surface-700 dark:text-surface-200 whitespace-nowrap">
                           {getCategoryLabel(category)}
                         </span>
                         <ChevronDown
@@ -406,7 +424,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     </div>
 
                     {/* Duration Input */}
-                    <div className="col-span-3 flex justify-center">
+                    <div className="col-span-2 flex justify-center">
                       <div className="relative">
                         <input
                           type="number"
@@ -418,6 +436,25 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                           className="w-20 px-3 py-1.5 text-sm font-bold text-center bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-surface-900 dark:text-white"
                         />
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-surface-400 pointer-events-none">m</span>
+                      </div>
+                    </div>
+
+                    {/* Min Spacing Input */}
+                    <div className="col-span-2 flex justify-center">
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="15"
+                          placeholder="—"
+                          value={localMinSpacing[category] ?? (config.minTimeBetween != null ? config.minTimeBetween : (category === "restaurant" ? 180 : ""))}
+                          onChange={(e) => handleMinSpacingChange(category, e.target.value)}
+                          title="Minimum minutes between visits of this category on the same day (e.g. 180 min between meals)"
+                          className="w-16 px-2 py-1.5 text-sm font-bold text-center bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-surface-900 dark:text-white placeholder:text-surface-300 dark:placeholder:text-surface-600"
+                        />
+                        {(localMinSpacing[category] !== "" && (localMinSpacing[category] !== undefined ? localMinSpacing[category] !== "" : (config.minTimeBetween != null || category === "restaurant"))) && (
+                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-surface-400 pointer-events-none">m</span>
+                        )}
                       </div>
                     </div>
 
@@ -434,7 +471,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     </div>
 
                     {/* Max Per Day Input */}
-                    <div className="col-span-3 flex justify-center items-center gap-2">
+                    <div className="col-span-2 flex justify-center items-center gap-2">
                       <input
                         type="number"
                         min="0"

@@ -23,6 +23,7 @@ import {
   Trash2,
   Coffee,
   Star,
+  Utensils,
 } from "lucide-react";
 import { toast } from "../../services/toastService";
 import { TravelMode, RouteSegment, CustomBuffer } from "../../types";
@@ -541,6 +542,7 @@ interface SortableStopProps {
   dateMode: "fixed" | "duration";
   currentDate: Date;
   onEdit: (id: string) => void;
+  mealGapAlert?: { gap: number; minGap: number } | null;
 }
 
 const areSortableStopPropsEqual = (
@@ -557,7 +559,9 @@ const areSortableStopPropsEqual = (
     prev.currentDate?.getTime() === next.currentDate?.getTime() &&
     prev.unassignPlace === next.unassignPlace &&
     prev.updatePlace === next.updatePlace &&
-    prev.onEdit === next.onEdit
+    prev.onEdit === next.onEdit &&
+    prev.mealGapAlert?.gap === next.mealGapAlert?.gap &&
+    prev.mealGapAlert?.minGap === next.mealGapAlert?.minGap
   );
 };
 
@@ -573,6 +577,7 @@ const SortableStop: React.FC<SortableStopProps> = React.memo(
     dateMode,
     currentDate,
     onEdit,
+    mealGapAlert,
   }) => {
     const timeConflict =
       dateMode === "fixed"
@@ -670,6 +675,15 @@ const SortableStop: React.FC<SortableStopProps> = React.memo(
                   >
                     <AlertTriangle className="w-3 h-3" />
                     <span className="hidden sm:inline">Closed</span>
+                  </div>
+                )}
+                {mealGapAlert && (
+                  <div
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 text-[10px] font-bold border border-amber-200 dark:border-amber-800"
+                    title={`Only ${mealGapAlert.gap}m since previous meal (minimum recommended: ${mealGapAlert.minGap}m)`}
+                  >
+                    <Utensils className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                    <span className="hidden sm:inline">{mealGapAlert.gap}m meal gap</span>
                   </div>
                 )}
                 {/* Star / Must-Visit Priority Toggle Button */}
@@ -1176,6 +1190,7 @@ export const DailySchedule: React.FC = () => {
   const departureFlight = useRouteStore((s) => s.departureFlight);
   const setDepartureFlight = useRouteStore((s) => s.setDepartureFlight);
   const distanceUnit = useRouteStore((s) => s.distanceUnit);
+  const categoryConfigs = useRouteStore((s) => s.categoryConfigs);
 
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -1757,6 +1772,7 @@ export const DailySchedule: React.FC = () => {
                         <div className="flex flex-col relative">
                           {(() => {
                             let physicalSegmentIndex = 0;
+                            let lastMealDepartureTime: number | null = null;
 
                             return dayItems.map((itemId, idx) => {
                               const isFirst = idx === 0;
@@ -1931,6 +1947,17 @@ export const DailySchedule: React.FC = () => {
                                     }
                                   }
 
+                                  let mealGapAlert: { gap: number; minGap: number } | null = null;
+                                  const minSpacing = categoryConfigs?.[stop.category]?.minTimeBetween ?? (stop.category === "restaurant" ? 180 : 0);
+                                  if (minSpacing > 0 && stop.category === "restaurant") {
+                                    if (lastMealDepartureTime !== null) {
+                                      const gap = stopArrivalTime - lastMealDepartureTime;
+                                      if (gap < minSpacing) {
+                                        mealGapAlert = { gap, minGap: minSpacing };
+                                      }
+                                    }
+                                  }
+
                                   element = (
                                     <SortableStop
                                       key={stop.id}
@@ -1944,9 +1971,13 @@ export const DailySchedule: React.FC = () => {
                                       dateMode={dateMode}
                                       currentDate={currentDate}
                                       onEdit={handleEditPlace}
+                                      mealGapAlert={mealGapAlert}
                                     />
                                   );
                                   itemDuration = stop.estimatedDuration || 0;
+                                  if (stop.category === "restaurant") {
+                                    lastMealDepartureTime = stopArrivalTime + (stop.estimatedDuration || 60);
+                                  }
                                 }
                               }
 

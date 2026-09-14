@@ -19,6 +19,7 @@ export interface CategoryDayOverride {
 export interface CategoryConfig {
   minPerDay?: number | null;
   maxPerDay?: number | null;
+  minTimeBetween?: number | null; // Minimum minutes between visits of this category (e.g. 180 for restaurant)
   firstDayOverride?: CategoryDayOverride;
   lastDayOverride?: CategoryDayOverride;
   customDayOverrides?: Record<number, CategoryDayOverride>;

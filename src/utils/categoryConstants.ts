@@ -3,10 +3,10 @@ import { PlaceCategory } from "../types";
 // Default visit duration per category (in minutes)
 export const CATEGORY_DEFAULTS: Record<
   PlaceCategory,
-  { label: string; duration: number; emoji: string; fallbackImage: string }
+  { label: string; duration: number; emoji: string; fallbackImage: string; minTimeBetween?: number | null }
 > = {
   museum: { label: "Museum", duration: 120, emoji: "🏛️", fallbackImage: "https://loremflickr.com/800/600/museum,exhibit" },
-  restaurant: { label: "Restaurant", duration: 90, emoji: "🍽️", fallbackImage: "https://loremflickr.com/800/600/restaurant,dining" },
+  restaurant: { label: "Restaurant", duration: 90, emoji: "🍽️", fallbackImage: "https://loremflickr.com/800/600/restaurant,dining", minTimeBetween: 180 },
   coffee_shop: { label: "Coffee Shop", duration: 20, emoji: "☕", fallbackImage: "https://loremflickr.com/800/600/coffeeshop,latte" },
   park: { label: "Park", duration: 60, emoji: "🌳", fallbackImage: "https://loremflickr.com/800/600/park,nature" },
   landmark: { label: "Landmark", duration: 30, emoji: "📸", fallbackImage: "https://loremflickr.com/800/600/landmark,city" },

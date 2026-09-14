@@ -178,6 +178,18 @@ function clusterPlaces(
         }
       }
 
+      // 1b. Check minTimeBetween feasibility (e.g. minimum time between restaurants)
+      const minSpacing = catConfig?.minTimeBetween ?? (place.category === "restaurant" ? 180 : 0);
+      if (minSpacing > 0 && currentCount > 0) {
+        const duration = place.estimatedDuration || 60;
+        const totalMealSpan = (currentCount + 1) * duration + currentCount * minSpacing;
+        const dayWindow = dayWindows[d] || { start: baseDayStartMin, end: baseDayEndMin };
+        const availableWindow = dayWindow.end - dayWindow.start;
+        if (totalMealSpan > availableWindow) {
+          continue; // Day window physically cannot fit another visit with minimum spacing
+        }
+      }
+
       // 2. Strict Avoid Closed Hours Check:
       // If avoidClosedHours is on, NEVER assign unpinned places to days they are closed,
       // or to days where open hours have zero/insufficient overlap with active day window.
@@ -227,6 +239,11 @@ function clusterPlaces(
           if (currentCount < catConfig.minPerDay) {
             score += 10000; // Massive artificial boost to prioritize filling the minimum
           }
+        }
+
+        // Encourage balanced distribution of meals across days rather than clustering all onto 1 day
+        if (minSpacing > 0 && currentCount > 0) {
+          score -= currentCount * 2000;
         }
 
         if (score > maxScore) {
@@ -320,11 +337,15 @@ function evaluateRouteCost(
   currentDate: Date,
   avoidClosedHours: boolean,
   travelMode: TravelMode,
-): { totalDistance: number; totalCost: number; conflicts: number } {
+  categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
+): { totalDistance: number; totalCost: number; conflicts: number; mealSpacingConflicts: number } {
   let totalDist = 0;
   let currentTime = startMinutes;
   let conflicts = 0;
   let penaltyMinutes = 0;
+  let mealSpacingPenalty = 0;
+  let mealSpacingConflicts = 0;
+  const lastCategoryDeparture: Record<string, number> = {};
 
   for (let i = 0; i < points.length - 1; i++) {
     const from = points[i];
@@ -357,16 +378,28 @@ function evaluateRouteCost(
         }
       }
 
+      // Spacing check: enforce minimum time between visits of the same category (default 180m for restaurant)
+      const minSpacing = categoryConfigs?.[place.category]?.minTimeBetween ?? (place.category === "restaurant" ? 180 : 0);
+      if (minSpacing > 0 && lastCategoryDeparture[place.category] !== undefined) {
+        const timeSinceLast = currentTime - lastCategoryDeparture[place.category];
+        if (timeSinceLast < minSpacing) {
+          const shortfall = minSpacing - timeSinceLast;
+          mealSpacingConflicts++;
+          mealSpacingPenalty += 500000 + shortfall * 5000;
+        }
+      }
+
       currentTime += duration;
+      lastCategoryDeparture[place.category] = currentTime;
     }
   }
 
   // 1 conflict = 1,000 km penalty to guarantee avoiding closed hours over shortest distance
-  const totalCost = totalDist + conflicts * 1000000 + penaltyMinutes * 1000;
-  return { totalDistance: totalDist, totalCost, conflicts };
+  const totalCost = totalDist + conflicts * 1000000 + penaltyMinutes * 1000 + mealSpacingPenalty;
+  return { totalDistance: totalDist, totalCost, conflicts, mealSpacingConflicts };
 }
 
-// 2-Opt Algorithm for a sub-path (Start -> Stops -> End) with opening-hours awareness
+// 2-Opt Algorithm for a sub-path (Start -> Stops -> End) with opening-hours and category-spacing awareness
 function optimize2OptSub(
   startAnchor: Hotel | Place | null,
   endAnchor: Hotel | Place | null,
@@ -375,10 +408,11 @@ function optimize2OptSub(
   currentDate: Date = new Date(),
   avoidClosedHours: boolean = true,
   travelMode: TravelMode = "driving",
+  categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
 ): Place[] {
   if (places.length <= 1) return places;
 
-  // For small N (<= 6 stops), exact permutation search guarantees zero conflicts and optimal distance
+  // For small N (<= 6 stops), exact permutation search guarantees zero conflicts, proper meal spacing, and optimal distance
   if (places.length <= 6) {
     let bestPoints: (Hotel | Place)[] = [];
     let bestCost = Infinity;
@@ -396,6 +430,7 @@ function optimize2OptSub(
           currentDate,
           avoidClosedHours,
           travelMode,
+          categoryConfigs,
         );
 
         if (totalCost < bestCost) {
@@ -431,6 +466,36 @@ function optimize2OptSub(
     });
   }
 
+  // Interleave categories with minSpacing (e.g. restaurant) so the initial order doesn't start with back-to-back meals
+  const spacedCategories = new Set<string>();
+  places.forEach((p) => {
+    const spacing = categoryConfigs?.[p.category]?.minTimeBetween ?? (p.category === "restaurant" ? 180 : 0);
+    if (spacing > 0) spacedCategories.add(p.category);
+  });
+
+  if (spacedCategories.size > 0) {
+    for (const cat of spacedCategories) {
+      const catPlaces = sortedPlaces.filter((p) => p.category === cat);
+      if (catPlaces.length > 1) {
+        const otherPlaces = sortedPlaces.filter((p) => p.category !== cat);
+        const interleaved: Place[] = [];
+        const step = otherPlaces.length / (catPlaces.length + 1);
+        let catIdx = 0;
+        let otherIdx = 0;
+        for (let pos = 0; pos < places.length; pos++) {
+          if (catIdx < catPlaces.length && (otherIdx >= Math.round((catIdx + 1) * step) || otherIdx >= otherPlaces.length)) {
+            interleaved.push(catPlaces[catIdx++]);
+          } else if (otherIdx < otherPlaces.length) {
+            interleaved.push(otherPlaces[otherIdx++]);
+          } else if (catIdx < catPlaces.length) {
+            interleaved.push(catPlaces[catIdx++]);
+          }
+        }
+        sortedPlaces = interleaved;
+      }
+    }
+  }
+
   let points: (Hotel | Place)[] = [];
   if (startAnchor) points.push(startAnchor);
   points.push(...sortedPlaces);
@@ -445,6 +510,7 @@ function optimize2OptSub(
     currentDate,
     avoidClosedHours,
     travelMode,
+    categoryConfigs,
   );
 
   let improved = true;
@@ -465,6 +531,7 @@ function optimize2OptSub(
           currentDate,
           avoidClosedHours,
           travelMode,
+          categoryConfigs,
         );
 
         if (newCost < bestCost) {
@@ -489,6 +556,7 @@ function optimize2OptSub(
           currentDate,
           avoidClosedHours,
           travelMode,
+          categoryConfigs,
         );
 
         if (newCost < bestCost) {
@@ -505,7 +573,7 @@ function optimize2OptSub(
   return points.slice(placeStart, placeEnd) as Place[];
 }
 
-// Algorithm for a single day's route, respecting locked custom reservation times and open hours
+// Algorithm for a single day's route, respecting locked custom reservation times, open hours, and meal spacing
 function optimizeDayRoute(
   startHotel: Hotel | Place | null,
   endHotel: Hotel | Place | null,
@@ -515,6 +583,7 @@ function optimizeDayRoute(
   avoidClosedHours: boolean = true,
   travelMode: TravelMode = "driving",
   startMinutesOverride?: number,
+  categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
 ): Place[] {
   if (dayPlaces.length <= 1) return dayPlaces;
 
@@ -534,6 +603,7 @@ function optimizeDayRoute(
       currentDate,
       avoidClosedHours,
       travelMode,
+      categoryConfigs,
     );
     return optimized.map((p, idx) => ({ ...p, orderInDay: idx }));
   }
@@ -601,6 +671,21 @@ function optimizeDayRoute(
         }
       }
 
+      // Penalize assigning a restaurant to a window that already has one, or is adjacent to a locked meal
+      const minSpacing = categoryConfigs?.[place.category]?.minTimeBetween ?? (place.category === "restaurant" ? 180 : 0);
+      if (minSpacing > 0) {
+        const hasSameCatInBucket = windowBuckets[w].some((p) => p.category === place.category);
+        if (hasSameCatInBucket) {
+          score += 1000000;
+        }
+        if (w > 0 && lockedPlaces[w - 1].category === place.category && wCapacity < minSpacing) {
+          score += 500000;
+        }
+        if (w < lockedPlaces.length && lockedPlaces[w].category === place.category && wCapacity < minSpacing) {
+          score += 500000;
+        }
+      }
+
       if (score < minAdditionalDist) {
         minAdditionalDist = score;
         bestWindow = w;
@@ -624,6 +709,7 @@ function optimizeDayRoute(
       currentDate,
       avoidClosedHours,
       travelMode,
+      categoryConfigs,
     );
     finalizedPlaces.push(...optimizedSub);
 
@@ -658,6 +744,7 @@ function buildDayRoute(
   isLastDay: boolean = false,
   arrivalFlight?: FlightInfo | null,
   _departureFlight?: FlightInfo | null,
+  categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
 ): DayRoute {
   // On the last day, travelers check out in the morning, so there is no Day End / Hotel
   const endHotelRaw = (!isLastDay && (hotels.find((h) => h.dayIndex === dayIndex) || null)) || null;
@@ -697,6 +784,7 @@ function buildDayRoute(
         avoidClosedHours,
         travelMode,
         startMinutes,
+        categoryConfigs,
       );
 
   let dayDist = 0;
@@ -814,6 +902,7 @@ function evictClosedHourConflicts(
   isLastDay: boolean = false,
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
+  categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
 ): { route: DayRoute; evicted: { place: Place; reason: string }[]; remainingPlaces: Place[] } {
   let currentPlaces = [...dayPlaces];
   const evicted: { place: Place; reason: string }[] = [];
@@ -842,6 +931,7 @@ function evictClosedHourConflicts(
       isLastDay,
       dayIndex === 0 ? arrivalFlight : null,
       isLastDay ? departureFlight : null,
+      categoryConfigs,
     );
 
     // Compute arrival time at each stop exactly as DailySchedule does
@@ -912,6 +1002,7 @@ function evictClosedHourConflicts(
         isLastDay,
         dayIndex === 0 ? arrivalFlight : null,
         isLastDay ? departureFlight : null,
+        categoryConfigs,
       );
       return { route: emptyRoute, evicted, remainingPlaces: [] };
     }
@@ -1030,6 +1121,7 @@ export async function solveSingleDay(
   isLastDay: boolean = false,
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
+  categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
 ): Promise<DayRoute> {
   let route: DayRoute;
 
@@ -1046,6 +1138,7 @@ export async function solveSingleDay(
       isLastDay,
       arrivalFlight,
       departureFlight,
+      categoryConfigs,
     );
     route = conflictResult.route;
   } else {
@@ -1064,6 +1157,7 @@ export async function solveSingleDay(
       isLastDay,
       arrivalFlight,
       departureFlight,
+      categoryConfigs,
     );
   }
 
@@ -1133,6 +1227,7 @@ export async function solveTSP(
         isLastDay,
         d === 0 ? arrivalFlight : null,
         isLastDay ? departureFlight : null,
+        categoryConfigs,
       );
 
       route = conflictResult.route;
@@ -1163,6 +1258,7 @@ export async function solveTSP(
         isLastDay,
         d === 0 ? arrivalFlight : null,
         isLastDay ? departureFlight : null,
+        categoryConfigs,
       );
     }
 
@@ -1218,6 +1314,7 @@ export async function solveTSP(
             isLastDay,
             d === 0 ? arrivalFlight : null,
             isLastDay ? departureFlight : null,
+            categoryConfigs,
           );
           route = conflictResult.route;
           dayPlaces = conflictResult.remainingPlaces;
@@ -1245,6 +1342,7 @@ export async function solveTSP(
             isLastDay,
             d === 0 ? arrivalFlight : null,
             isLastDay ? departureFlight : null,
+            categoryConfigs,
           );
         }
 

@@ -541,6 +541,7 @@ export const useRouteStore = create<RouteState>()(
                 dayIndex === state.days - 1,
                 dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
                 dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+                state.categoryConfigs,
               );
               if (idx >= 0) newRoutes[idx] = result;
               set({ places: newPlaces, optimizedRoutes: newRoutes, isCalculating: false });
@@ -612,6 +613,7 @@ export const useRouteStore = create<RouteState>()(
                   dayIndex === state.days - 1,
                   dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
                   dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+                  state.categoryConfigs,
                 );
                 if (idx >= 0) newRoutes[idx] = result;
               }
@@ -754,6 +756,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === state.days - 1,
             dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+            state.categoryConfigs,
           );
 
           if (idx >= 0) {
@@ -812,6 +815,7 @@ export const useRouteStore = create<RouteState>()(
               dayIndex === state.days - 1,
               dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
               dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+              state.categoryConfigs,
             );
             if (idx >= 0) newRoutes[idx] = result;
           }
@@ -913,6 +917,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === state.days - 1,
             dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+            state.categoryConfigs,
           );
 
           const newRoutes = [...state.optimizedRoutes];
@@ -1031,6 +1036,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === state.days - 1,
             dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+            state.categoryConfigs,
           );
 
           routes[routeIdx] = result;
