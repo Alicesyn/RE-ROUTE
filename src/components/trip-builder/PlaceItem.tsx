@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, MapPin, Pin, Clock, Timer, AlertCircle, Sparkles, Loader2, ExternalLink, Eye, EyeOff, Coins, Star, Copy, X, Check, CalendarDays, Pencil } from "lucide-react";
+import { GripVertical, Trash2, MapPin, Pin, Clock, Timer, AlertCircle, Sparkles, Loader2, ExternalLink, Eye, EyeOff, Coins, Star, Copy, X, Check, CalendarDays, Pencil, ChevronDown } from "lucide-react";
 import { Place, PlaceCategory } from "../../types";
 import { useRouteStore } from "../../store/useRouteStore";
 import { formatDayRangeBadge } from "../../utils/dayRangeUtils";
@@ -44,15 +44,18 @@ interface PlaceItemProps {
   place: Place;
   isDuplicate?: boolean;
   onEdit?: (id: string) => void;
-  onFilterByDay?: (dayIndex: number) => void;
 }
 
-export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplicate, onEdit, onFilterByDay }) => {
+export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplicate, onEdit }) => {
   const updatePlace = useRouteStore((s) => s.updatePlace);
   const removePlace = useRouteStore((s) => s.removePlace);
   const togglePlaceDisabled = useRouteStore((s) => s.togglePlaceDisabled);
   const startDate = useRouteStore((s) => s.startDate);
   const dayTitles = useRouteStore((s) => s.dayTitles);
+  const days = useRouteStore((s) => s.days);
+  const assignPlaceToDay = useRouteStore((s) => s.assignPlaceToDay);
+  const unassignPlace = useRouteStore((s) => s.unassignPlace);
+  const dayIndices = useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
   const appMode = useRouteStore((s) => s.appMode);
   const showImages = useRouteStore((s) => s.showImages);
   const hasOptimizedSchedule = useRouteStore((s) => s.optimizedRoutes.length > 0);
@@ -329,9 +332,19 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
                     </button>
                   )}
                 </h3>
-                <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5 truncate">
-                  {place.address}
-                </p>
+                <div className="relative group/addr min-w-0 inline-block max-w-full">
+                  <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5 truncate cursor-help hover:text-surface-700 dark:hover:text-surface-200 transition-colors">
+                    {place.address}
+                  </p>
+                  {place.address && (
+                    <div className="absolute left-0 top-full pt-1 z-40 hidden group-hover/addr:block">
+                      <div className="flex items-start gap-1.5 w-max max-w-[280px] sm:max-w-xs p-2 rounded-lg bg-surface-900/95 dark:bg-surface-800/98 text-white dark:text-surface-100 text-xs shadow-xl border border-surface-700/80 backdrop-blur-sm animate-in fade-in duration-150">
+                        <MapPin className="w-3.5 h-3.5 text-primary-400 shrink-0 mt-0.5" />
+                        <span className="break-words font-medium leading-relaxed select-text">{place.address}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -416,28 +429,78 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
             </div>
           </div>
 
-          {/* Dedicated Lower Section Day Label (shown for all assigned days) */}
-          {!place.isDisabled && place.dayIndex !== null && (
+          {/* Day Assignment Badge / Dropdown (shown for all active places in PTV) */}
+          {!place.isDisabled && (
             <div className="mt-2 flex items-center">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onFilterByDay) {
-                    onFilterByDay(place.dayIndex!);
-                  } else {
-                    onEdit?.(place.id);
+              <div className="relative inline-flex items-center">
+                {/* Visual badge */}
+                <div
+                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-md border shadow-2xs transition-all ${
+                    place.dayIndex !== null && place.dayIndex !== undefined
+                      ? `${getBadgeColor(place.dayIndex)} hover:opacity-90`
+                      : "bg-surface-50 dark:bg-surface-800/80 text-surface-600 dark:text-surface-400 border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700 hover:border-surface-300 dark:hover:border-surface-600"
+                  }`}
+                >
+                  <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {place.dayIndex !== null && place.dayIndex !== undefined
+                      ? `Day ${place.dayIndex + 1}${assignedDayTitle ? `: ${assignedDayTitle}` : ""}`
+                      : "+ Assign to Day"}
+                  </span>
+                  {place.dayIndex !== null && place.pinnedToDay && (
+                    <Pin className="w-3 h-3 opacity-70 shrink-0" />
+                  )}
+                  <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+                </div>
+
+                {/* Native select overlay that intercepts clicks and opens dropdown to assign or change day */}
+                <select
+                  value={place.dayIndex !== null && place.dayIndex !== undefined ? place.dayIndex : "unassigned"}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "unassigned") {
+                      unassignPlace(place.id);
+                      toast.info(`Unassigned "${place.name}".`, "Day Assignment Updated");
+                    } else {
+                      const newDay = parseInt(val, 10);
+                      assignPlaceToDay(place.id, newDay);
+                      const title = dayTitles?.[newDay]?.trim();
+                      toast.success(
+                        `Assigned "${place.name}" to Day ${newDay + 1}${title ? `: ${title}` : ""}.`,
+                        "Day Assignment Updated"
+                      );
+                    }
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-xs bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100"
+                  style={{ colorScheme: "dark light" }}
+                  title={
+                    place.dayIndex !== null && place.dayIndex !== undefined
+                      ? `Assigned to Day ${place.dayIndex + 1}${assignedDayTitle ? `: ${assignedDayTitle}` : ""}. Click to change day or unassign.`
+                      : "Click to assign this place to a day."
                   }
-                }}
-                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-md border shadow-2xs transition-opacity hover:opacity-90 cursor-pointer ${getBadgeColor(place.dayIndex)}`}
-                title={`Assigned to Day ${place.dayIndex + 1}${assignedDayTitle ? `: ${assignedDayTitle}` : ""}${place.pinnedToDay ? " (Pinned)" : ""}. Click to filter list by Day ${place.dayIndex + 1}.`}
-              >
-                <CalendarDays className="w-3.5 h-3.5 shrink-0" />
-                <span>Day {place.dayIndex + 1}{assignedDayTitle ? `: ${assignedDayTitle}` : ""}</span>
-                {place.pinnedToDay && (
-                  <Pin className="w-3 h-3 opacity-70 shrink-0" />
-                )}
-              </button>
+                  aria-label="Assign to Day"
+                >
+                  <option
+                    value="unassigned"
+                    disabled={place.dayIndex === null}
+                    className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 py-1"
+                  >
+                    {place.dayIndex === null ? "+ Assign to Day..." : "❌ Unassign from Day"}
+                  </option>
+                  {dayIndices.map((i) => {
+                    const title = dayTitles?.[i]?.trim();
+                    return (
+                      <option
+                        key={i}
+                        value={i}
+                        className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 py-1"
+                      >
+                        Day {i + 1}{title ? `: ${title}` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
             </div>
           )}
 

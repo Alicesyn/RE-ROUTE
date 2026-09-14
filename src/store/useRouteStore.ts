@@ -744,6 +744,7 @@ export const useRouteStore = create<RouteState>()(
         set({ isCalculating: true, calculatingText: "Calculating routes..." });
         try {
           const state = get();
+          const oldDayIndex = state.places.find((p) => p.id === placeId)?.dayIndex;
           const newPlaces = state.places.map((p) =>
             p.id === placeId
               ? {
@@ -760,6 +761,36 @@ export const useRouteStore = create<RouteState>()(
           );
 
           let newRoutes = [...state.optimizedRoutes];
+
+          // If place was previously on another day, re-solve the previous day to remove it
+          if (oldDayIndex !== null && oldDayIndex !== undefined && oldDayIndex !== dayIndex) {
+            const oldDayPlaces = newPlaces.filter((p) => p.dayIndex === oldDayIndex && !p.isDisabled);
+            const oldIdx = newRoutes.findIndex((r) => r.day === oldDayIndex);
+            let oldManualSequence: string[] | undefined = undefined;
+            if (oldIdx >= 0 && newRoutes[oldIdx].manualSequence) {
+              oldManualSequence = newRoutes[oldIdx].manualSequence.filter((id) => id !== placeId);
+            }
+
+            const oldResult = await solveSingleDay(
+              oldDayPlaces,
+              state.hotels,
+              oldDayIndex,
+              state.travelMode,
+              oldDayIndex === 0 && state.showFlights ? state.arrivalFlight?.location : null,
+              oldDayIndex === state.days - 1 && state.showFlights ? state.departureFlight?.location : null,
+              !!oldManualSequence,
+              oldManualSequence,
+              state.startDate,
+              state.dayStartTime,
+              state.avoidClosedHours,
+              oldDayIndex === state.days - 1,
+              oldDayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
+              oldDayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+              state.categoryConfigs,
+            );
+            if (oldIdx >= 0) newRoutes[oldIdx] = oldResult;
+          }
+
           const dayPlaces = newPlaces.filter((p) => p.dayIndex === dayIndex && !p.isDisabled);
 
           const idx = newRoutes.findIndex((r) => r.day === dayIndex);

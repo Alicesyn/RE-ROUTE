@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Search, EyeOff, CheckCircle2, ArrowUpDown, CalendarClock, AlertTriangle, Star, ChevronUp, ChevronDown, X } from "lucide-react";
+import { Search, EyeOff, CheckCircle2, ArrowUpDown, CalendarClock, AlertTriangle, Star, ChevronUp, ChevronDown, X, Layers, Trash2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -23,8 +23,9 @@ const EditPlaceModal = React.lazy(() =>
   import("../schedule/EditPlaceModal").then((m) => ({ default: m.EditPlaceModal }))
 );
 import { ALL_CATEGORIES, getCategoryLabel, getCategoryEmoji } from "../../utils/categoryUtils";
-import { Place, PlaceCategory } from "../../types";
+import { Place, PlaceCategory, DayRangeConstraint } from "../../types";
 import { findDuplicatePlaceIds, getDuplicatePlaceIdsToRemove } from "../../utils/duplicateUtils";
+import { formatDayRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
 
 interface PlaceListProps {
@@ -55,9 +56,11 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
   const places = useRouteStore((s) => s.places);
   const reorderPlaces = useRouteStore((s) => s.reorderPlaces);
   const removePlace = useRouteStore((s) => s.removePlace);
+  const updatePlacesBulk = useRouteStore((s) => s.updatePlacesBulk);
   const setAllPlacesDisabled = useRouteStore((s) => s.setAllPlacesDisabled);
   const days = useRouteStore((s) => s.days);
   const dayTitles = useRouteStore((s) => s.dayTitles);
+  const startDate = useRouteStore((s) => s.startDate);
   const dayIndices = useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
   const [internalIsExpanded, setInternalIsExpanded] = useState(false);
   const isExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsExpanded;
@@ -78,6 +81,12 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
   const [starredOnly, setStarredOnly] = useState(false);
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
+
+  // Mass Edit State
+  const [isMassEditOpen, setIsMassEditOpen] = useState(false);
+  const [showCustomRangePicker, setShowCustomRangePicker] = useState(false);
+  const [customRangeStart, setCustomRangeStart] = useState(0);
+  const [customRangeEnd, setCustomRangeEnd] = useState(Math.max(0, days - 1));
 
   const duplicatePlaceIds = useMemo(() => findDuplicatePlaceIds(places), [places]);
 
@@ -347,6 +356,125 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
     [filteredPlaces],
   );
 
+  // Mass Edit Actions
+  const allFilteredStarred = useMemo(() => {
+    return filteredPlaces.length > 0 && filteredPlaces.every((p) => p.isStarred);
+  }, [filteredPlaces]);
+
+  const allFilteredDisabled = useMemo(() => {
+    return filteredPlaces.length > 0 && filteredPlaces.every((p) => p.isDisabled);
+  }, [filteredPlaces]);
+
+  const handleMassStar = () => {
+    if (filteredPlaces.length === 0) return;
+    const targetStarred = !allFilteredStarred;
+    const updates = filteredPlaces.map((p) => ({
+      id: p.id,
+      updates: { isStarred: targetStarred },
+    }));
+    updatePlacesBulk(updates);
+    toast.success(
+      targetStarred
+        ? `Starred ${filteredPlaces.length} place(s) as Must-Visit.`
+        : `Removed star priority from ${filteredPlaces.length} place(s).`,
+      "Places Updated"
+    );
+  };
+
+  const handleMassDisabled = async () => {
+    if (filteredPlaces.length === 0) return;
+    const targetDisabled = !allFilteredDisabled;
+    const ids = filteredPlaces.map((p) => p.id);
+    await setAllPlacesDisabled(targetDisabled, ids);
+    toast.success(
+      targetDisabled
+        ? `Excluded ${filteredPlaces.length} place(s) from routing.`
+        : `Re-enabled ${filteredPlaces.length} place(s) for routing.`,
+      "Places Updated"
+    );
+  };
+
+  const handleApplyDayRestriction = (range: DayRangeConstraint | null) => {
+    if (filteredPlaces.length === 0) return;
+
+    const updates = filteredPlaces.map((p) => {
+      const isOutOfRange =
+        range &&
+        p.dayIndex !== null &&
+        p.dayIndex !== undefined &&
+        (p.dayIndex < range.startDay || p.dayIndex > range.endDay);
+
+      return {
+        id: p.id,
+        updates: {
+          allowedDayRange: range ? { ...range } : undefined,
+          ...(isOutOfRange ? { dayIndex: null, orderInDay: null, pinnedToDay: false } : {}),
+        },
+      };
+    });
+
+    updatePlacesBulk(updates);
+
+    if (range) {
+      const badge = formatDayRangeBadge(range, startDate, dayTitles);
+      toast.success(
+        `Restricted ${filteredPlaces.length} place(s) to ${badge.fullLabel}.`,
+        "Day Restriction Applied"
+      );
+    } else {
+      toast.info(
+        `Cleared day restrictions for ${filteredPlaces.length} place(s).`,
+        "Day Restrictions Cleared"
+      );
+    }
+  };
+
+  const handleApplyCustomRange = () => {
+    const start = Math.min(customRangeStart, customRangeEnd);
+    const end = Math.max(customRangeStart, customRangeEnd);
+    handleApplyDayRestriction({ startDay: start, endDay: end });
+    setShowCustomRangePicker(false);
+  };
+
+  const handleMassAssignDay = (targetDay: number | "unassign") => {
+    if (filteredPlaces.length === 0) return;
+
+    if (targetDay === "unassign") {
+      const updates = filteredPlaces.map((p) => ({
+        id: p.id,
+        updates: { dayIndex: null, orderInDay: null, pinnedToDay: false },
+      }));
+      updatePlacesBulk(updates);
+      toast.info(`Unassigned ${filteredPlaces.length} place(s).`, "Day Assignment Updated");
+    } else {
+      const updates = filteredPlaces.map((p) => ({
+        id: p.id,
+        updates: { dayIndex: targetDay, orderInDay: null, pinnedToDay: false, isDisabled: false },
+      }));
+      updatePlacesBulk(updates);
+      const dayTitle = dayTitles?.[targetDay]?.trim();
+      toast.success(
+        `Assigned ${filteredPlaces.length} place(s) to Day ${targetDay + 1}${dayTitle ? `: ${dayTitle}` : ""}.`,
+        "Day Assignment Updated"
+      );
+    }
+  };
+
+  const handleMassDelete = () => {
+    if (filteredPlaces.length === 0) return;
+    if (
+      window.confirm(
+        `Are you sure you want to remove all ${filteredPlaces.length} place(s) currently shown from your trip?`
+      )
+    ) {
+      filteredPlaces.forEach((p) => removePlace(p.id));
+      toast.success(`Removed ${filteredPlaces.length} place(s).`, "Places Deleted");
+    }
+  };
+
+  const isSearching = searchQuery.trim().length > 0;
+  const showMassEditBar = (isSearching || isMassEditOpen) && filteredPlaces.length > 0;
+
   if (places.length === 0) {
     return (
       <div className="text-center py-12 px-4 bg-white dark:bg-surface-800 border border-dashed border-surface-300 dark:border-surface-600 rounded-xl">
@@ -490,8 +618,8 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
       )}
 
       {/* PTV Search & Filter */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col lg:flex-row gap-2 mb-3">
+        <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 w-3.5 h-3.5" />
           <input
             type="text"
@@ -512,7 +640,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
           )}
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
           {/* Day Filter Dropdown */}
           <select
             value={dayFilter}
@@ -615,6 +743,33 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
               </span>
             )}
           </button>
+
+          {/* Quick Toggle: Mass Edit */}
+          <button
+            type="button"
+            onClick={() => setIsMassEditOpen((prev) => !prev)}
+            className={`h-9 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer ${
+              isMassEditOpen || (isSearching && filteredPlaces.length > 0)
+                ? "bg-primary-100 dark:bg-primary-900/50 text-primary-900 dark:text-primary-200 border-primary-300 dark:border-primary-700 shadow-2xs"
+                : "bg-surface-50 dark:bg-surface-800 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700"
+            }`}
+            title={isMassEditOpen ? "Close mass edit toolbar" : "Open mass edit toolbar for current results"}
+          >
+            <Layers className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400 shrink-0" />
+            <span className="hidden sm:inline">Mass Edit</span>
+            <span className="sm:hidden">Mass</span>
+            {filteredPlaces.length > 0 && (
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                  isMassEditOpen || (isSearching && filteredPlaces.length > 0)
+                    ? "bg-primary-200/90 dark:bg-primary-800/90 text-primary-900 dark:text-primary-100"
+                    : "bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300"
+                }`}
+              >
+                {filteredPlaces.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -669,6 +824,230 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
         </div>
       )}
 
+      {/* Mass Edit Action Banner for Search/Filter Results */}
+      {showMassEditBar && (
+        <div className="bg-primary-50/90 dark:bg-primary-950/40 border border-primary-200 dark:border-primary-800/80 rounded-xl p-3 mb-3 text-xs shadow-2xs animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-primary-200/60 dark:border-primary-800/50">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-primary-100 dark:bg-primary-900/70 flex items-center justify-center text-primary-700 dark:text-primary-300 shrink-0">
+                <Layers className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-surface-900 dark:text-white">
+                  Mass Edit {filteredPlaces.length} Result{filteredPlaces.length === 1 ? "" : "s"}
+                </span>
+                {isSearching && (
+                  <span className="text-surface-500 dark:text-surface-400">
+                    matching &ldquo;<span className="font-semibold text-primary-700 dark:text-primary-300">{searchQuery.trim()}</span>&rdquo;
+                  </span>
+                )}
+                {!isSearching && (
+                  <span className="text-surface-500 dark:text-surface-400">
+                    (in current view)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsMassEditOpen(false);
+                setShowCustomRangePicker(false);
+              }}
+              className="p-1 text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 rounded cursor-pointer transition-colors self-end sm:self-center"
+              title="Close mass edit banner"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Day Restriction Selector */}
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) return;
+                if (val === "clear") {
+                  handleApplyDayRestriction(null);
+                } else if (val === "first-half") {
+                  const halfEnd = Math.ceil(days / 2) - 1;
+                  handleApplyDayRestriction({ startDay: 0, endDay: Math.max(0, halfEnd) });
+                } else if (val === "second-half") {
+                  const halfStart = Math.ceil(days / 2);
+                  handleApplyDayRestriction({ startDay: Math.min(days - 1, halfStart), endDay: days - 1 });
+                } else if (val === "custom") {
+                  setShowCustomRangePicker(true);
+                } else if (val.startsWith("day-")) {
+                  const dayIdx = parseInt(val.replace("day-", ""), 10);
+                  handleApplyDayRestriction({ startDay: dayIdx, endDay: dayIdx });
+                }
+                e.target.value = "";
+              }}
+              className="h-8 text-xs font-semibold bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 hover:bg-surface-50 dark:hover:bg-surface-700 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer shadow-2xs"
+              style={{ colorScheme: "dark light" }}
+              title="Restrict all results to specific days"
+            >
+              <option value="">📅 Restrict to Days...</option>
+              <option value="clear">❌ Clear Day Restriction</option>
+              <optgroup label="Single Day Only">
+                {dayIndices.map((i) => {
+                  const title = dayTitles?.[i]?.trim();
+                  return (
+                    <option key={i} value={`day-${i}`}>
+                      Day {i + 1}{title ? `: ${title}` : ""}
+                    </option>
+                  );
+                })}
+              </optgroup>
+              {days > 2 && (
+                <optgroup label="Multi-Day Ranges">
+                  <option value="first-half">
+                    Days 1–{Math.ceil(days / 2)} (First Half)
+                  </option>
+                  <option value="second-half">
+                    Days {Math.ceil(days / 2) + 1}–{days} (Second Half)
+                  </option>
+                </optgroup>
+              )}
+              <option value="custom">⚙️ Custom Day Range...</option>
+            </select>
+
+            {/* Star All / Unstar All */}
+            <button
+              type="button"
+              onClick={handleMassStar}
+              className={`h-8 px-2.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+                allFilteredStarred
+                  ? "bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700 hover:bg-amber-200/80"
+                  : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
+              }`}
+              title={allFilteredStarred ? "Remove star priority from all results" : "Star all results as must-visit"}
+            >
+              <Star className={`w-3.5 h-3.5 ${allFilteredStarred ? "fill-amber-500 text-amber-500" : "text-amber-500"}`} />
+              <span>{allFilteredStarred ? "Unstar All" : "Star All"}</span>
+            </button>
+
+            {/* Exclude All / Include All */}
+            <button
+              type="button"
+              onClick={handleMassDisabled}
+              className={`h-8 px-2.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+                allFilteredDisabled
+                  ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100"
+                  : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
+              }`}
+              title={allFilteredDisabled ? "Re-enable all results for routing" : "Exclude all results from routing"}
+            >
+              {allFilteredDisabled ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Re-enable All</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>Exclude All</span>
+                </>
+              )}
+            </button>
+
+            {/* Assign to Day */}
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) return;
+                if (val === "unassign") {
+                  handleMassAssignDay("unassign");
+                } else if (val.startsWith("day-")) {
+                  const d = parseInt(val.replace("day-", ""), 10);
+                  handleMassAssignDay(d);
+                }
+                e.target.value = "";
+              }}
+              className="h-8 text-xs font-semibold bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 hover:bg-surface-50 dark:hover:bg-surface-700 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer shadow-2xs"
+              style={{ colorScheme: "dark light" }}
+              title="Assign all results directly to a day or unassign all"
+            >
+              <option value="">📌 Assign to Day...</option>
+              <option value="unassign">Unassign All</option>
+              <optgroup label="Assign to Day">
+                {dayIndices.map((i) => {
+                  const title = dayTitles?.[i]?.trim();
+                  return (
+                    <option key={i} value={`day-${i}`}>
+                      Day {i + 1}{title ? `: ${title}` : ""}
+                    </option>
+                  );
+                })}
+              </optgroup>
+            </select>
+
+            {/* Delete All */}
+            <button
+              type="button"
+              onClick={handleMassDelete}
+              className="h-8 px-2.5 rounded-lg font-semibold flex items-center gap-1.5 bg-white dark:bg-surface-800 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/60 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all cursor-pointer shadow-2xs ml-auto"
+              title={`Remove all ${filteredPlaces.length} results from trip`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete All</span>
+            </button>
+          </div>
+
+          {/* Custom Day Range Inline Picker */}
+          {showCustomRangePicker && (
+            <div className="mt-2.5 pt-2.5 border-t border-primary-200/60 dark:border-primary-800/50 flex flex-wrap items-center gap-2 text-xs animate-in fade-in duration-150">
+              <span className="font-semibold text-surface-700 dark:text-surface-300">Custom Day Range:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-surface-500">From</span>
+                <select
+                  value={customRangeStart}
+                  onChange={(e) => setCustomRangeStart(parseInt(e.target.value, 10))}
+                  className="h-7 text-xs bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded px-2 text-surface-800 dark:text-surface-200"
+                >
+                  {dayIndices.map((i) => (
+                    <option key={i} value={i}>
+                      Day {i + 1}{dayTitles?.[i]?.trim() ? `: ${dayTitles[i]}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-surface-500">To</span>
+                <select
+                  value={customRangeEnd}
+                  onChange={(e) => setCustomRangeEnd(parseInt(e.target.value, 10))}
+                  className="h-7 text-xs bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded px-2 text-surface-800 dark:text-surface-200"
+                >
+                  {dayIndices.map((i) => (
+                    <option key={i} value={i}>
+                      Day {i + 1}{dayTitles?.[i]?.trim() ? `: ${dayTitles[i]}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleApplyCustomRange}
+                className="h-7 px-3 rounded-md bg-primary-600 hover:bg-primary-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
+              >
+                Apply Range
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCustomRangePicker(false)}
+                className="h-7 px-2.5 rounded-md bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-300 dark:hover:bg-surface-600 font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {filteredPlaces.length === 0 ? (
         <div className="text-center py-8 px-4 bg-white dark:bg-surface-800 border border-dashed border-surface-300 dark:border-surface-600 rounded-xl">
           <p className="text-surface-500 dark:text-surface-400 text-sm">
@@ -710,12 +1089,6 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
                     place={place}
                     isDuplicate={duplicatePlaceIds.has(place.id)}
                     onEdit={(id) => setEditingPlaceId(id)}
-                    onFilterByDay={(dayIdx) => {
-                      setDayFilter(dayIdx);
-                      if (activeTab === "unassigned" || activeTab === "disabled") {
-                        setActiveTab("active");
-                      }
-                    }}
                   />
                 </div>
               ))}

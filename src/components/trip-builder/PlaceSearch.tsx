@@ -32,8 +32,8 @@ export const PlaceSearch: React.FC = () => {
   const [results, setResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const { addPlace, appMode, days, places, hotels } = useRouteStore();
+  const [selectedDay] = useState<number | null>(null);
+  const { addPlace, appMode, places, hotels } = useRouteStore();
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
