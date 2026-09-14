@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Search,
   Plus,
-  CalendarDays,
   Loader2,
   AlertCircle,
   FileText,
@@ -130,10 +129,9 @@ export const PlaceSearch: React.FC = () => {
     const existing = findExistingPlace(place);
     if (existing) {
       const confirmAdd = window.confirm(
-        `"${place.name}" is already in your Places To Visit (${
-          existing.isDisabled
-            ? "Excluded"
-            : existing.dayIndex !== null
+        `"${place.name}" is already in your Places To Visit (${existing.isDisabled
+          ? "Excluded"
+          : existing.dayIndex !== null
             ? `Day ${existing.dayIndex + 1}`
             : "Unassigned"
         }).\n\nDo you want to add a duplicate copy?`
@@ -166,30 +164,6 @@ export const PlaceSearch: React.FC = () => {
     setIsOpen(false);
   };
 
-  const daySelector = (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <CalendarDays className="w-3.5 h-3.5 text-surface-400 dark:text-surface-500" />
-      <select
-        value={selectedDay !== null ? selectedDay : ""}
-        onChange={(e) =>
-          setSelectedDay(
-            e.target.value === "" ? null : parseInt(e.target.value),
-          )
-        }
-        className="text-xs font-medium bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 text-surface-700 dark:text-surface-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 appearance-none cursor-pointer"
-        title="Assign to day"
-      >
-        <option value="">-</option>
-        {Array.from({ length: days }).map((_, i) => (
-          <option key={i} value={i}>
-            D
-            {i + 1}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-
   if (appMode === "dropdown-mock") {
     return (
       <div className="relative mb-6">
@@ -213,8 +187,8 @@ export const PlaceSearch: React.FC = () => {
                   ? existing.isDisabled
                     ? " [Added • Excluded]"
                     : existing.dayIndex !== null
-                    ? ` [Added • Day ${existing.dayIndex + 1}]`
-                    : " [Added]"
+                      ? ` [Added • Day ${existing.dayIndex + 1}]`
+                      : " [Added]"
                   : "";
                 return (
                   <option key={i} value={i}>
@@ -228,7 +202,6 @@ export const PlaceSearch: React.FC = () => {
               <Plus className="w-5 h-5 text-surface-400" />
             </div>
           </div>
-          {daySelector}
         </div>
       </div>
     );
@@ -258,7 +231,6 @@ export const PlaceSearch: React.FC = () => {
           />
         </div>
         <div className="flex flex-col gap-1">
-          {daySelector}
           <button
             onClick={() => setIsImportOpen(true)}
             className="flex items-center justify-center gap-1.5 px-2 py-1 text-[10px] font-bold text-surface-500 hover:text-primary-600 dark:text-surface-400 dark:hover:text-primary-400 border border-surface-200 dark:border-surface-700 rounded-lg hover:border-primary-500/50 transition-all"
@@ -302,9 +274,8 @@ export const PlaceSearch: React.FC = () => {
                 <button
                   key={place.id}
                   onClick={() => handleAdd(place)}
-                  className={`w-full text-left px-4 py-3 hover:bg-surface-50 dark:hover:bg-surface-700 flex items-center justify-between group transition-colors border-b border-surface-50 dark:border-surface-700 last:border-0 ${
-                    isAdded ? "bg-emerald-50/30 dark:bg-emerald-950/15" : ""
-                  }`}
+                  className={`w-full text-left px-4 py-3 hover:bg-surface-50 dark:hover:bg-surface-700 flex items-center justify-between group transition-colors border-b border-surface-50 dark:border-surface-700 last:border-0 ${isAdded ? "bg-emerald-50/30 dark:bg-emerald-950/15" : ""
+                    }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span
@@ -320,20 +291,19 @@ export const PlaceSearch: React.FC = () => {
                         </h4>
                         {isAdded && (
                           <span
-                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-                              existing.isDisabled
-                                ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
-                                : existing.dayIndex !== null
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${existing.isDisabled
+                              ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
+                              : existing.dayIndex !== null
                                 ? "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-800"
                                 : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800"
-                            }`}
+                              }`}
                           >
                             <Check className="w-2.5 h-2.5" />
                             {existing.isDisabled
                               ? "Added (Excluded)"
                               : existing.dayIndex !== null
-                              ? `Added (Day ${existing.dayIndex + 1})`
-                              : "Added"}
+                                ? `Added (Day ${existing.dayIndex + 1})`
+                                : "Added"}
                           </span>
                         )}
                       </div>
@@ -343,18 +313,17 @@ export const PlaceSearch: React.FC = () => {
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         {place.priceEstimate && (
                           <span
-                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                              place.priceEstimate.toLowerCase().includes("free")
-                                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
-                                : "bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300 border-surface-200 dark:border-surface-600"
-                            }`}
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${place.priceEstimate.toLowerCase().includes("free")
+                              ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                              : "bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300 border-surface-200 dark:border-surface-600"
+                              }`}
                           >
                             <Coins className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
                             {place.priceEstimate}
                           </span>
                         )}
                         {place.openingHours && place.openingHours.length > 0 && (
-                          <div 
+                          <div
                             className="inline-flex items-center gap-1 text-[10px] text-surface-400 dark:text-surface-500 cursor-help"
                             title={place.openingHours.join("\n")}
                             onClick={(e) => e.stopPropagation()} // Prevent adding if they just want to hover, though hover works regardless

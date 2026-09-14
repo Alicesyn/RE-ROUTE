@@ -995,11 +995,11 @@ export const useRouteStore = create<RouteState>()(
             return stopIdx >= 0
               ? { ...p, orderInDay: stopIdx }
               : {
-                  ...p,
-                  dayIndex: null,
-                  orderInDay: null,
-                  unfeasibleReason: "Closed during scheduled visiting hours.",
-                };
+                ...p,
+                dayIndex: null,
+                orderInDay: null,
+                unfeasibleReason: "Closed during scheduled visiting hours.",
+              };
           });
 
           set({ optimizedRoutes: newRoutes, places: updatedPlaces, isCalculating: false });
