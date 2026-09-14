@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Search, EyeOff, CheckCircle2, ArrowUpDown, CalendarClock, AlertTriangle, Star, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, EyeOff, CheckCircle2, ArrowUpDown, CalendarClock, AlertTriangle, Star, ChevronUp, ChevronDown, X } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -119,14 +119,56 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
 
   const baseFilteredPlaces = useMemo(() => {
     let list = places;
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      list = list.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          p.address?.toLowerCase().includes(query),
-      );
+    const query = searchQuery.trim().toLowerCase();
+
+    if (query) {
+      const words = query.split(/\s+/).filter(Boolean);
+      const matchField = (field?: string | null) => {
+        if (!field) return false;
+        const lower = field.toLowerCase();
+        if (lower.includes(query)) return true;
+        if (words.length > 1 && words.every((w) => lower.includes(w))) return true;
+        return false;
+      };
+
+      const scored: { place: Place; rank: number; originalIndex: number }[] = [];
+
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        const isNameMatch =
+          matchField(p.name) ||
+          matchField(p.romanizedName);
+
+        const isHighlightMatch =
+          matchField(p.highlight?.text) ||
+          matchField(p.highlight?.label);
+
+        const isDescMatch =
+          matchField(p.description) ||
+          matchField(p.editorialSummary) ||
+          matchField(p.notes);
+
+        const isAddressMatch = matchField(p.address);
+
+        if (isNameMatch) {
+          scored.push({ place: p, rank: 0, originalIndex: i });
+        } else if (isHighlightMatch) {
+          scored.push({ place: p, rank: 1, originalIndex: i });
+        } else if (isDescMatch) {
+          scored.push({ place: p, rank: 2, originalIndex: i });
+        } else if (isAddressMatch) {
+          scored.push({ place: p, rank: 3, originalIndex: i });
+        }
+      }
+
+      scored.sort((a, b) => {
+        if (a.rank !== b.rank) return a.rank - b.rank;
+        return a.originalIndex - b.originalIndex;
+      });
+
+      list = scored.map((item) => item.place);
     }
+
     if (categoryFilter !== "all") {
       list = list.filter((p) => p.category === categoryFilter);
     }
@@ -217,37 +259,52 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
       return list;
     }
 
+    const query = searchQuery.trim().toLowerCase();
+    const isDirectNameMatch = (p: Place) => {
+      if (!query) return true;
+      const words = query.split(/\s+/).filter(Boolean);
+      const matchField = (field?: string | null) => {
+        if (!field) return false;
+        const lower = field.toLowerCase();
+        return lower.includes(query) || (words.length > 1 && words.every((w) => lower.includes(w)));
+      };
+      return matchField(p.name) || matchField(p.romanizedName);
+    };
+
     const sorted = [...list];
-    if (sortBy === "starred") {
-      sorted.sort((a, b) => {
+    sorted.sort((a, b) => {
+      if (query) {
+        const tierA = isDirectNameMatch(a) ? 0 : 1;
+        const tierB = isDirectNameMatch(b) ? 0 : 1;
+        if (tierA !== tierB) return tierA - tierB;
+      }
+
+      if (sortBy === "starred") {
         const diff = (b.isStarred ? 1 : 0) - (a.isStarred ? 1 : 0);
         if (diff !== 0) return diff;
         return places.indexOf(a) - places.indexOf(b);
-      });
-    } else if (sortBy === "reservation-rec") {
-      sorted.sort((a, b) => {
+      } else if (sortBy === "reservation-rec") {
         const diff = getReservationRank(b) - getReservationRank(a);
         if (diff !== 0) return diff;
         return places.indexOf(a) - places.indexOf(b);
-      });
-    } else if (sortBy === "reservation-none") {
-      sorted.sort((a, b) => {
+      } else if (sortBy === "reservation-none") {
         const diff = getReservationRank(a) - getReservationRank(b);
         if (diff !== 0) return diff;
         return places.indexOf(a) - places.indexOf(b);
-      });
-    } else if (sortBy === "name-asc") {
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sortBy === "name-desc") {
-      sorted.sort((a, b) => b.name.localeCompare(a.name));
-    } else if (sortBy === "duration-desc") {
-      sorted.sort((a, b) => (b.estimatedDuration ?? 60) - (a.estimatedDuration ?? 60));
-    } else if (sortBy === "duration-asc") {
-      sorted.sort((a, b) => (a.estimatedDuration ?? 60) - (b.estimatedDuration ?? 60));
-    }
+      } else if (sortBy === "name-asc") {
+        return a.name.localeCompare(b.name);
+      } else if (sortBy === "name-desc") {
+        return b.name.localeCompare(a.name);
+      } else if (sortBy === "duration-desc") {
+        return (b.estimatedDuration ?? 60) - (a.estimatedDuration ?? 60);
+      } else if (sortBy === "duration-asc") {
+        return (a.estimatedDuration ?? 60) - (b.estimatedDuration ?? 60);
+      }
+      return 0;
+    });
 
     return sorted;
-  }, [baseFilteredPlaces, activeTab, starredOnly, reservationOnly, duplicatesOnly, duplicatePlaceIds, sortBy, places]);
+  }, [baseFilteredPlaces, activeTab, starredOnly, reservationOnly, duplicatesOnly, duplicatePlaceIds, sortBy, places, searchQuery]);
 
   const getSortLabel = (sort: SortOption) => {
     switch (sort) {
@@ -425,9 +482,19 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search added places..."
-            className="w-full h-9 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg pl-8 pr-3 text-surface-900 dark:text-white placeholder:text-surface-400 dark:placeholder:text-surface-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            placeholder="Search places by name, highlights, or description..."
+            className="w-full h-9 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg pl-8 pr-8 text-surface-900 dark:text-white placeholder:text-surface-400 dark:placeholder:text-surface-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 rounded"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
@@ -553,19 +620,21 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
       {filteredPlaces.length === 0 ? (
         <div className="text-center py-8 px-4 bg-white dark:bg-surface-800 border border-dashed border-surface-300 dark:border-surface-600 rounded-xl">
           <p className="text-surface-500 dark:text-surface-400 text-sm">
-            {duplicatesOnly
-              ? "No duplicate places found."
-              : starredOnly
-                ? "No starred must-visit places found. Click the star icon on any place card to star it."
-                : reservationOnly
-                  ? "No places with reservation recommendations found."
-                  : activeTab === "disabled"
-                    ? "No places are currently excluded. You can exclude any place using the toggle button on its card to keep it in reserve without routing it."
-                    : activeTab === "unassigned"
-                      ? "All active places are assigned to a day!"
-                      : activeTab === "active"
-                        ? "No active places found. Check the Excluded tab to re-enable saved places, or search above to add new ones."
-                        : "No places match this filter."}
+            {searchQuery.trim()
+              ? `No places matching "${searchQuery}". Try searching by a different name, dish/highlight, or keyword.`
+              : duplicatesOnly
+                ? "No duplicate places found."
+                : starredOnly
+                  ? "No starred must-visit places found. Click the star icon on any place card to star it."
+                  : reservationOnly
+                    ? "No places with reservation recommendations found."
+                    : activeTab === "disabled"
+                      ? "No places are currently excluded. You can exclude any place using the toggle button on its card to keep it in reserve without routing it."
+                      : activeTab === "unassigned"
+                        ? "All active places are assigned to a day!"
+                        : activeTab === "active"
+                          ? "No active places found. Check the Excluded tab to re-enable saved places, or search above to add new ones."
+                          : "No places match this filter."}
           </p>
         </div>
       ) : (
@@ -610,7 +679,9 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
                   ? "Starred Places"
                   : reservationOnly
                     ? "Reservation Places"
-                    : "Places"}
+                    : searchQuery.trim()
+                      ? "Search Results"
+                      : "Places"}
             </>
           )}
         </button>
