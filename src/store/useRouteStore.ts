@@ -698,6 +698,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex: null,
             orderInDay: null,
             pinnedToDay: false,
+            unfeasibleReason: undefined,
           })),
           optimizedRoutes: [],
           customBuffers: [],
@@ -710,6 +711,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex: null,
             orderInDay: null,
             pinnedToDay: false,
+            unfeasibleReason: undefined,
           })),
           optimizedRoutes: [],
           customBuffers: [],
@@ -742,6 +744,7 @@ export const useRouteStore = create<RouteState>()(
                   (pl) => pl.dayIndex === dayIndex && !pl.isDisabled,
                 ).length,
                 pinnedToDay: true,
+                unfeasibleReason: undefined,
               }
               : p,
           );
@@ -797,7 +800,7 @@ export const useRouteStore = create<RouteState>()(
 
           const newPlaces = state.places.map((p) =>
             p.id === placeId
-              ? { ...p, dayIndex: null, orderInDay: null, pinnedToDay: false }
+              ? { ...p, dayIndex: null, orderInDay: null, pinnedToDay: false, unfeasibleReason: undefined }
               : p,
           );
 
