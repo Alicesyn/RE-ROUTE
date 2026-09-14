@@ -1173,6 +1173,8 @@ export const DailySchedule: React.FC = () => {
 
   const optimizedRoutes = useRouteStore((s) => s.optimizedRoutes);
   const optimizeDay = useRouteStore((s) => s.optimizeDay);
+  const clearOptimizedSchedule = useRouteStore((s) => s.clearOptimizedSchedule);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const unassignPlace = useRouteStore((s) => s.unassignPlace);
   const updatePlace = useRouteStore((s) => s.updatePlace);
   const reorderDayStops = useRouteStore((s) => s.reorderDayStops);
@@ -1233,6 +1235,12 @@ export const DailySchedule: React.FC = () => {
     } finally {
       setOptimizingDayIndex(null);
     }
+  };
+
+  const handleClearSchedule = () => {
+    clearOptimizedSchedule();
+    setShowClearConfirm(false);
+    toast.info("Optimized schedule cleared. All places returned to unassigned pool.", "Schedule Cleared");
   };
 
   const sensors = useSensors(
@@ -1299,6 +1307,36 @@ export const DailySchedule: React.FC = () => {
                 <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-200/70 dark:bg-amber-900/70 px-1.5 py-0.5 rounded-full">
                   {!isBannerDismissed ? "Hide Notice" : "Why?"}
                 </span>
+              </button>
+            )}
+
+            {showClearConfirm ? (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/80 rounded-lg animate-in fade-in zoom-in-95 duration-150">
+                <span className="text-xs font-semibold text-red-700 dark:text-red-300">Clear all days?</span>
+                <button
+                  type="button"
+                  onClick={handleClearSchedule}
+                  className="px-2 py-0.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded transition-colors shadow-2xs cursor-pointer"
+                >
+                  Yes, Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="px-2 py-0.5 text-xs font-medium text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700 rounded transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100/90 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800/60 transition-all shadow-2xs cursor-pointer"
+                title="Clear optimized schedule and return places to unassigned pool"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear Schedule</span>
               </button>
             )}
           </div>

@@ -115,6 +115,7 @@ interface RouteState extends ModeData {
   applyCategoryDurationsToPlaces: () => void;
   clearAll: () => void;
   unassignAll: () => void;
+  clearOptimizedSchedule: () => void;
 
   // Missing Places
   addMissingPlace: (name: string) => void;
@@ -649,7 +650,7 @@ export const useRouteStore = create<RouteState>()(
 
       clearAll: () => {
         console.log("Zustand clearAll executed");
-        set({ places: [], hotels: [], missingPlaces: [], optimizedRoutes: [] });
+        set({ places: [], hotels: [], missingPlaces: [], optimizedRoutes: [], customBuffers: [] });
       },
 
       resetTrip: () => {
@@ -683,6 +684,7 @@ export const useRouteStore = create<RouteState>()(
             hotels: [],
             missingPlaces: [],
             optimizedRoutes: [],
+            customBuffers: [],
             mockData: state.appMode === "real" ? state.mockData : emptyModeData,
             realData: state.appMode === "real" ? emptyModeData : state.realData,
           };
@@ -698,6 +700,19 @@ export const useRouteStore = create<RouteState>()(
             pinnedToDay: false,
           })),
           optimizedRoutes: [],
+          customBuffers: [],
+        })),
+
+      clearOptimizedSchedule: () =>
+        set((state) => ({
+          places: state.places.map((p) => ({
+            ...p,
+            dayIndex: null,
+            orderInDay: null,
+            pinnedToDay: false,
+          })),
+          optimizedRoutes: [],
+          customBuffers: [],
         })),
 
       addMissingPlace: (name) =>

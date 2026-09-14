@@ -11,7 +11,7 @@ import { toast } from "./services/toastService";
 import { useRouteStore } from "./store/useRouteStore";
 import { solveTSP } from "./services/tspSolver";
 import { clearMapsCache, fetchFreshPhoto } from "./services/mapsService";
-import { Wand2, Sparkles, ChevronDown, ChevronUp, RefreshCw, Loader2, MapPin, RotateCcw } from "lucide-react";
+import { Wand2, Sparkles, ChevronDown, ChevronUp, RefreshCw, Loader2, MapPin, RotateCcw, Trash2 } from "lucide-react";
 
 const MapView = React.lazy(() =>
   import("./components/map/MapView").then((m) => ({ default: m.MapView }))
@@ -41,6 +41,7 @@ function App() {
     optimizedRoutes,
     setOptimizedRoutes,
     unassignAll,
+    clearOptimizedSchedule,
     appMode,
     updatePlacesBulk,
     theme,
@@ -564,6 +565,13 @@ function App() {
     toast.info("All places unassigned from schedule.", "Schedule Cleared");
   };
 
+  const handleClearOptimizedSchedule = () => {
+    if (window.confirm("Are you sure you want to clear the optimized schedule? Places will return to the unassigned pool.")) {
+      clearOptimizedSchedule();
+      toast.info("Optimized schedule cleared. All places returned to unassigned pool.", "Schedule Cleared");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-surface-50 dark:bg-surface-900 flex flex-col font-sans transition-colors overflow-hidden">
       <Header />
@@ -759,31 +767,46 @@ function App() {
             </div>
           </div>
 
-          {/* Optimize Button */}
-          <button
-            onClick={handleOptimize}
-            disabled={places.filter((p) => !p.isDisabled).length === 0 || isOptimizing}
-            className="btn-primary w-full flex items-center justify-center gap-2 group py-4 text-lg rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isOptimizing ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>
-                  Optimizing Route ({places.filter((p) => !p.isDisabled).length} places)...
-                </span>
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                <span>
-                  Optimize Route
-                  {places.some((p) => p.isDisabled)
-                    ? ` (${places.filter((p) => !p.isDisabled).length} active)`
-                    : ""}
-                </span>
-              </>
+          {/* Optimize Button & Clear Schedule */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleOptimize}
+              disabled={places.filter((p) => !p.isDisabled).length === 0 || isOptimizing}
+              className="btn-primary flex-1 flex items-center justify-center gap-2 group py-4 text-lg rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isOptimizing ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>
+                    Optimizing Route ({places.filter((p) => !p.isDisabled).length} places)...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                  <span>
+                    {optimizedRoutes.length > 0 ? "Re-Optimize Route" : "Optimize Route"}
+                    {places.some((p) => p.isDisabled)
+                      ? ` (${places.filter((p) => !p.isDisabled).length} active)`
+                      : ""}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {optimizedRoutes.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearOptimizedSchedule}
+                disabled={isOptimizing}
+                className="flex items-center justify-center gap-2 py-4 px-5 text-base font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800/60 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer disabled:opacity-50"
+                title="Clear optimized schedule and unassign all places back to pool"
+              >
+                <Trash2 className="w-5 h-5" />
+                <span className="hidden sm:inline">Clear Schedule</span>
+              </button>
             )}
-          </button>
+          </div>
 
           {/* Bottom Row: Daily Schedule */}
           {optimizedRoutes.length > 0 && (
