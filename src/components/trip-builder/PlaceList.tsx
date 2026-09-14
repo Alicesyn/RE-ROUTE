@@ -18,6 +18,10 @@ import {
 } from "@dnd-kit/sortable";
 import { PlaceItem } from "./PlaceItem";
 import { useRouteStore } from "../../store/useRouteStore";
+
+const EditPlaceModal = React.lazy(() =>
+  import("../schedule/EditPlaceModal").then((m) => ({ default: m.EditPlaceModal }))
+);
 import { ALL_CATEGORIES, getCategoryLabel, getCategoryEmoji } from "../../utils/categoryUtils";
 import { Place, PlaceCategory } from "../../types";
 import { findDuplicatePlaceIds, getDuplicatePlaceIdsToRemove } from "../../utils/duplicateUtils";
@@ -52,6 +56,9 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
   const reorderPlaces = useRouteStore((s) => s.reorderPlaces);
   const removePlace = useRouteStore((s) => s.removePlace);
   const setAllPlacesDisabled = useRouteStore((s) => s.setAllPlacesDisabled);
+  const days = useRouteStore((s) => s.days);
+  const dayTitles = useRouteStore((s) => s.dayTitles);
+  const dayIndices = useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
   const [internalIsExpanded, setInternalIsExpanded] = useState(false);
   const isExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsExpanded;
   const toggleExpanded = () => {
@@ -65,10 +72,12 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
   const [activeTab, setActiveTab] = useState<FilterTab>("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<PlaceCategory | "all">("all");
+  const [dayFilter, setDayFilter] = useState<number | "all" | "unassigned">("all");
   const [sortBy, setSortBy] = useState<SortOption>("default");
   const [reservationOnly, setReservationOnly] = useState(false);
   const [starredOnly, setStarredOnly] = useState(false);
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
+  const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
 
   const duplicatePlaceIds = useMemo(() => findDuplicatePlaceIds(places), [places]);
 
@@ -228,6 +237,12 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
         break;
     }
 
+    if (dayFilter === "unassigned") {
+      list = list.filter((p) => p.dayIndex === null);
+    } else if (typeof dayFilter === "number") {
+      list = list.filter((p) => p.dayIndex === dayFilter);
+    }
+
     if (starredOnly) {
       list = list.filter((p) => p.isStarred);
     }
@@ -304,7 +319,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
     });
 
     return sorted;
-  }, [baseFilteredPlaces, activeTab, starredOnly, reservationOnly, duplicatesOnly, duplicatePlaceIds, sortBy, places, searchQuery]);
+  }, [baseFilteredPlaces, activeTab, dayFilter, starredOnly, reservationOnly, duplicatesOnly, duplicatePlaceIds, sortBy, places, searchQuery]);
 
   const getSortLabel = (sort: SortOption) => {
     switch (sort) {
@@ -498,6 +513,32 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          {/* Day Filter Dropdown */}
+          <select
+            value={dayFilter}
+            onChange={(e) => {
+              const val = e.target.value;
+              const nextVal = val === "all" || val === "unassigned" ? val : parseInt(val, 10);
+              setDayFilter(nextVal);
+              if (typeof nextVal === "number" && (activeTab === "unassigned" || activeTab === "disabled")) {
+                setActiveTab("active");
+              }
+            }}
+            className="h-9 shrink-0 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg px-2 text-surface-700 dark:text-surface-300 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer font-medium"
+            title="Filter places by assigned day"
+          >
+            <option value="all">All Days</option>
+            <option value="unassigned">Unassigned Only</option>
+            {dayIndices.map((i) => {
+              const title = dayTitles?.[i]?.trim();
+              return (
+                <option key={i} value={i}>
+                  Day {i + 1}{title ? `: ${title}` : ""}
+                </option>
+              );
+            })}
+          </select>
+
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as PlaceCategory | "all")}
@@ -578,12 +619,22 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
       </div>
 
       {/* Notice when custom sort or quick filters are active */}
-      {(sortBy !== "default" || reservationOnly || starredOnly || duplicatesOnly) && (
+      {(sortBy !== "default" || reservationOnly || starredOnly || duplicatesOnly || dayFilter !== "all") && (
         <div className="flex items-center justify-between text-[11px] bg-surface-100/80 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700/80 rounded-lg px-3 py-1.5 mb-3 text-surface-600 dark:text-surface-300 animate-in fade-in duration-150">
           <div className="flex items-center gap-2 flex-wrap">
             {sortBy !== "default" && (
               <span>
                 Sorted by <strong className="text-surface-900 dark:text-white">{getSortLabel(sortBy)}</strong>. Manual reordering is locked.
+              </span>
+            )}
+            {dayFilter !== "all" && (
+              <span>
+                Filter: <strong className="text-primary-700 dark:text-primary-300">
+                  {dayFilter === "unassigned"
+                    ? "Unassigned"
+                    : `Day ${(dayFilter as number) + 1}${dayTitles?.[dayFilter as number] ? `: ${dayTitles[dayFilter as number]}` : ""}`
+                  } ({filteredPlaces.length})
+                </strong>
               </span>
             )}
             {duplicatesOnly && (
@@ -609,6 +660,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
               setReservationOnly(false);
               setStarredOnly(false);
               setDuplicatesOnly(false);
+              setDayFilter("all");
             }}
             className="text-primary-600 dark:text-primary-400 font-bold hover:underline shrink-0 ml-2 cursor-pointer"
           >
@@ -628,13 +680,15 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
                   ? "No starred must-visit places found. Click the star icon on any place card to star it."
                   : reservationOnly
                     ? "No places with reservation recommendations found."
-                    : activeTab === "disabled"
-                      ? "No places are currently excluded. You can exclude any place using the toggle button on its card to keep it in reserve without routing it."
-                      : activeTab === "unassigned"
-                        ? "All active places are assigned to a day!"
-                        : activeTab === "active"
-                          ? "No active places found. Check the Excluded tab to re-enable saved places, or search above to add new ones."
-                          : "No places match this filter."}
+                    : dayFilter !== "all"
+                      ? `No places found for ${typeof dayFilter === "number" ? `Day ${dayFilter + 1}${dayTitles?.[dayFilter] ? `: ${dayTitles[dayFilter]}` : ""}` : "Unassigned"}.`
+                      : activeTab === "disabled"
+                        ? "No places are currently excluded. You can exclude any place using the toggle button on its card to keep it in reserve without routing it."
+                        : activeTab === "unassigned"
+                          ? "All active places are assigned to a day!"
+                          : activeTab === "active"
+                            ? "No active places found. Check the Excluded tab to re-enable saved places, or search above to add new ones."
+                            : "No places match this filter."}
           </p>
         </div>
       ) : (
@@ -652,7 +706,17 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
             >
               {filteredPlaces.map((place, index) => (
                 <div key={place.id} className={`h-full ${index >= 6 ? "content-auto" : ""}`}>
-                  <PlaceItem place={place} isDuplicate={duplicatePlaceIds.has(place.id)} />
+                  <PlaceItem
+                    place={place}
+                    isDuplicate={duplicatePlaceIds.has(place.id)}
+                    onEdit={(id) => setEditingPlaceId(id)}
+                    onFilterByDay={(dayIdx) => {
+                      setDayFilter(dayIdx);
+                      if (activeTab === "unassigned" || activeTab === "disabled") {
+                        setActiveTab("active");
+                      }
+                    }}
+                  />
                 </div>
               ))}
             </div>
@@ -685,6 +749,15 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(({ isExpanded: con
             </>
           )}
         </button>
+      )}
+
+      {editingPlaceId && (
+        <React.Suspense fallback={null}>
+          <EditPlaceModal
+            placeId={editingPlaceId}
+            onClose={() => setEditingPlaceId(null)}
+          />
+        </React.Suspense>
       )}
     </div>
   );

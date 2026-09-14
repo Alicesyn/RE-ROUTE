@@ -69,6 +69,12 @@ export interface Place {
   customTime?: string; // Optional locked arrival/reservation time in "HH:mm" format (e.g. "13:30", "19:00")
   isStarred?: boolean; // If true, optimizer will force this place into the schedule (never leave unassigned)
   dismissedDuplicate?: boolean; // If true, user manually removed/dismissed the duplicate flag for this place
+  allowedDayRange?: DayRangeConstraint; // Optional day range constraint (inclusive 0-indexed startDay & endDay)
+}
+
+export interface DayRangeConstraint {
+  startDay: number; // 0-indexed day index (e.g. 0 for Day 1)
+  endDay: number;   // 0-indexed day index (e.g. 6 for Day 7)
 }
 
 export interface Hotel {
@@ -98,6 +104,7 @@ export interface RouteSegment {
 
 export interface DayRoute {
   day: number;
+  title?: string;
   startHotel: Hotel | null;
   endHotel: Hotel | null;
   stops: Place[];
@@ -146,6 +153,7 @@ export interface ItinerarySnapshot {
   categoryDurations?: Record<PlaceCategory, number>;
   categoryConfigs?: Record<PlaceCategory, CategoryConfig>;
   customBuffers?: CustomBuffer[];
+  dayTitles?: Record<number, string>;
   optimizedRoutes: DayRoute[];
   savedAt: number;
 }

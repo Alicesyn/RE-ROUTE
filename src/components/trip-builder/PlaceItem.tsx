@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, MapPin, Pin, Clock, Timer, AlertCircle, Sparkles, Loader2, ExternalLink, Eye, EyeOff, Coins, Star, Copy, X, Check } from "lucide-react";
+import { GripVertical, Trash2, MapPin, Pin, Clock, Timer, AlertCircle, Sparkles, Loader2, ExternalLink, Eye, EyeOff, Coins, Star, Copy, X, Check, CalendarDays, Pencil } from "lucide-react";
 import { Place, PlaceCategory } from "../../types";
 import { useRouteStore } from "../../store/useRouteStore";
+import { formatDayRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
 import {
   getCategoryEmoji,
@@ -24,33 +25,34 @@ import {
 
 // Day badge colors (static)
 const DAY_COLORS = [
-  "bg-blue-50 text-blue-700 border-blue-200",
-  "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "bg-amber-50 text-amber-700 border-amber-200",
-  "bg-purple-50 text-purple-700 border-purple-200",
-  "bg-rose-50 text-rose-700 border-rose-200",
-  "bg-cyan-50 text-cyan-700 border-cyan-200",
-  "bg-orange-50 text-orange-700 border-orange-200",
+  "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+  "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+  "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+  "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+  "bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
+  "bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800",
 ];
 
 const getBadgeColor = (dayIndex: number | null) => {
   if (dayIndex === null)
-    return "bg-surface-100 text-surface-500 border-surface-200";
+    return "bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400 border-surface-200 dark:border-surface-700";
   return DAY_COLORS[dayIndex % DAY_COLORS.length];
 };
 
 interface PlaceItemProps {
   place: Place;
   isDuplicate?: boolean;
+  onEdit?: (id: string) => void;
+  onFilterByDay?: (dayIndex: number) => void;
 }
 
-export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplicate }) => {
+export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplicate, onEdit, onFilterByDay }) => {
   const updatePlace = useRouteStore((s) => s.updatePlace);
   const removePlace = useRouteStore((s) => s.removePlace);
-  const assignPlaceToDay = useRouteStore((s) => s.assignPlaceToDay);
-  const unassignPlace = useRouteStore((s) => s.unassignPlace);
   const togglePlaceDisabled = useRouteStore((s) => s.togglePlaceDisabled);
-  const days = useRouteStore((s) => s.days);
+  const startDate = useRouteStore((s) => s.startDate);
+  const dayTitles = useRouteStore((s) => s.dayTitles);
   const appMode = useRouteStore((s) => s.appMode);
   const showImages = useRouteStore((s) => s.showImages);
   const hasOptimizedSchedule = useRouteStore((s) => s.optimizedRoutes.length > 0);
@@ -122,8 +124,6 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
         zIndex: isDragging ? 50 : undefined,
       }
     : undefined;
-
-  const dayIndices = React.useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -219,15 +219,6 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
     }
   };
 
-  const handleDayChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === "") {
-      unassignPlace(place.id);
-    } else {
-      assignPlaceToDay(place.id, parseInt(val));
-    }
-  };
-
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newCat = e.target.value as PlaceCategory;
     updatePlace(place.id, {
@@ -239,6 +230,7 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
 
   const activePhotoUrl = getActivePhotoUrl(place.photoUrl);
   const hasImage = showImages && !!activePhotoUrl;
+  const assignedDayTitle = place.dayIndex !== null ? dayTitles?.[place.dayIndex]?.trim() : undefined;
 
   return (
     <div
@@ -281,7 +273,13 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
             <div className="flex items-start gap-1.5 min-w-0 flex-1">
               <MapPin className="w-4 h-4 text-primary-500 shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-surface-900 dark:text-white leading-snug">
+                <h3
+                  onClick={() => {
+                    if (!isDragging) onEdit?.(place.id);
+                  }}
+                  className="font-semibold text-surface-900 dark:text-white leading-snug cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                  title="Click to edit place details & allowed day range"
+                >
                   <span className="break-words">{place.name}</span>
                   {place.romanizedName && place.romanizedName.toLowerCase() !== place.name.toLowerCase() && (
                     <span className="text-xs font-normal text-surface-500 dark:text-surface-400 italic ml-1.5">
@@ -394,27 +392,19 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
                 )}
               </button>
 
-              {/* Day assignment dropdown (only when active) */}
-              {!place.isDisabled && (
-                <div className="relative">
-                  <select
-                    value={place.dayIndex !== null ? place.dayIndex : ""}
-                    onChange={handleDayChange}
-                    className={`text-xs font-bold border rounded-md pl-1.5 pr-4 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500 appearance-none cursor-pointer text-center tracking-wide ${place.dayIndex === null ? "bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400 border-surface-200 dark:border-surface-700" : getBadgeColor(place.dayIndex)}`}
-                    title="Assign to day"
-                  >
-                    <option value="">-</option>
-                    {dayIndices.map((i) => (
-                      <option key={i} value={i}>
-                        D{i + 1}
-                      </option>
-                    ))}
-                  </select>
-                  {place.pinnedToDay && (
-                    <Pin className="absolute right-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-current opacity-60 pointer-events-none" />
-                  )}
-                </div>
-              )}
+              {/* Edit Details & Day Range Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit?.(place.id);
+                }}
+                className="p-1.5 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 text-surface-400 dark:text-surface-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/30 transition-all cursor-pointer"
+                title="Edit place details & allowed day range"
+                aria-label="Edit place details"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
 
               <button
                 onClick={() => removePlace(place.id)}
@@ -425,6 +415,31 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
               </button>
             </div>
           </div>
+
+          {/* Dedicated Lower Section Day Label (shown for all assigned days) */}
+          {!place.isDisabled && place.dayIndex !== null && (
+            <div className="mt-2 flex items-center">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onFilterByDay) {
+                    onFilterByDay(place.dayIndex!);
+                  } else {
+                    onEdit?.(place.id);
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-md border shadow-2xs transition-opacity hover:opacity-90 cursor-pointer ${getBadgeColor(place.dayIndex)}`}
+                title={`Assigned to Day ${place.dayIndex + 1}${assignedDayTitle ? `: ${assignedDayTitle}` : ""}${place.pinnedToDay ? " (Pinned)" : ""}. Click to filter list by Day ${place.dayIndex + 1}.`}
+              >
+                <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                <span>Day {place.dayIndex + 1}{assignedDayTitle ? `: ${assignedDayTitle}` : ""}</span>
+                {place.pinnedToDay && (
+                  <Pin className="w-3 h-3 opacity-70 shrink-0" />
+                )}
+              </button>
+            </div>
+          )}
 
           {/* Full-width Info Badges Row: Category, Duration, Hours, Price, View on Google */}
           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -515,6 +530,35 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
             {/* Reservation Requirement badge */}
             {place.reservation && (
               <ReservationBadge reservation={place.reservation} compact />
+            )}
+
+            {/* Allowed Day Range Badge or Add Day Range chip */}
+            {place.allowedDayRange ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit?.(place.id);
+                }}
+                className="flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 shadow-2xs whitespace-nowrap hover:bg-indigo-100 dark:hover:bg-indigo-900/60 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-pointer"
+                title={`Allowed schedule range: ${formatDayRangeBadge(place.allowedDayRange, startDate, dayTitles).fullLabel} (Click to edit range)`}
+              >
+                <CalendarDays className="w-3 h-3 text-indigo-500 shrink-0" />
+                <span>{formatDayRangeBadge(place.allowedDayRange, startDate, dayTitles).fullLabel}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit?.(place.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-medium rounded-md px-1.5 py-0.5 border border-dashed border-surface-300 dark:border-surface-600 text-surface-400 dark:text-surface-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all cursor-pointer whitespace-nowrap"
+                title="Set allowed day or date range for this place"
+              >
+                <CalendarDays className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span>+ Day Range</span>
+              </button>
             )}
 
             {/* View on Google link */}

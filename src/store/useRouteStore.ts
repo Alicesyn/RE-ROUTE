@@ -22,6 +22,7 @@ interface ModeData {
   hotels: Hotel[];
   missingPlaces: string[];
   optimizedRoutes: DayRoute[];
+  dayTitles?: Record<number, string>;
 }
 
 interface RouteState extends ModeData {
@@ -56,6 +57,7 @@ interface RouteState extends ModeData {
   categoryDurations: Record<PlaceCategory, number>;
   categoryConfigs: Record<PlaceCategory, CategoryConfig>;
   customBuffers: CustomBuffer[];
+  dayTitles: Record<number, string>;
   optimizedRoutes: DayRoute[];
   savedTrips: ItinerarySnapshot[];
   isCalculating: boolean;
@@ -130,6 +132,7 @@ interface RouteState extends ModeData {
   setHotelForDay: (dayIndex: number, hotel: Hotel | null) => void;
   applyHotelToAllDays: (hotel: Hotel | null) => void;
   setHotelRange: (startDay: number, endDay: number, hotel: Hotel | null) => void;
+  setDayTitle: (dayIndex: number, title: string) => void;
 
   // Results
   setOptimizedRoutes: (routes: DayRoute[]) => void;
@@ -236,6 +239,7 @@ export const useRouteStore = create<RouteState>()(
         {} as Record<PlaceCategory, CategoryConfig>,
       ),
       customBuffers: [],
+      dayTitles: {},
       optimizedRoutes: [],
       savedTrips: [],
       isCalculating: false,
@@ -245,12 +249,14 @@ export const useRouteStore = create<RouteState>()(
         hotels: [],
         missingPlaces: [],
         optimizedRoutes: [],
+        dayTitles: {},
       },
       realData: {
         places: [],
         hotels: [],
         missingPlaces: [],
         optimizedRoutes: [],
+        dayTitles: {},
       },
 
       setTitle: (title) => set({ title }),
@@ -414,6 +420,7 @@ export const useRouteStore = create<RouteState>()(
             hotels: state.hotels,
             missingPlaces: state.missingPlaces,
             optimizedRoutes: state.optimizedRoutes,
+            dayTitles: state.dayTitles,
           };
 
           const isOldModeReal = oldMode === "real";
@@ -432,6 +439,7 @@ export const useRouteStore = create<RouteState>()(
             appMode: newMode,
             mockData: updatedMockData,
             realData: updatedRealData,
+            dayTitles: targetData.dayTitles || {},
             ...targetData,
           };
         }),
@@ -512,7 +520,7 @@ export const useRouteStore = create<RouteState>()(
           const dayIndex = target.dayIndex;
           const newPlaces = state.places.map((p) =>
             p.id === placeId
-              ? { ...p, isDisabled: true, dayIndex: null, orderInDay: null, pinnedToDay: false }
+              ? { ...p, isDisabled: true, dayIndex: null, orderInDay: null, pinnedToDay: false, unfeasibleReason: undefined }
               : p,
           );
 
@@ -650,7 +658,7 @@ export const useRouteStore = create<RouteState>()(
 
       clearAll: () => {
         console.log("Zustand clearAll executed");
-        set({ places: [], hotels: [], missingPlaces: [], optimizedRoutes: [], customBuffers: [] });
+        set({ places: [], hotels: [], missingPlaces: [], optimizedRoutes: [], customBuffers: [], dayTitles: {} });
       },
 
       resetTrip: () => {
@@ -664,6 +672,7 @@ export const useRouteStore = create<RouteState>()(
             hotels: [],
             missingPlaces: [],
             optimizedRoutes: [],
+            dayTitles: {},
           };
 
           return {
@@ -685,6 +694,7 @@ export const useRouteStore = create<RouteState>()(
             missingPlaces: [],
             optimizedRoutes: [],
             customBuffers: [],
+            dayTitles: {},
             mockData: state.appMode === "real" ? state.mockData : emptyModeData,
             realData: state.appMode === "real" ? emptyModeData : state.realData,
           };
@@ -877,7 +887,37 @@ export const useRouteStore = create<RouteState>()(
           return { hotels: existing.sort((a, b) => a.dayIndex - b.dayIndex) };
         }),
 
-      setOptimizedRoutes: (optimizedRoutes) => set({ optimizedRoutes }),
+      setDayTitle: (dayIndex: number, title: string) => {
+        const trimmed = title.trim();
+        set((state) => {
+          const newDayTitles = { ...state.dayTitles };
+          if (trimmed) {
+            newDayTitles[dayIndex] = trimmed;
+          } else {
+            delete newDayTitles[dayIndex];
+          }
+          const updatedRoutes = state.optimizedRoutes.map((r, i) =>
+            i === dayIndex || r.day === dayIndex
+              ? { ...r, title: trimmed || undefined }
+              : r
+          );
+          return {
+            dayTitles: newDayTitles,
+            optimizedRoutes: updatedRoutes,
+          };
+        });
+      },
+
+      setOptimizedRoutes: (optimizedRoutes) =>
+        set((state) => ({
+          optimizedRoutes: optimizedRoutes.map((r, idx) => {
+            const dayIdx = r.day ?? idx;
+            return {
+              ...r,
+              title: r.title || state.dayTitles[dayIdx] || undefined,
+            };
+          }),
+        })),
 
       updateSegmentTravelMode: (dayIndex, segmentIndex, mode) =>
         set((state) => {
@@ -940,10 +980,12 @@ export const useRouteStore = create<RouteState>()(
 
           const newRoutes = [...state.optimizedRoutes];
           const existingIdx = newRoutes.findIndex((r) => r.day === dayIndex);
+          const existingTitle = state.dayTitles[dayIndex] || (existingIdx >= 0 ? newRoutes[existingIdx]?.title : undefined);
+          const resultWithTitle = { ...result, title: existingTitle };
           if (existingIdx >= 0) {
-            newRoutes[existingIdx] = result;
+            newRoutes[existingIdx] = resultWithTitle;
           } else {
-            newRoutes.push(result);
+            newRoutes.push(resultWithTitle);
             newRoutes.sort((a, b) => a.day - b.day);
           }
 
@@ -1057,7 +1099,8 @@ export const useRouteStore = create<RouteState>()(
             state.categoryConfigs,
           );
 
-          routes[routeIdx] = result;
+          const existingTitle = state.dayTitles[dayIndex] || routes[routeIdx]?.title;
+          routes[routeIdx] = { ...result, title: existingTitle };
 
           const updatedPlaces = state.places.map((p) => {
             const stopIdx = result.stops.findIndex((s) => String(s.id) === String(p.id));
@@ -1098,6 +1141,7 @@ export const useRouteStore = create<RouteState>()(
             categoryDurations: state.categoryDurations,
             categoryConfigs: state.categoryConfigs,
             customBuffers: state.customBuffers,
+            dayTitles: state.dayTitles,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
           };
@@ -1141,6 +1185,7 @@ export const useRouteStore = create<RouteState>()(
             categoryDurations: trip.categoryDurations || state.categoryDurations,
             categoryConfigs: trip.categoryConfigs || state.categoryConfigs,
             customBuffers: trip.customBuffers || [],
+            dayTitles: trip.dayTitles || {},
             optimizedRoutes: trip.optimizedRoutes || [],
           };
         }),
@@ -1183,6 +1228,7 @@ export const useRouteStore = create<RouteState>()(
             categoryDurations: trip.categoryDurations || state.categoryDurations,
             categoryConfigs: trip.categoryConfigs || state.categoryConfigs,
             customBuffers: trip.customBuffers || [],
+            dayTitles: trip.dayTitles || {},
             optimizedRoutes: trip.optimizedRoutes || [],
             savedTrips: newSavedTrips,
           };
@@ -1218,6 +1264,7 @@ export const useRouteStore = create<RouteState>()(
             categoryDurations: state.categoryDurations,
             categoryConfigs: state.categoryConfigs,
             customBuffers: state.customBuffers,
+            dayTitles: state.dayTitles,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
           };
@@ -1274,6 +1321,7 @@ export const useRouteStore = create<RouteState>()(
             categoryDurations: state.categoryDurations,
             categoryConfigs: state.categoryConfigs,
             customBuffers: state.customBuffers,
+            dayTitles: state.dayTitles,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
           };
@@ -1347,6 +1395,7 @@ export const useRouteStore = create<RouteState>()(
                 {} as Record<PlaceCategory, CategoryConfig>,
               ),
             customBuffers: Array.isArray(trip.customBuffers) ? trip.customBuffers : [],
+            dayTitles: trip.dayTitles && typeof trip.dayTitles === "object" ? trip.dayTitles : {},
             optimizedRoutes: Array.isArray(trip.optimizedRoutes)
               ? trip.optimizedRoutes
               : [],
@@ -1387,6 +1436,8 @@ export const useRouteStore = create<RouteState>()(
         dailyBudget: state.dailyBudget,
         strictBudget: state.strictBudget,
         avoidClosedHours: state.avoidClosedHours,
+        customBuffers: state.customBuffers,
+        dayTitles: state.dayTitles,
         places: state.places,
         hotels: state.hotels,
         missingPlaces: state.missingPlaces,

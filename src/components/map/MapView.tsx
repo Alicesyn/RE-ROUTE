@@ -210,7 +210,7 @@ export const MapView: React.FC = React.memo(() => {
                   >
                     <Popup>
                       <h3 className="font-bold text-sm">
-                        Day {i + 1} - Stop {stopIdx + 1}
+                        {route.title ? `${route.title} (Day ${i + 1})` : `Day ${i + 1}`} - Stop {stopIdx + 1}
                       </h3>
                       <p className="font-semibold text-gray-800">
                         {stop.name}

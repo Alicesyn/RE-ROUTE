@@ -12,6 +12,11 @@ import { getDistance, estimateTime } from "../utils/distance";
 import { fetchRouteSegment } from "./mapsService";
 import { parseISO, addDays, setHours, setMinutes } from "date-fns";
 import { checkTimeConflict, getPlaceDayHours } from "../utils/timeUtils";
+import {
+  isDayAllowedForPlace,
+  getEffectiveAllowedDayRange,
+  formatDayRangeBadge,
+} from "../utils/dayRangeUtils";
 
 
 export interface FlightInfo {
@@ -156,6 +161,11 @@ function clusterPlaces(
     let maxScore = -Infinity;
 
     for (let d = 0; d < days; d++) {
+      // Unified check: respects both hard-pinning (pinnedToDay / customTime) and allowedDayRange
+      if (!isDayAllowedForPlace(place, d, days)) {
+        continue;
+      }
+
       // Resolve effective category config — check custom day override first, then first/last day
       const isFirstDay = d === 0;
       const isLastDay = d === days - 1;
@@ -271,9 +281,12 @@ function clusterPlaces(
     } else {
       // Starred places must be scheduled — force-assign to the day with the most remaining budget
       if (place.isStarred) {
-        let forceBestDay = 0;
+        let forceBestDay = -1;
         let forceMaxRemaining = -Infinity;
         for (let d = 0; d < days; d++) {
+          if (!isDayAllowedForPlace(place, d, days)) {
+            continue;
+          }
           const remaining = dailyBudgets[d] - dayTimeUsed[d];
           // If avoidClosedHours, prefer days where the place is actually open
           if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
@@ -290,21 +303,37 @@ function clusterPlaces(
             forceBestDay = d;
           }
         }
-        place.dayIndex = forceBestDay;
-        place.unfeasibleReason = undefined;
-        const hotel = hotels.find((h) => h.dayIndex === forceBestDay);
-        let travelMin = 0;
-        if (hotel) {
-          const dist = getDistance(place.lat, place.lng, hotel.lat, hotel.lng);
-          travelMin = estimateTime(dist, travelMode) / 60;
+        if (forceBestDay !== -1) {
+          place.dayIndex = forceBestDay;
+          place.unfeasibleReason = undefined;
+          const hotel = hotels.find((h) => h.dayIndex === forceBestDay);
+          let travelMin = 0;
+          if (hotel) {
+            const dist = getDistance(place.lat, place.lng, hotel.lat, hotel.lng);
+            travelMin = estimateTime(dist, travelMode) / 60;
+          }
+          dayTimeUsed[forceBestDay] += (place.estimatedDuration ?? 60) + travelMin;
+          if (!categoryCounts[forceBestDay]) categoryCounts[forceBestDay] = {};
+          categoryCounts[forceBestDay][place.category] = (categoryCounts[forceBestDay][place.category] || 0) + 1;
+        } else {
+          place.dayIndex = null;
+          const effectiveRange = getEffectiveAllowedDayRange(place, days);
+          if (effectiveRange) {
+            const badge = formatDayRangeBadge(effectiveRange, startDateISO);
+            place.unfeasibleReason = `Must-visit place cannot be scheduled within allowed range (${badge.fullLabel}).`;
+          } else {
+            place.unfeasibleReason = "Must-visit place cannot be scheduled on any trip days.";
+          }
+          rejectedUnassigned.push(place);
         }
-        dayTimeUsed[forceBestDay] += (place.estimatedDuration ?? 60) + travelMin;
-        if (!categoryCounts[forceBestDay]) categoryCounts[forceBestDay] = {};
-        categoryCounts[forceBestDay][place.category] = (categoryCounts[forceBestDay][place.category] || 0) + 1;
       } else {
         place.dayIndex = null;
+        const effectiveRange = getEffectiveAllowedDayRange(place, days);
         let reason = "Exceeds daily time budget or category limits.";
-        if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
+        if (effectiveRange) {
+          const badge = formatDayRangeBadge(effectiveRange, startDateISO);
+          reason = `Cannot fit into schedule within allowed range (${badge.fullLabel}).`;
+        } else if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
           let allClosed = true;
           for (let d = 0; d < days; d++) {
             const dayDate = addDays(parseISO(startDateISO), d);

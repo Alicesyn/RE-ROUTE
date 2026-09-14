@@ -24,10 +24,13 @@ import {
   Coffee,
   Star,
   Utensils,
+  CalendarDays,
+  Check,
 } from "lucide-react";
 import { toast } from "../../services/toastService";
-import { TravelMode, RouteSegment, CustomBuffer } from "../../types";
+import { TravelMode, RouteSegment, CustomBuffer, Place } from "../../types";
 import { getCategoryEmoji } from "../../utils/categoryUtils";
+import { formatDayRangeBadge } from "../../utils/dayRangeUtils";
 import { format, addDays, parseISO } from "date-fns";
 import { checkTimeConflict } from "../../utils/timeUtils";
 import {
@@ -191,6 +194,11 @@ const BufferPill: React.FC<BufferPillProps> = ({
             <Clock className="w-3 h-3 text-surface-400 shrink-0" />
           )}
           <span>{label || `${minutes} min buffer`}</span>
+          {startTime !== undefined && (
+            <span className="font-mono text-[9px] lowercase opacity-75 font-semibold">
+              ({formatTime(startTime)} – {formatTime(startTime + minutes)})
+            </span>
+          )}
           {isEditable && (
             <Pencil className="w-2.5 h-2.5 opacity-50 group-hover:opacity-100 hover:opacity-100 transition-opacity text-primary-500 dark:text-primary-400" />
           )}
@@ -426,20 +434,34 @@ const SortableCustomBuffer: React.FC<{
     isDragging,
   } = useSortable({ id: buffer.id });
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempLabel, setTempLabel] = useState(buffer.label || "Rest Break");
+  const [tempDuration, setTempDuration] = useState(buffer.duration);
+
+  React.useEffect(() => {
+    if (!isEditing) {
+      setTempLabel(buffer.label || "Rest Break");
+      setTempDuration(buffer.duration);
+    }
+  }, [buffer.label, buffer.duration, isEditing]);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : 1,
+    zIndex: isDragging ? 50 : isEditing ? 50 : 1,
     position: "relative" as const,
     opacity: isDragging ? 0.3 : 1,
     scale: isDragging ? 1.02 : 1,
   };
 
+  const formattedStartTime = startTime !== undefined ? formatTime(startTime) : null;
+  const formattedEndTime = startTime !== undefined ? formatTime(startTime + buffer.duration) : null;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative group ${isDragging ? "cursor-grabbing" : ""}`}
+      className={`relative group ${isDragging ? "cursor-grabbing" : ""} ${isEditing ? "z-50" : ""}`}
     >
       {/* Visual Drop Indicator */}
       {isDragging && (
@@ -451,43 +473,219 @@ const SortableCustomBuffer: React.FC<{
         className={`absolute left-5 w-0.5 bg-surface-200 dark:bg-surface-700/50 ${isFirst ? "top-5" : "top-0"} ${isLast ? "h-5" : "bottom-0"}`}
       />
 
-      <div className="relative flex items-center justify-between gap-2">
-        {/* Drag Handle */}
-        <div
-          {...attributes}
-          {...listeners}
-          className="absolute -left-6 top-3 -translate-y-1/2 p-1.5 text-surface-400 dark:text-surface-500 hover:text-surface-700 dark:hover:text-surface-200 cursor-grab active:cursor-grabbing opacity-30 group-hover:opacity-100 hover:opacity-100 transition-opacity touch-none z-20"
-          title="Drag to reorder buffer"
-        >
-          <GripVertical className="w-4 h-4" />
+      <div className="flex gap-4 relative z-10">
+        {/* Left icon with drag handle */}
+        <div className="relative z-20">
+          <div
+            className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-950/60 border-2 border-amber-300 dark:border-amber-700 flex items-center justify-center shrink-0 shadow-sm text-amber-600 dark:text-amber-400"
+            title="Buffer / Break"
+          >
+            <Coffee className="w-5 h-5" />
+          </div>
+
+          {/* Drag Handle */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="absolute -left-6 top-5 -translate-y-1/2 p-1.5 text-surface-400 dark:text-surface-500 hover:text-surface-700 dark:hover:text-surface-200 cursor-grab active:cursor-grabbing opacity-40 group-hover:opacity-100 hover:opacity-100 transition-opacity touch-none"
+            title="Drag to reorder buffer"
+          >
+            <GripVertical className="w-4 h-4" />
+          </div>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <BufferPill
-            minutes={buffer.duration}
-            startTime={startTime}
-            label={buffer.label ? `${buffer.label} (${buffer.duration}m)` : `${buffer.duration} min buffer`}
-            showLine={false}
-            type="custom"
-            customLabel={buffer.label}
-            onSaveMinutes={(newMinutes) => onUpdate({ duration: newMinutes })}
-            onSaveLabel={(newLabel) => onUpdate({ label: newLabel })}
-            onDelete={onDelete}
-          />
-        </div>
+        {/* Card Body */}
+        <div className="flex-1 min-w-0 pt-0.5 pb-3">
+          <div className="bg-amber-50/75 dark:bg-amber-950/30 rounded-xl p-3 border border-amber-200 dark:border-amber-800/60 shadow-2xs hover:shadow-md transition-all relative">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-sm font-bold text-amber-950 dark:text-amber-100 truncate">
+                  {buffer.label || "Buffer / Break"}
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300/60 dark:border-amber-700/60 shrink-0">
+                  {buffer.duration}m
+                </span>
+              </div>
 
-        {/* Quick delete button on hover */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full bg-red-100 dark:bg-red-900/40 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-800/60 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
-          title="Remove buffer"
-        >
-          <X className="w-3 h-3" />
-        </button>
+              <div className="flex items-center gap-1 shrink-0">
+                {formattedStartTime && formattedEndTime && (
+                  <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-white dark:bg-surface-800 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/70 shadow-2xs">
+                    {formattedStartTime} – {formattedEndTime}
+                  </span>
+                )}
+
+                {/* Edit Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditing((prev) => !prev);
+                  }}
+                  className="p-1 rounded text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                  title="Edit buffer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Remove Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  className="p-1 rounded text-surface-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  title="Remove buffer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-amber-700/80 dark:text-amber-400/80 uppercase font-bold tracking-tight mt-0.5">
+              Scheduled Buffer / Free Time
+            </p>
+
+            {/* Inline Edit Popover */}
+            {isEditing && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-transparent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditing(false);
+                  }}
+                />
+                <div
+                  className="absolute right-0 top-full mt-2 z-50 w-72 bg-white dark:bg-surface-850 rounded-xl shadow-2xl border border-surface-200 dark:border-surface-700 p-3.5 text-surface-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-surface-100 dark:border-surface-700 mb-2.5">
+                    <span className="text-xs font-bold flex items-center gap-1.5 text-surface-900 dark:text-white">
+                      <Coffee className="w-3.5 h-3.5 text-amber-500" />
+                      Edit Buffer / Break
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="p-1 rounded text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Label Input */}
+                  <div className="space-y-1 mb-2.5">
+                    <label className="text-[10px] font-bold text-surface-500 uppercase">
+                      Label / Activity:
+                    </label>
+                    <input
+                      type="text"
+                      value={tempLabel}
+                      onChange={(e) => setTempLabel(e.target.value)}
+                      placeholder="e.g. Lunch Break, Coffee Stop..."
+                      className="w-full bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                      {["Rest Break", "Coffee / Snack", "Lunch Break", "Buffer Time"].map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => setTempLabel(chip)}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-600 hover:border-amber-400 transition-colors"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Duration input */}
+                  <div className="space-y-1.5 mb-3">
+                    <label className="text-[10px] font-bold text-surface-500 uppercase">
+                      Duration:
+                    </label>
+                    <div className="flex items-center border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden bg-surface-50 dark:bg-surface-900">
+                      <button
+                        type="button"
+                        onClick={() => setTempDuration((m) => Math.max(5, m - 15))}
+                        className="px-2.5 py-1.5 hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-xs font-bold transition-colors"
+                      >
+                        -15
+                      </button>
+                      <input
+                        type="number"
+                        min="5"
+                        max="480"
+                        step="5"
+                        value={tempDuration}
+                        onChange={(e) => setTempDuration(Math.max(5, parseInt(e.target.value) || 5))}
+                        className="flex-1 min-w-0 bg-transparent text-center text-xs font-bold text-surface-900 dark:text-white py-1 focus:outline-none"
+                      />
+                      <span className="text-[10px] text-surface-400 dark:text-surface-500 pr-2 font-medium">
+                        min
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setTempDuration((m) => m + 15)}
+                        className="px-2.5 py-1.5 hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-xs font-bold transition-colors"
+                      >
+                        +15
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {[15, 30, 45, 60, 90].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setTempDuration(preset)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${tempDuration === preset
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300 border-surface-200 dark:border-surface-600"
+                            }`}
+                        >
+                          {preset}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-surface-100 dark:border-surface-700">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDelete();
+                        setIsEditing(false);
+                      }}
+                      className="text-xs text-red-500 hover:text-red-600 font-semibold px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                    >
+                      Delete
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(false)}
+                        className="px-2.5 py-1 text-xs font-semibold text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-md"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdate({ label: tempLabel, duration: tempDuration });
+                          setIsEditing(false);
+                        }}
+                        className="px-3 py-1 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-md shadow-2xs transition-colors"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -579,6 +777,7 @@ const SortableStop: React.FC<SortableStopProps> = React.memo(
     onEdit,
     mealGapAlert,
   }) => {
+    const startDate = useRouteStore((s) => s.startDate);
     const timeConflict =
       dateMode === "fixed"
         ? checkTimeConflict(stopArrivalTime, stop.estimatedDuration || 60, stop.openingHours, currentDate)
@@ -884,6 +1083,15 @@ const SortableStop: React.FC<SortableStopProps> = React.memo(
               )}
               {stop.reservation && (
                 <ReservationBadge reservation={stop.reservation} compact />
+              )}
+              {stop.allowedDayRange && (
+                <span
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 shadow-2xs"
+                  title={`Constrained by user to ${formatDayRangeBadge(stop.allowedDayRange, startDate).fullLabel}`}
+                >
+                  <CalendarDays className="w-2.5 h-2.5 text-indigo-500" />
+                  <span>{formatDayRangeBadge(stop.allowedDayRange, startDate).fullLabel}</span>
+                </span>
               )}
             </div>
 
@@ -1198,6 +1406,32 @@ export const DailySchedule: React.FC = () => {
   const setDepartureFlight = useRouteStore((s) => s.setDepartureFlight);
   const distanceUnit = useRouteStore((s) => s.distanceUnit);
   const categoryConfigs = useRouteStore((s) => s.categoryConfigs);
+  const dayTitles = useRouteStore((s) => s.dayTitles);
+  const setDayTitle = useRouteStore((s) => s.setDayTitle);
+
+  const [editingDayTitleIndex, setEditingDayTitleIndex] = useState<number | null>(null);
+  const [editingDayTitleText, setEditingDayTitleText] = useState<string>("");
+  const titleInputRef = React.useRef<HTMLInputElement>(null);
+
+  const startEditingDayTitle = (dayIndex: number, currentTitle?: string) => {
+    setEditingDayTitleIndex(dayIndex);
+    setEditingDayTitleText(currentTitle || "");
+    setTimeout(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }, 50);
+  };
+
+  const handleSaveDayTitle = (dayIndex: number) => {
+    const trimmed = editingDayTitleText.trim();
+    setDayTitle(dayIndex, trimmed);
+    setEditingDayTitleIndex(null);
+    if (trimmed) {
+      toast.success(`Day ${dayIndex + 1} named "${trimmed}"!`, "Day Renamed");
+    } else {
+      toast.info(`Day ${dayIndex + 1} reset to default title.`);
+    }
+  };
 
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -1369,21 +1603,30 @@ export const DailySchedule: React.FC = () => {
             </div>
 
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              {optimizedRoutes.map((_, i) => {
+              {optimizedRoutes.map((route, i) => {
                 const btnDate = addDays(parseISO(startDate), i);
+                const customName = route.title || dayTitles[i];
                 return (
                   <button
                     key={i}
                     onClick={() => scrollToDay(i)}
-                    className={`px-3 py-1.5 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 font-bold text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600 transition-all whitespace-nowrap flex flex-col items-center justify-center min-w-[60px] ${dateMode === "fixed" ? "text-[10px]" : "text-xs"}`}
+                    title={customName ? `${customName} (Day ${i + 1})` : `Day ${i + 1}`}
+                    className={`px-3 py-1.5 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 font-bold text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600 transition-all whitespace-nowrap flex flex-col items-center justify-center min-w-[60px] max-w-[120px] ${dateMode === "fixed" ? "text-[10px]" : "text-xs"}`}
                   >
-                    {dateMode === "fixed" ? (
+                    {customName ? (
                       <>
-                        <span className="opacity-50">D{i + 1}</span>
-                        <span>{format(btnDate, "MMM d")}</span>
+                        <span className="truncate w-full font-black text-primary-600 dark:text-primary-400 text-center">{customName}</span>
+                        <span className="text-[9px] opacity-60">D{i + 1}{dateMode === "fixed" ? ` • ${format(btnDate, "MMM d")}` : ""}</span>
                       </>
                     ) : (
-                      <span>Day {i + 1}</span>
+                      dateMode === "fixed" ? (
+                        <>
+                          <span className="opacity-50">D{i + 1}</span>
+                          <span>{format(btnDate, "MMM d")}</span>
+                        </>
+                      ) : (
+                        <span>Day {i + 1}</span>
+                      )
                     )}
                   </button>
                 );
@@ -1519,37 +1762,92 @@ export const DailySchedule: React.FC = () => {
 
             const dayItems = getDayItemSequence(route, i);
 
-            // Pre-calculate auto wait buffers for opening times and reservation gaps
-            let autoWaitBufferMin = 0;
+            // Unified day timeline simulation: calculate exact start times, wait buffers, durations, and segments
             let simTime = currentTime;
             let simSegIdx = 0;
-            dayItems.forEach((itemId) => {
-              if (itemId.startsWith("custom-buffer-")) {
-                const cb = customBuffers.find((b) => b.id === itemId);
-                if (cb) simTime += cb.duration;
-              } else if (itemId !== "arrival" && itemId !== "departure" && itemId !== "start-hotel" && itemId !== "end-hotel") {
-                const stop = route.stops.find((s) => s.id === itemId);
+            let autoWaitBufferMin = 0;
+
+            const itemScheduleList = dayItems.map((itemId, idx) => {
+              const isFirst = idx === 0;
+              const isLast = idx === dayItems.length - 1;
+              let preWaitMin = 0;
+              let preWaitType: "reservation" | "wait" | undefined = undefined;
+              let itemDuration = 0;
+              let customBuf: CustomBuffer | null = null;
+              let stop: Place | null = null;
+
+              if (itemId === "arrival" && arrivalFlight) {
+                itemDuration = arrivalFlight.buffer ?? 30;
+              } else if (itemId === "departure" && departureFlight) {
+                itemDuration = departureFlight.buffer ?? 90;
+              } else if (itemId === "start-hotel" && route.startHotel) {
+                itemDuration = 0;
+              } else if (itemId === "end-hotel" && route.endHotel && !isLastDay) {
+                itemDuration = 0;
+              } else if (itemId.startsWith("custom-buffer-")) {
+                customBuf = customBuffers.find((b) => b.id === itemId) || null;
+                itemDuration = customBuf ? customBuf.duration : 0;
+              } else {
+                stop = route.stops.find((s) => s.id === itemId) || null;
                 if (stop) {
                   if (stop.customTime) {
                     const customMin = parseTimeToMinutes(stop.customTime);
                     if (customMin > simTime) {
-                      autoWaitBufferMin += (customMin - simTime);
+                      preWaitMin = customMin - simTime;
+                      preWaitType = "reservation";
                       simTime = customMin;
                     }
                   } else if (dateMode === "fixed") {
-                    const tc = checkTimeConflict(simTime, stop.estimatedDuration || 60, stop.openingHours, currentDate);
+                    const tc = checkTimeConflict(
+                      simTime,
+                      stop.estimatedDuration || 60,
+                      stop.openingHours,
+                      currentDate
+                    );
                     if (tc.waitMinutes && tc.waitMinutes > 0) {
-                      autoWaitBufferMin += tc.waitMinutes;
+                      preWaitMin = tc.waitMinutes;
+                      preWaitType = "wait";
                       simTime += tc.waitMinutes;
                     }
                   }
-                  simTime += (stop.estimatedDuration || 60);
-                  if (simSegIdx < route.segments.length) {
-                    simTime += Math.round(route.segments[simSegIdx].time / 60);
-                    simSegIdx++;
-                  }
+                  itemDuration = stop.estimatedDuration || 0;
                 }
               }
+
+              const stopArrivalTime = simTime;
+              const itemStartTime = simTime;
+              simTime += itemDuration;
+              autoWaitBufferMin += preWaitMin;
+
+              // Segment calculation (segment renders right before the next physical stop)
+              const nextPhysicalIdx = dayItems.slice(idx + 1).findIndex((id) => !id.startsWith("custom-buffer-"));
+              const hasPrevPhysical = dayItems.slice(0, idx + 1).some((id) => !id.startsWith("custom-buffer-"));
+
+              let segmentData: { seg: RouteSegment; segIdx: number; segTimeMin: number } | null = null;
+              if (hasPrevPhysical && nextPhysicalIdx === 0 && simSegIdx < route.segments.length) {
+                const seg = route.segments[simSegIdx];
+                const segIdx = simSegIdx;
+                simSegIdx++;
+                const segTimeMin = Math.round(seg.time / 60);
+                simTime += segTimeMin;
+                segmentData = { seg, segIdx, segTimeMin };
+              }
+
+              return {
+                itemId,
+                idx,
+                isFirst,
+                isLast,
+                preWaitMin,
+                preWaitType,
+                preWaitStartTime: stopArrivalTime - preWaitMin,
+                startTime: itemStartTime,
+                stopArrivalTime,
+                itemDuration,
+                segmentData,
+                customBuf,
+                stop,
+              };
             });
 
             const visitMin = route.stops.reduce(
@@ -1557,7 +1855,9 @@ export const DailySchedule: React.FC = () => {
               0,
             );
             const dayCustomBuffers = customBuffers.filter((b) => b.dayIndex === i);
-            const bufferMin = dayCustomBuffers.reduce((acc, b) => acc + (b.duration || 0), 0) + autoWaitBufferMin;
+            const customBufferMin = dayCustomBuffers.reduce((acc, b) => acc + (b.duration || 0), 0);
+            const arrivalFlightBuffer = showFlights && isFirstDay && arrivalFlight ? (arrivalFlight.buffer ?? 30) : 0;
+            const bufferMin = customBufferMin + autoWaitBufferMin + arrivalFlightBuffer;
             const travelMin = Math.round(route.totalTime / 60);
             const totalDayMin = visitMin + travelMin + bufferMin;
             const remainingTime = Math.max(0, dayAvailableMinutes - totalDayMin);
@@ -1576,14 +1876,89 @@ export const DailySchedule: React.FC = () => {
                 <div className="bg-white dark:bg-surface-800 rounded-2xl border border-surface-100 dark:border-surface-700 shadow-xl overflow-hidden flex flex-col h-full max-h-[600px]">
                   <div className="p-4 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex flex-col">
-                        <h3 className="text-lg font-bold text-surface-900 dark:text-white leading-tight">
-                          Day {i + 1}
-                        </h3>
-                        {dateMode === "fixed" && (
-                          <span className="text-[11px] font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">
-                            {format(currentDate, "MMM d (EEE)")}
-                          </span>
+                      <div className="flex-1 min-w-0 pr-2">
+                        {editingDayTitleIndex === i ? (
+                          <div className="flex items-center gap-1.5 w-full">
+                            <input
+                              ref={titleInputRef}
+                              type="text"
+                              value={editingDayTitleText}
+                              onChange={(e) => setEditingDayTitleText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveDayTitle(i);
+                                if (e.key === "Escape") setEditingDayTitleIndex(null);
+                              }}
+                              placeholder="e.g. Kyoto Day 1!"
+                              maxLength={40}
+                              className="w-full max-w-[200px] bg-white dark:bg-surface-900 border border-primary-500 rounded-lg px-2 py-1 text-sm font-bold text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveDayTitle(i)}
+                              className="p-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Save day name"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDayTitleIndex(null)}
+                              className="p-1.5 text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors cursor-pointer shrink-0"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          (() => {
+                            const customName = route.title || dayTitles[i];
+                            return (
+                              <div className="flex flex-col min-w-0">
+                                <div
+                                  onClick={() => startEditingDayTitle(i, customName)}
+                                  className="group/title flex items-center gap-1.5 cursor-pointer max-w-full"
+                                  title="Click to rename this day (e.g. Kyoto Day 1!)"
+                                >
+                                  <h3 className="text-lg font-black text-surface-900 dark:text-white leading-tight truncate group-hover/title:text-primary-600 dark:group-hover/title:text-primary-400 transition-colors">
+                                    {customName || `Day ${i + 1}`}
+                                  </h3>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startEditingDayTitle(i, customName);
+                                    }}
+                                    className="opacity-0 group-hover/title:opacity-100 p-1 text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 rounded transition-all cursor-pointer shrink-0"
+                                    title="Rename day"
+                                    aria-label="Rename day"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-surface-500 dark:text-surface-400">
+                                  {customName ? (
+                                    <>
+                                      <span>Day {i + 1}</span>
+                                      {dateMode === "fixed" && (
+                                        <>
+                                          <span>•</span>
+                                          <span className="text-primary-600 dark:text-primary-400 uppercase tracking-wider">
+                                            {format(currentDate, "MMM d (EEE)")}
+                                          </span>
+                                        </>
+                                      )}
+                                    </>
+                                  ) : (
+                                    dateMode === "fixed" && (
+                                      <span className="text-primary-600 dark:text-primary-400 uppercase tracking-wider">
+                                        {format(currentDate, "MMM d (EEE)")}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()
                         )}
                       </div>
                       <div className="flex items-center gap-2 relative">
@@ -1814,16 +2189,60 @@ export const DailySchedule: React.FC = () => {
                       >
                         <div className="flex flex-col relative">
                           {(() => {
-                            let physicalSegmentIndex = 0;
                             let lastMealDepartureTime: number | null = null;
 
-                            return dayItems.map((itemId, idx) => {
-                              const isFirst = idx === 0;
-                              const isLast = idx === dayItems.length - 1;
+                            return itemScheduleList.map((item) => {
+                              const {
+                                itemId,
+                                isFirst,
+                                isLast,
+                                preWaitMin,
+                                preWaitType,
+                                preWaitStartTime,
+                                startTime,
+                                stopArrivalTime,
+                                segmentData,
+                                customBuf,
+                                stop,
+                              } = item;
 
                               let element = null;
-                              let itemDuration = 0;
                               let preBufferPill = null;
+
+                              if (preWaitMin > 0 && stop) {
+                                const isRes = preWaitType === "reservation";
+                                const openTimeFormatted = formatTime(stopArrivalTime);
+                                preBufferPill = (
+                                  <BufferPill
+                                    key={isRes ? `buffer-${stop.id}` : `wait-buffer-${stop.id}`}
+                                    minutes={preWaitMin}
+                                    startTime={preWaitStartTime}
+                                    label={
+                                      isRes
+                                        ? `Buffer: ${preWaitMin} min free time before reservation`
+                                        : `Buffer: ${preWaitMin} min wait until opening (${openTimeFormatted})`
+                                    }
+                                    isReservation={isRes}
+                                    showLine={!isFirst}
+                                    type={isRes ? "reservation" : "wait"}
+                                    stopName={stop.name}
+                                    reservationTime={stop.customTime}
+                                    onSaveReservationTime={
+                                      isRes
+                                        ? async (newTime) => {
+                                          updatePlace(stop.id, { customTime: newTime });
+                                          toast.success(`Updated ${stop.name} reservation to ${formatTimeString(newTime)}`);
+                                          try {
+                                            await useRouteStore.getState().optimizeDay(i);
+                                          } catch (e) {
+                                            console.error("Failed to re-optimize day after setting custom time", e);
+                                          }
+                                        }
+                                        : undefined
+                                    }
+                                  />
+                                );
+                              }
 
                               if (itemId === "arrival" && arrivalFlight) {
                                 const arrMin = parseTimeToMinutes(arrivalFlight.time);
@@ -1849,7 +2268,6 @@ export const DailySchedule: React.FC = () => {
                                     }}
                                   />
                                 );
-                                itemDuration = arrBuffer;
                               } else if (
                                 itemId === "departure" &&
                                 departureFlight
@@ -1878,7 +2296,6 @@ export const DailySchedule: React.FC = () => {
                                     }}
                                   />
                                 );
-                                itemDuration = depBuffer;
                               } else if (
                                 itemId === "start-hotel" &&
                                 route.startHotel
@@ -1889,7 +2306,7 @@ export const DailySchedule: React.FC = () => {
                                     id="start-hotel"
                                     name={route.startHotel.name}
                                     type="start-hotel"
-                                    calculatedTime={currentTime}
+                                    calculatedTime={startTime}
                                     isFirst={isFirst}
                                     isLast={isLast}
                                   />
@@ -1905,154 +2322,73 @@ export const DailySchedule: React.FC = () => {
                                     id="end-hotel"
                                     name={route.endHotel.name}
                                     type="end-hotel"
-                                    calculatedTime={currentTime}
+                                    calculatedTime={startTime}
                                     isFirst={isFirst}
                                     isLast={isLast}
                                   />
                                 );
-                              } else if (itemId.startsWith("custom-buffer-")) {
-                                const customBuf = customBuffers.find((b) => b.id === itemId);
-                                if (customBuf) {
-                                  element = (
-                                    <SortableCustomBuffer
-                                      key={customBuf.id}
-                                      buffer={customBuf}
-                                      startTime={currentTime}
-                                      isFirst={isFirst}
-                                      isLast={isLast}
-                                      onUpdate={(updates) => updateCustomBuffer(customBuf.id, updates)}
-                                      onDelete={() => {
-                                        deleteCustomBuffer(customBuf.id);
-                                        toast.success("Buffer removed");
-                                      }}
-                                    />
-                                  );
-                                  itemDuration = customBuf.duration;
-                                }
-                              } else {
-                                const stop = route.stops.find(
-                                  (s) => s.id === itemId,
+                              } else if (itemId.startsWith("custom-buffer-") && customBuf) {
+                                element = (
+                                  <SortableCustomBuffer
+                                    key={customBuf.id}
+                                    buffer={customBuf}
+                                    startTime={startTime}
+                                    isFirst={isFirst}
+                                    isLast={isLast}
+                                    onUpdate={(updates) => updateCustomBuffer(customBuf.id, updates)}
+                                    onDelete={() => {
+                                      deleteCustomBuffer(customBuf.id);
+                                      toast.success("Buffer removed");
+                                    }}
+                                  />
                                 );
-                                if (stop) {
-                                  let stopArrivalTime = currentTime;
-                                  if (stop.customTime) {
-                                    const customMin = parseTimeToMinutes(stop.customTime);
-                                    if (customMin > currentTime) {
-                                      const idleMin = customMin - currentTime;
-                                      preBufferPill = (
-                                        <BufferPill
-                                          key={`buffer-${stop.id}`}
-                                          minutes={idleMin}
-                                          startTime={currentTime}
-                                          label={`${idleMin} min free time before reservation`}
-                                          isReservation
-                                          showLine={!isFirst}
-                                          type="reservation"
-                                          stopName={stop.name}
-                                          reservationTime={stop.customTime}
-                                          onSaveReservationTime={async (newTime) => {
-                                            updatePlace(stop.id, { customTime: newTime });
-                                            toast.success(`Updated ${stop.name} reservation to ${formatTimeString(newTime)}`);
-                                            try {
-                                              await useRouteStore.getState().optimizeDay(i);
-                                            } catch (e) {
-                                              console.error("Failed to re-optimize day after setting custom time", e);
-                                            }
-                                          }}
-                                        />
-                                      );
-                                      currentTime = customMin;
-                                      stopArrivalTime = customMin;
-                                    }
-                                  } else if (dateMode === "fixed") {
-                                    const timeCheck = checkTimeConflict(
-                                      currentTime,
-                                      stop.estimatedDuration || 60,
-                                      stop.openingHours,
-                                      currentDate
-                                    );
-                                    if (timeCheck.waitMinutes && timeCheck.waitMinutes > 0) {
-                                      const waitMin = timeCheck.waitMinutes;
-                                      const openTimeFormatted = formatTime(currentTime + waitMin);
-                                      preBufferPill = (
-                                        <BufferPill
-                                          key={`wait-buffer-${stop.id}`}
-                                          minutes={waitMin}
-                                          startTime={currentTime}
-                                          label={`${waitMin} min wait until opening (${openTimeFormatted})`}
-                                          showLine={!isFirst}
-                                          type="wait"
-                                          stopName={stop.name}
-                                        />
-                                      );
-                                      currentTime += waitMin;
-                                      stopArrivalTime = currentTime;
+                              } else if (stop) {
+                                let mealGapAlert: { gap: number; minGap: number } | null = null;
+                                const minSpacing = categoryConfigs?.[stop.category]?.minTimeBetween ?? (stop.category === "restaurant" ? 180 : 0);
+                                if (minSpacing > 0 && stop.category === "restaurant") {
+                                  if (lastMealDepartureTime !== null) {
+                                    const gap = stopArrivalTime - lastMealDepartureTime;
+                                    if (gap < minSpacing) {
+                                      mealGapAlert = { gap, minGap: minSpacing };
                                     }
                                   }
+                                }
 
-                                  let mealGapAlert: { gap: number; minGap: number } | null = null;
-                                  const minSpacing = categoryConfigs?.[stop.category]?.minTimeBetween ?? (stop.category === "restaurant" ? 180 : 0);
-                                  if (minSpacing > 0 && stop.category === "restaurant") {
-                                    if (lastMealDepartureTime !== null) {
-                                      const gap = stopArrivalTime - lastMealDepartureTime;
-                                      if (gap < minSpacing) {
-                                        mealGapAlert = { gap, minGap: minSpacing };
-                                      }
-                                    }
-                                  }
-
-                                  element = (
-                                    <SortableStop
-                                      key={stop.id}
-                                      stop={stop}
-                                      stopArrivalTime={stopArrivalTime}
-                                      isFirst={isFirst}
-                                      isLast={isLast}
-                                      unassignPlace={unassignPlace}
-                                      updatePlace={updatePlace}
-                                      dayIndex={i}
-                                      dateMode={dateMode}
-                                      currentDate={currentDate}
-                                      onEdit={handleEditPlace}
-                                      mealGapAlert={mealGapAlert}
-                                    />
-                                  );
-                                  itemDuration = stop.estimatedDuration || 0;
-                                  if (stop.category === "restaurant") {
-                                    lastMealDepartureTime = stopArrivalTime + (stop.estimatedDuration || 60);
-                                  }
+                                element = (
+                                  <SortableStop
+                                    key={stop.id}
+                                    stop={stop}
+                                    stopArrivalTime={stopArrivalTime}
+                                    isFirst={isFirst}
+                                    isLast={isLast}
+                                    unassignPlace={unassignPlace}
+                                    updatePlace={updatePlace}
+                                    dayIndex={i}
+                                    dateMode={dateMode}
+                                    currentDate={currentDate}
+                                    onEdit={handleEditPlace}
+                                    mealGapAlert={mealGapAlert}
+                                  />
+                                );
+                                if (stop.category === "restaurant") {
+                                  lastMealDepartureTime = stopArrivalTime + (stop.estimatedDuration || 60);
                                 }
                               }
 
                               if (!element) return null;
 
-                              currentTime += itemDuration;
-
-                              // Segment should render right before the next physical stop
-                              const nextPhysicalIdx = dayItems.slice(idx + 1).findIndex((id) => !id.startsWith("custom-buffer-"));
-                              const hasPrevPhysical = dayItems.slice(0, idx + 1).some((id) => !id.startsWith("custom-buffer-"));
-
                               let segmentElement = null;
-                              if (hasPrevPhysical && nextPhysicalIdx === 0 && physicalSegmentIndex < route.segments.length) {
-                                const currentSeg = route.segments[physicalSegmentIndex];
-                                const segIdx = physicalSegmentIndex;
-                                physicalSegmentIndex++;
+                              if (segmentData) {
                                 segmentElement = (
                                   <div
                                     className="mt-[-4px]"
-                                    key={`seg-${itemId}-${segIdx}`}
+                                    key={`seg-${itemId}-${segmentData.segIdx}`}
                                   >
                                     <SegmentPill
-                                      segment={currentSeg}
+                                      segment={segmentData.seg}
                                       dayIndex={i}
-                                      segmentIndex={segIdx}
+                                      segmentIndex={segmentData.segIdx}
                                     />
-                                    {(() => {
-                                      currentTime += Math.round(
-                                        currentSeg.time / 60,
-                                      );
-                                      return null;
-                                    })()}
                                   </div>
                                 );
                               }

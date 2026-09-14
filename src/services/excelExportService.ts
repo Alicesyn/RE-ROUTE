@@ -693,10 +693,13 @@ export async function exportTripToExcel(
   });
 
   trip.optimizedRoutes.forEach((route, i) => {
-    let dayDateLabel = `Day ${i + 1}`;
+    const customTitle = route.title || trip.dayTitles?.[i];
+    let dayDateLabel = customTitle ? `${customTitle} (Day ${i + 1})` : `Day ${i + 1}`;
     if (trip.dateMode === "fixed" && trip.startDate) {
       const d = addDays(parseISO(trip.startDate), i);
-      dayDateLabel = `Day ${i + 1} (${format(d, "EEE, MMM d")})`;
+      dayDateLabel = customTitle
+        ? `${customTitle} • Day ${i + 1} (${format(d, "EEE, MMM d")})`
+        : `Day ${i + 1} (${format(d, "EEE, MMM d")})`;
     }
     const stopsList = route.stops.map((s) => s.name).join(" → ");
     const distanceStr = formatDistance(route.totalDistance, distanceUnit);
@@ -1048,8 +1051,9 @@ export async function exportTripToExcel(
   // SHEETS 3..N: 📍 DAY 1, DAY 2... (Individual Daily Pages)
   // -------------------------------------------------------------------------
   trip.optimizedRoutes.forEach((route, dayIdx) => {
-    let tabName = `📍 Day ${dayIdx + 1}`;
-    if (trip.dateMode === "fixed" && trip.startDate) {
+    const customTitle = route.title || trip.dayTitles?.[dayIdx];
+    let tabName = customTitle ? `📍 ${customTitle.slice(0, 22)}` : `📍 Day ${dayIdx + 1}`;
+    if (!customTitle && trip.dateMode === "fixed" && trip.startDate) {
       const d = addDays(parseISO(trip.startDate), dayIdx);
       tabName = `📍 Day ${dayIdx + 1} (${format(d, "MMM d")})`;
     }
