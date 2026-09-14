@@ -4,7 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2, MapPin, Pin, Clock, Timer, AlertCircle, Sparkles, Loader2, ExternalLink, Eye, EyeOff, Coins, Star, Copy, X, Check, CalendarDays, Pencil, ChevronDown } from "lucide-react";
 import { Place, PlaceCategory } from "../../types";
 import { useRouteStore } from "../../store/useRouteStore";
-import { formatDayRangeBadge } from "../../utils/dayRangeUtils";
+import { formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
 import {
   getCategoryEmoji,
@@ -596,7 +596,7 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
             )}
 
             {/* Allowed Day Range Badge or Add Day Range chip */}
-            {place.allowedDayRange ? (
+            {place.allowedDayRanges && place.allowedDayRanges.length > 0 ? (
               <button
                 type="button"
                 onClick={(e) => {
@@ -604,10 +604,10 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
                   onEdit?.(place.id);
                 }}
                 className="flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 shadow-2xs whitespace-nowrap hover:bg-indigo-100 dark:hover:bg-indigo-900/60 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-pointer"
-                title={`Allowed schedule range: ${formatDayRangeBadge(place.allowedDayRange, startDate, dayTitles).fullLabel} (Click to edit range)`}
+                title={`Allowed schedule range: ${formatMultiRangeBadge(place.allowedDayRanges, startDate, dayTitles).fullLabel} (Click to edit)`}
               >
                 <CalendarDays className="w-3 h-3 text-indigo-500 shrink-0" />
-                <span>{formatDayRangeBadge(place.allowedDayRange, startDate, dayTitles).fullLabel}</span>
+                <span>{formatMultiRangeBadge(place.allowedDayRanges, startDate, dayTitles).fullLabel}</span>
               </button>
             ) : (
               <button

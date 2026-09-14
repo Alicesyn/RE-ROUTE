@@ -69,7 +69,7 @@ export interface Place {
   customTime?: string; // Optional locked arrival/reservation time in "HH:mm" format (e.g. "13:30", "19:00")
   isStarred?: boolean; // If true, optimizer will force this place into the schedule (never leave unassigned)
   dismissedDuplicate?: boolean; // If true, user manually removed/dismissed the duplicate flag for this place
-  allowedDayRange?: DayRangeConstraint; // Optional day range constraint (inclusive 0-indexed startDay & endDay)
+  allowedDayRanges?: DayRangeConstraint[]; // Multiple disjoint day range constraints (e.g., Oct 3–6 AND Oct 9–12)
 }
 
 export interface DayRangeConstraint {

@@ -26,10 +26,28 @@ const STORAGE_KEY_USAGE = "reroute_api_usage_stats_v1";
 const STORAGE_KEY_CUSTOM_MAPS = "reroute_custom_maps_key";
 const STORAGE_KEY_CUSTOM_GEMINI = "reroute_custom_gemini_key";
 const STORAGE_KEY_LIMITS = "reroute_api_budget_limits_v1";
+const STORAGE_KEY_CLOUD_SYNC = "reroute_cloud_sync_enabled_v1";
 
 const DEFAULT_LIMITS: ApiBudgetLimits = {
   dailyMapsLimit: 1000,
   dailyGeminiLimit: 1500,
+};
+
+export const isCloudSyncActive = (): boolean => {
+  if (!isLocalDev()) {
+    // In production (Vercel deployment), cloud sync is always active
+    return true;
+  }
+  // In local development, check localStorage override first
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_CLOUD_SYNC);
+    if (stored !== null) {
+      return stored === "true";
+    }
+  } catch (e) {}
+
+  // Fall back to environment variable VITE_SYNC_CLOUD_REDIS
+  return import.meta.env.VITE_SYNC_CLOUD_REDIS === "true";
 };
 
 const getTodayDateString = () => new Date().toISOString().split("T")[0];
@@ -92,8 +110,8 @@ const checkDayRollover = () => {
 
 // Sync with global cloud counter endpoint
 const fetchCloudStats = async () => {
-  if (isLocalDev()) {
-    // In local development, do not call Vercel serverless /api/usage
+  if (!isCloudSyncActive()) {
+    // Cloud sync disabled
     return;
   }
 
@@ -123,14 +141,33 @@ const fetchCloudStats = async () => {
 };
 
 // Initiate background cloud sync
-if (typeof window !== "undefined" && !isLocalDev()) {
-  setTimeout(() => fetchCloudStats(), 300);
+if (typeof window !== "undefined") {
+  if (isCloudSyncActive()) {
+    setTimeout(() => fetchCloudStats(), 300);
+  }
 }
 
 export const apiUsageService = {
   getStats: (): ApiUsageStats => {
     checkDayRollover();
     return { ...currentStats };
+  },
+
+  isCloudSyncEnabled: (): boolean => {
+    return isCloudSyncActive();
+  },
+
+  setCloudSyncEnabled: (enabled: boolean) => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CLOUD_SYNC, String(enabled));
+    } catch (e) {}
+
+    if (enabled) {
+      fetchCloudStats();
+    } else {
+      currentStats = { ...currentStats, isCloudSynced: false };
+      persistAndNotify();
+    }
   },
 
   getLimits: (): ApiBudgetLimits => {
@@ -148,10 +185,10 @@ export const apiUsageService = {
   },
 
   syncWithCloud: async (): Promise<{ success: boolean; message?: string }> => {
-    if (isLocalDev()) {
+    if (!isCloudSyncActive()) {
       return {
         success: false,
-        message: "Cloud sync is disabled during local dev (activates when deployed on Vercel).",
+        message: "Cloud sync is disabled (enable in settings or set VITE_SYNC_CLOUD_REDIS=true).",
       };
     }
     await fetchCloudStats();
@@ -171,8 +208,8 @@ export const apiUsageService = {
     else if (type === "gemini") currentStats.geminiCalls++;
     persistAndNotify();
 
-    // Asynchronously report to cloud counter (only when deployed on Vercel)
-    if (!isLocalDev()) {
+    // Asynchronously report to cloud counter (when cloud sync is active)
+    if (isCloudSyncActive()) {
       try {
         fetch("/api/usage", {
           method: "POST",
@@ -188,7 +225,7 @@ export const apiUsageService = {
     currentStats.cacheHits += count;
     persistAndNotify();
 
-    if (!isLocalDev()) {
+    if (isCloudSyncActive()) {
       try {
         fetch("/api/usage", {
           method: "POST",

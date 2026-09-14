@@ -25,7 +25,7 @@ import { PlaceListEmptyState } from "./PlaceListEmptyState";
 import { useRouteStore } from "../../store/useRouteStore";
 import { Place, PlaceCategory, DayRangeConstraint } from "../../types";
 import { findDuplicatePlaceIds, getDuplicatePlaceIdsToRemove } from "../../utils/duplicateUtils";
-import { formatDayRangeBadge } from "../../utils/dayRangeUtils";
+import { formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
 
 const EditPlaceModal = React.lazy(() =>
@@ -369,20 +369,21 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       );
     };
 
-    const handleApplyDayRestriction = (range: DayRangeConstraint | null) => {
+    const handleApplyDayRestriction = (ranges: DayRangeConstraint[] | null) => {
       if (filteredPlaces.length === 0) return;
 
       const updates = filteredPlaces.map((p) => {
         const isOutOfRange =
-          range &&
+          ranges &&
+          ranges.length > 0 &&
           p.dayIndex !== null &&
           p.dayIndex !== undefined &&
-          (p.dayIndex < range.startDay || p.dayIndex > range.endDay);
+          !ranges.some((r) => p.dayIndex! >= r.startDay && p.dayIndex! <= r.endDay);
 
         return {
           id: p.id,
           updates: {
-            allowedDayRange: range ? { ...range } : undefined,
+            allowedDayRanges: ranges && ranges.length > 0 ? ranges.map((r) => ({ ...r })) : undefined,
             ...(isOutOfRange ? { dayIndex: null, orderInDay: null, pinnedToDay: false } : {}),
           },
         };
@@ -390,8 +391,8 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
 
       updatePlacesBulk(updates);
 
-      if (range) {
-        const badge = formatDayRangeBadge(range, startDate, dayTitles);
+      if (ranges && ranges.length > 0) {
+        const badge = formatMultiRangeBadge(ranges, startDate, dayTitles);
         toast.success(
           `Restricted ${filteredPlaces.length} place(s) to ${badge.fullLabel}.`,
           "Day Restriction Applied"

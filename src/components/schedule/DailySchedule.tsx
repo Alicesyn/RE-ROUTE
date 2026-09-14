@@ -30,7 +30,7 @@ import {
 import { toast } from "../../services/toastService";
 import { TravelMode, RouteSegment, CustomBuffer, Place } from "../../types";
 import { getCategoryEmoji } from "../../utils/categoryUtils";
-import { formatDayRangeBadge } from "../../utils/dayRangeUtils";
+import { formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { format, addDays, parseISO } from "date-fns";
 import { checkTimeConflict } from "../../utils/timeUtils";
 import {
@@ -1081,17 +1081,16 @@ const SortableStop: React.FC<SortableStopProps> = React.memo(
                   {stop.priceEstimate}
                 </span>
               )}
-              {stop.reservation && (
-                <ReservationBadge reservation={stop.reservation} compact />
-              )}
-              {stop.allowedDayRange && (
+              {stop.allowedDayRanges && stop.allowedDayRanges.length > 0 && (
                 <span
                   className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 shadow-2xs"
-                  title={`Constrained by user to ${formatDayRangeBadge(stop.allowedDayRange, startDate).fullLabel}`}
+                  title={`Constrained by user to ${formatMultiRangeBadge(stop.allowedDayRanges, startDate).fullLabel}`}
                 >
                   <CalendarDays className="w-2.5 h-2.5 text-indigo-500" />
-                  <span>{formatDayRangeBadge(stop.allowedDayRange, startDate).fullLabel}</span>
                 </span>
+              )}
+              {stop.reservation && (
+                <ReservationBadge reservation={stop.reservation} compact />
               )}
             </div>
 

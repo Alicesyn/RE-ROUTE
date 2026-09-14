@@ -35,6 +35,7 @@ export const ApiBudgetModal: React.FC<ApiBudgetModalProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>("budget");
   const [stats, setStats] = useState<ApiUsageStats>(apiUsageService.getStats());
   const [limits, setLimits] = useState<ApiBudgetLimits>(apiUsageService.getLimits());
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(apiUsageService.isCloudSyncEnabled());
 
   const [customMapsKey, setCustomMapsKey] = useState(apiUsageService.getCustomMapsKey());
   const [customGeminiKey, setCustomGeminiKey] = useState(apiUsageService.getCustomGeminiKey());
@@ -48,6 +49,7 @@ export const ApiBudgetModal: React.FC<ApiBudgetModalProps> = ({
     const unsub = apiUsageService.subscribe((newStats) => {
       setStats(newStats);
       setLimits(apiUsageService.getLimits());
+      setCloudSyncEnabled(apiUsageService.isCloudSyncEnabled());
     });
     return unsub;
   }, []);
@@ -215,55 +217,91 @@ export const ApiBudgetModal: React.FC<ApiBudgetModalProps> = ({
             {activeTab === "budget" && (
               <div className="space-y-6">
                 {/* Cloud Sync Status Banner */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-50 dark:bg-surface-900/40 border border-surface-200 dark:border-surface-700">
-                  <div className="flex items-center gap-2.5">
-                    {stats.isCloudSynced ? (
-                      <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                        <Cloud className="w-4 h-4" />
-                      </div>
-                    ) : (
-                      <div className="w-7 h-7 rounded-lg bg-surface-200 dark:bg-surface-700 text-surface-500 dark:text-surface-400 flex items-center justify-center">
-                        <CloudOff className="w-4 h-4" />
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-surface-900 dark:text-white">
+                <div className="p-3.5 rounded-xl bg-surface-50 dark:bg-surface-900/40 border border-surface-200 dark:border-surface-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {stats.isCloudSynced ? (
+                        <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                          <Cloud className="w-4 h-4" />
+                        </div>
+                      ) : (
+                        <div className="w-7 h-7 rounded-lg bg-surface-200 dark:bg-surface-700 text-surface-500 dark:text-surface-400 flex items-center justify-center">
+                          <CloudOff className="w-4 h-4" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-surface-900 dark:text-white">
+                            {stats.isCloudSynced
+                              ? "Global Cloud Sync Active"
+                              : isLocalDev()
+                              ? (cloudSyncEnabled ? "Connecting to Cloud..." : "Local Dev (Browser Storage)")
+                              : "Local Browser Storage Active"}
+                          </span>
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              stats.isCloudSynced ? "bg-emerald-500 animate-pulse" : "bg-surface-400"
+                            }`}
+                          />
+                        </div>
+                        <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5">
                           {stats.isCloudSynced
-                            ? "Global Cloud Sync Active"
+                            ? "Budget usage is live synced across all visitors via shared cloud database"
                             : isLocalDev()
-                            ? "Local Dev (Browser Storage)"
-                            : "Local Browser Storage Active"}
-                        </span>
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            stats.isCloudSynced ? "bg-emerald-500 animate-pulse" : "bg-surface-400"
-                          }`}
-                        />
+                            ? (cloudSyncEnabled
+                              ? "Live sync with https://reroute.tools Redis database is active."
+                              : "Running in isolated local dev. Toggle below to sync with production Redis.")
+                            : "Connect free Upstash Redis / Vercel KV to sync total usage across all visitors"}
+                        </p>
                       </div>
-                      <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5">
-                        {stats.isCloudSynced
-                          ? "Budget usage is live synced across all visitors via shared cloud database"
-                          : isLocalDev()
-                          ? "Running in local development. Cloud Upstash counter is active when deployed on Vercel."
-                          : "Connect free Upstash Redis / Vercel KV to sync total usage across all visitors"}
-                      </p>
                     </div>
+                    <button
+                      onClick={async () => {
+                        const res = await apiUsageService.syncWithCloud();
+                        if (!res.success && res.message) {
+                          toast.info(res.message, "Cloud Sync");
+                        } else {
+                          toast.success("Synchronized with global Redis cloud counter.", "Cloud Synced");
+                        }
+                      }}
+                      className="p-1.5 px-2.5 rounded-lg border border-surface-200 dark:border-surface-700 hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Sync</span>
+                    </button>
                   </div>
-                  <button
-                    onClick={async () => {
-                      const res = await apiUsageService.syncWithCloud();
-                      if (!res.success && res.message) {
-                        toast.info(res.message, "Local Dev Mode");
-                      } else {
-                        toast.info("Checked global cloud counter.", "Cloud Synced");
-                      }
-                    }}
-                    className="p-1.5 px-2.5 rounded-lg border border-surface-200 dark:border-surface-700 hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Sync</span>
-                  </button>
+
+                  {/* Local Development Only: Sync with Production Redis Toggle */}
+                  {isLocalDev() && (
+                    <div className="mt-3 pt-3 border-t border-surface-200/80 dark:border-surface-700/80 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-surface-700 dark:text-surface-300">
+                          Sync with Production Redis
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-950/60 text-primary-600 dark:text-primary-400 font-mono font-semibold">
+                          reroute.tools
+                        </span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={cloudSyncEnabled}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setCloudSyncEnabled(checked);
+                            apiUsageService.setCloudSyncEnabled(checked);
+                            if (checked) {
+                              toast.info("Connecting to https://reroute.tools Redis database...", "Cloud Sync Enabled");
+                            } else {
+                              toast.info("Local storage isolated from production database.", "Cloud Sync Disabled");
+                            }
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-surface-300 peer-focus:outline-none rounded-full peer dark:bg-surface-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 {/* Summary Banner */}

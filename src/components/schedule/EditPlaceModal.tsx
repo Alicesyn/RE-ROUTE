@@ -55,10 +55,10 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setCustomTimeVal(place.customTime || "");
       setIsStarred(!!place.isStarred);
       setDismissedDuplicate(!!place.dismissedDuplicate);
-      if (place.allowedDayRange) {
+      if (place.allowedDayRanges && place.allowedDayRanges.length > 0) {
         setHasDayRange(true);
-        setStartDayIndex(Math.max(0, Math.min(days - 1, place.allowedDayRange.startDay)));
-        setEndDayIndex(Math.max(0, Math.min(days - 1, place.allowedDayRange.endDay)));
+        setStartDayIndex(Math.max(0, Math.min(days - 1, place.allowedDayRanges[0].startDay)));
+        setEndDayIndex(Math.max(0, Math.min(days - 1, place.allowedDayRanges[0].endDay)));
       } else {
         setHasDayRange(false);
         setStartDayIndex(0);
@@ -90,18 +90,18 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       : undefined;
 
     const trimmedCustomTime = customTimeVal.trim();
-    const finalAllowedDayRange: DayRangeConstraint | undefined = hasDayRange
-      ? {
+    const finalAllowedDayRanges: DayRangeConstraint[] | undefined = hasDayRange
+      ? [{
         startDay: Math.min(startDayIndex, endDayIndex),
         endDay: Math.max(startDayIndex, endDayIndex),
-      }
+      }]
       : undefined;
 
     const isDayOutOfRange =
       place.dayIndex !== null &&
       place.dayIndex !== undefined &&
-      finalAllowedDayRange !== undefined &&
-      (place.dayIndex < finalAllowedDayRange.startDay || place.dayIndex > finalAllowedDayRange.endDay);
+      finalAllowedDayRanges !== undefined &&
+      !finalAllowedDayRanges.some((r) => place.dayIndex! >= r.startDay && place.dayIndex! <= r.endDay);
 
     const shouldReoptimize =
       place.dayIndex !== null &&
@@ -121,7 +121,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       pinnedToDay: trimmedCustomTime ? true : place.pinnedToDay,
       isStarred,
       dismissedDuplicate,
-      allowedDayRange: finalAllowedDayRange,
+      allowedDayRanges: finalAllowedDayRanges,
       ...(isDayOutOfRange ? { dayIndex: null, orderInDay: null, pinnedToDay: false } : {}),
     });
     onClose();

@@ -3,6 +3,15 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api": {
+        target: "https://reroute.tools",
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
   build: {
     target: "esnext",
     cssCodeSplit: true,
