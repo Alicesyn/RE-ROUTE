@@ -59,3 +59,15 @@ This skill guides creating and styling user interfaces, interactive maps, and dr
 - All heavy modals (`ApiBudgetModal`, `CategorySettingsModal`, `ImportModal`, `LoadTripModal`, `EditPlaceModal`) **must be lazy-loaded** using `React.lazy` and rendered conditionally inside `<React.Suspense fallback={null}>`.
 - Modals use `<AnimatePresence>` from `framer-motion` for backdrop blur and smooth scale-in.
 - Ensure all modal inputs have accessible labels, dark mode styles, and click-outside / Escape dismissal.
+
+### 5. Component Modularity & Code Hygiene
+
+- **Keep Components Under ~300 Lines**: Massive monolithic components (>500 lines) are an anti-pattern in RE-ROUTE. When a component grows beyond ~300 lines or manages multiple distinct concerns, decompose it into focused, single-responsibility subcomponents.
+- **Decomposition Pattern**:
+  - Extract toolbars, filter tabs, alert banners, action menus, and empty states into dedicated sibling files (e.g., `PlaceFilterTabs.tsx`, `DuplicatePlacesBanner.tsx`, `PlaceListToolbar.tsx`, `PlaceMassEditBar.tsx`, `PlaceListEmptyState.tsx`).
+  - Keep the parent container focused on state coordination, store subscriptions, drag-and-drop orchestration, and high-level layout.
+- **Performance & Contracts**:
+  - Wrap pure presentational or controlled subcomponents in `React.memo` with precise prop contracts.
+  - Export clear TypeScript prop interfaces (`interface XProps { ... }`) for each subcomponent to ensure strong type safety and maintainability.
+  - For native `<select>` controls, always provide explicit cross-platform dark mode styling (`style={{ colorScheme: "dark light" }}` and dark option classes) to prevent unreadable text in dark mode on OS-native dropdowns.
+
