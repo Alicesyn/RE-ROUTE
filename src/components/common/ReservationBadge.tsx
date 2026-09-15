@@ -41,7 +41,7 @@ export const ReservationBadge: React.FC<ReservationBadgeProps> = ({
       case "walk_ins_only":
         return {
           icon: Footprints,
-          label: "Walk-in Only",
+          label: compact ? "Walk-in" : "Walk-in Only",
           badgeClass:
             "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/80",
           iconClass: "text-sky-600 dark:text-sky-400",
@@ -75,14 +75,6 @@ export const ReservationBadge: React.FC<ReservationBadgeProps> = ({
       >
         <IconComponent className={`w-2.5 h-2.5 shrink-0 ${config.iconClass}`} />
         <span>{config.label}</span>
-        {advanceTime && (
-          <>
-            <span className="opacity-40">•</span>
-            <span className="font-normal opacity-90 truncate max-w-[120px] sm:max-w-[180px]">
-              {advanceTime}
-            </span>
-          </>
-        )}
       </span>
     );
   }

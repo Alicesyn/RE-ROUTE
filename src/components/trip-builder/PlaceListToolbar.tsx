@@ -156,7 +156,8 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
           </select>
 
           {/* Sort By Dropdown */}
-          <div className="relative shrink-0">
+          <div className="relative shrink-0 flex items-center">
+            <ArrowUpDown className="w-3.5 h-3.5 text-surface-400 dark:text-surface-500 absolute left-2.5 pointer-events-none z-10" />
             <select
               value={sortBy}
               onChange={(e) => onSortChange(e.target.value as SortOption)}
@@ -171,7 +172,6 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
               <option value="duration-desc">Sort: Duration (High to Low)</option>
               <option value="duration-asc">Sort: Duration (Low to High)</option>
             </select>
-            <ArrowUpDown className="w-3.5 h-3.5 text-surface-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
           {/* Quick Filter: Starred Only */}
