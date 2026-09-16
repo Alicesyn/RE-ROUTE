@@ -75,6 +75,7 @@ export default async function handler(req: Request) {
         `reroute:usage:${today}:mapsPhoto`,
         `reroute:usage:${today}:mapsRoute`,
         `reroute:usage:${today}:gemini`,
+        `reroute:usage:${today}:ekispert`,
         `reroute:usage:${today}:cacheHits`,
       ];
 
@@ -97,7 +98,8 @@ export default async function handler(req: Request) {
         mapsPhotoCalls: parseInt(results[1]?.result || "0", 10),
         mapsRouteCalls: parseInt(results[2]?.result || "0", 10),
         geminiCalls: parseInt(results[3]?.result || "0", 10),
-        cacheHits: parseInt(results[4]?.result || "0", 10),
+        ekispertCalls: parseInt(results[4]?.result || "0", 10),
+        cacheHits: parseInt(results[5]?.result || "0", 10),
       };
 
       return new Response(JSON.stringify(stats), {
@@ -133,6 +135,7 @@ export default async function handler(req: Request) {
       else if (type === "maps_photo") field = "mapsPhoto";
       else if (type === "maps_route") field = "mapsRoute";
       else if (type === "gemini") field = "gemini";
+      else if (type === "ekispert") field = "ekispert";
       else if (type === "cache_hit") field = "cacheHits";
 
       if (!field) {

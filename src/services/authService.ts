@@ -83,7 +83,7 @@ export const authService = {
     }
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (_event: any, session: any) => {
         const user = session?.user ? mapSupabaseUser(session.user) : null;
         callback(user);
       }

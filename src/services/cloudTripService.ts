@@ -18,7 +18,7 @@ export const cloudTripService = {
         return { trips: [], error: error.message };
       }
 
-      const trips: ItinerarySnapshot[] = (data || []).map((row) => {
+      const trips: ItinerarySnapshot[] = (data || []).map((row: any) => {
         const snapshot = row.data as ItinerarySnapshot;
         return {
           ...snapshot,

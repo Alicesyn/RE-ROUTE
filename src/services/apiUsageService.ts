@@ -5,6 +5,7 @@
  */
 
 import { isLocalDev } from "../utils/envUtils";
+import { analyticsService } from "./analyticsService";
 
 export interface ApiUsageStats {
   date: string; // YYYY-MM-DD
@@ -12,7 +13,10 @@ export interface ApiUsageStats {
   mapsPhotoCalls: number;
   mapsRouteCalls: number;
   geminiCalls: number;
+  ekispertCalls: number;
   cacheHits: number;
+  errorCalls: number;
+  averageLatencyMs: number;
   lastResetTime: number;
   isCloudSynced?: boolean;
 }
@@ -22,7 +26,7 @@ export interface ApiBudgetLimits {
   dailyGeminiLimit: number; // default ~1,500 queries/day (free tier)
 }
 
-const STORAGE_KEY_USAGE = "reroute_api_usage_stats_v1";
+const STORAGE_KEY_USAGE = "reroute_api_usage_stats_v2";
 const STORAGE_KEY_CUSTOM_MAPS = "reroute_custom_maps_key";
 const STORAGE_KEY_CUSTOM_GEMINI = "reroute_custom_gemini_key";
 const STORAGE_KEY_LIMITS = "reroute_api_budget_limits_v1";
@@ -59,7 +63,13 @@ const getInitialStats = (): ApiUsageStats => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.date === today) {
-        return { ...parsed, isCloudSynced: false };
+        return {
+          ...parsed,
+          ekispertCalls: parsed.ekispertCalls || 0,
+          errorCalls: parsed.errorCalls || 0,
+          averageLatencyMs: parsed.averageLatencyMs || 0,
+          isCloudSynced: false,
+        };
       }
     }
   } catch (e) {
@@ -71,13 +81,18 @@ const getInitialStats = (): ApiUsageStats => {
     mapsPhotoCalls: 0,
     mapsRouteCalls: 0,
     geminiCalls: 0,
+    ekispertCalls: 0,
     cacheHits: 0,
+    errorCalls: 0,
+    averageLatencyMs: 0,
     lastResetTime: Date.now(),
     isCloudSynced: false,
   };
 };
 
 let currentStats: ApiUsageStats = getInitialStats();
+let totalLatencySum = 0;
+let totalLatencyCount = 0;
 
 type UsageListener = (stats: ApiUsageStats) => void;
 const listeners = new Set<UsageListener>();
@@ -100,10 +115,15 @@ const checkDayRollover = () => {
       mapsPhotoCalls: 0,
       mapsRouteCalls: 0,
       geminiCalls: 0,
+      ekispertCalls: 0,
       cacheHits: 0,
+      errorCalls: 0,
+      averageLatencyMs: 0,
       lastResetTime: Date.now(),
       isCloudSynced: currentStats.isCloudSynced,
     };
+    totalLatencySum = 0;
+    totalLatencyCount = 0;
     persistAndNotify();
   }
 };
@@ -111,7 +131,6 @@ const checkDayRollover = () => {
 // Sync with global cloud counter endpoint
 const fetchCloudStats = async () => {
   if (!isCloudSyncActive()) {
-    // Cloud sync disabled
     return;
   }
 
@@ -129,7 +148,10 @@ const fetchCloudStats = async () => {
         mapsPhotoCalls: Math.max(currentStats.mapsPhotoCalls, data.mapsPhotoCalls || 0),
         mapsRouteCalls: Math.max(currentStats.mapsRouteCalls, data.mapsRouteCalls || 0),
         geminiCalls: Math.max(currentStats.geminiCalls, data.geminiCalls || 0),
+        ekispertCalls: Math.max(currentStats.ekispertCalls, data.ekispertCalls || 0),
         cacheHits: Math.max(currentStats.cacheHits, data.cacheHits || 0),
+        errorCalls: Math.max(currentStats.errorCalls, data.errorCalls || 0),
+        averageLatencyMs: currentStats.averageLatencyMs || data.averageLatencyMs || 0,
         lastResetTime: currentStats.lastResetTime,
         isCloudSynced: true,
       };
@@ -195,18 +217,34 @@ export const apiUsageService = {
     return { success: true };
   },
 
-  recordCall: (type: "maps_search" | "maps_photo" | "maps_route" | "gemini") => {
+  recordCall: (
+    type: "maps_search" | "maps_photo" | "maps_route" | "gemini" | "ekispert",
+    latencyMs?: number
+  ) => {
     checkDayRollover();
     const isByok =
       type.startsWith("maps")
         ? apiUsageService.isUsingCustomMapsKey()
-        : apiUsageService.isUsingCustomGeminiKey();
+        : type === "gemini"
+          ? apiUsageService.isUsingCustomGeminiKey()
+          : false;
 
     if (type === "maps_search") currentStats.mapsSearchCalls++;
     else if (type === "maps_photo") currentStats.mapsPhotoCalls++;
     else if (type === "maps_route") currentStats.mapsRouteCalls++;
     else if (type === "gemini") currentStats.geminiCalls++;
+    else if (type === "ekispert") currentStats.ekispertCalls++;
+
+    if (latencyMs && latencyMs > 0) {
+      totalLatencySum += latencyMs;
+      totalLatencyCount += 1;
+      currentStats.averageLatencyMs = Math.round(totalLatencySum / totalLatencyCount);
+    }
+
     persistAndNotify();
+
+    // Send high-level product telemetry
+    analyticsService.trackEvent("api_call", { type, isByok, latencyMs });
 
     // Asynchronously report to cloud counter (when cloud sync is active)
     if (isCloudSyncActive()) {
@@ -220,10 +258,19 @@ export const apiUsageService = {
     }
   },
 
+  recordError: (type: string, errorMsg?: string) => {
+    checkDayRollover();
+    currentStats.errorCalls++;
+    persistAndNotify();
+    analyticsService.trackEvent("api_error", { type, error: errorMsg });
+  },
+
   recordCacheHit: (count = 1) => {
     checkDayRollover();
     currentStats.cacheHits += count;
     persistAndNotify();
+
+    analyticsService.trackEvent("cache_hit", { count });
 
     if (isCloudSyncActive()) {
       try {
@@ -236,6 +283,30 @@ export const apiUsageService = {
     }
   },
 
+  /**
+   * Calculates estimated USD cost saved from cache hits based on Google Maps & Gemini pricing
+   */
+  getEstimatedSavingsUsd: (): number => {
+    // Average Google Maps search ($0.017) + Photo ($0.007) + Route ($0.005) blended ~$0.012/hit
+    const savings = currentStats.cacheHits * 0.012;
+    return Number(savings.toFixed(2));
+  },
+
+  /**
+   * Calculates overall cache hit efficiency percentage
+   */
+  getCacheEfficiencyRatio: (): number => {
+    const totalCalls =
+      currentStats.mapsSearchCalls +
+      currentStats.mapsPhotoCalls +
+      currentStats.mapsRouteCalls +
+      currentStats.geminiCalls +
+      currentStats.ekispertCalls;
+    const total = totalCalls + currentStats.cacheHits;
+    if (total === 0) return 0;
+    return Math.round((currentStats.cacheHits / total) * 100);
+  },
+
   resetStats: () => {
     currentStats = {
       date: getTodayDateString(),
@@ -243,10 +314,15 @@ export const apiUsageService = {
       mapsPhotoCalls: 0,
       mapsRouteCalls: 0,
       geminiCalls: 0,
+      ekispertCalls: 0,
       cacheHits: 0,
+      errorCalls: 0,
+      averageLatencyMs: 0,
       lastResetTime: Date.now(),
       isCloudSynced: currentStats.isCloudSynced,
     };
+    totalLatencySum = 0;
+    totalLatencyCount = 0;
     persistAndNotify();
   },
 

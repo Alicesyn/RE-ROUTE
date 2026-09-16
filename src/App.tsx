@@ -11,6 +11,7 @@ import { toast } from "./services/toastService";
 import { useRouteStore } from "./store/useRouteStore";
 import { solveTSP } from "./services/tspSolver";
 import { clearMapsCache, fetchFreshPhoto } from "./services/mapsService";
+import { analyticsService } from "./services/analyticsService";
 import { Wand2, Sparkles, RefreshCw, Loader2, MapPin, RotateCcw, Trash2 } from "lucide-react";
 
 const MapView = React.lazy(() =>
@@ -195,6 +196,18 @@ function App() {
 
       if (result.success) {
         setOptimizedRoutes(result.days);
+
+        // Track optimization and planned destinations telemetry
+        analyticsService.trackRouteOptimized(activePlaces.length, days);
+        const uniqueCities = new Set<string>();
+        activePlaces.forEach((p) => {
+          if (p.address) {
+            const parts = p.address.split(",");
+            const city = parts[parts.length - 2]?.trim() || parts[0]?.trim();
+            if (city && city.length > 2) uniqueCities.add(city);
+          }
+        });
+        uniqueCities.forEach((city) => analyticsService.trackDestination(city));
 
         // Update places with their optimizer-assigned days and order
         const placeUpdates: {

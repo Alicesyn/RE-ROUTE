@@ -43,6 +43,7 @@ const ResetTripModal = React.lazy(() =>
 const AuthModal = React.lazy(() =>
   import("../auth/AuthModal").then((m) => ({ default: m.AuthModal }))
 );
+import { analyticsService } from "../../services/analyticsService";
 import { toast } from "../../services/toastService";
 import { apiUsageService, ApiUsageStats, ApiBudgetLimits } from "../../services/apiUsageService";
 import { authService } from "../../services/authService";
@@ -171,6 +172,7 @@ export const Header: React.FC = React.memo(() => {
     try {
       await new Promise((r) => setTimeout(r, 150));
       await exportTripAsExcel();
+      analyticsService.trackExport("excel");
       toast.success(`Exported "${title || "Trip"}" to Excel spreadsheet.`, "Export Complete");
     } catch (err: any) {
       toast.error(err?.message || "Failed to export Excel spreadsheet", "Export Error");
@@ -187,6 +189,7 @@ export const Header: React.FC = React.memo(() => {
     try {
       await new Promise((r) => setTimeout(r, 250));
       exportTripAsJson();
+      analyticsService.trackExport("geojson");
       toast.success(`Exported "${title || "Trip"}" to JSON file.`, "Export Complete");
     } catch (err: any) {
       toast.error(err?.message || "Failed to export trip file", "Export Error");
@@ -215,6 +218,7 @@ export const Header: React.FC = React.memo(() => {
       a.download = `Wanderlog_Places_${title.replace(/\s+/g, "_")}.txt`;
       a.click();
       URL.revokeObjectURL(url);
+      analyticsService.trackExport("txt");
       toast.success("Places list exported to text file.", "Export Complete");
     } catch (err: any) {
       toast.error(err?.message || "Failed to export text file", "Export Error");
@@ -239,6 +243,7 @@ export const Header: React.FC = React.memo(() => {
       a.download = `RE-ROUTE_Import_${title.replace(/\s+/g, "_")}.txt`;
       a.click();
       URL.revokeObjectURL(url);
+      analyticsService.trackExport("txt");
       toast.success("Place names exported to text file.", "Export Complete");
     } catch (err: any) {
       toast.error(err?.message || "Failed to export names file", "Export Error");
@@ -311,7 +316,7 @@ export const Header: React.FC = React.memo(() => {
                   ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800/60 hover:bg-amber-100"
                   : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-700"
           }`}
-          title="Open API Usage & Budget Monitor / BYOK"
+          title="Open Analytics, Visitor Geolocation & API Monitor / BYOK"
         >
           {hasCustomKey ? (
             <>
@@ -330,7 +335,7 @@ export const Header: React.FC = React.memo(() => {
                 }`}
               />
               <Activity className="w-3.5 h-3.5 text-surface-400 dark:text-surface-500" />
-              <span className="hidden sm:inline">API Budget</span>
+              <span className="hidden sm:inline">Analytics & API</span>
               <span>({maxPercent}%)</span>
             </>
           )}
