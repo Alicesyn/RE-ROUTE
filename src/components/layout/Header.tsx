@@ -18,6 +18,8 @@ import {
   Key,
   HelpCircle,
   RotateCcw,
+  Cloud,
+  LogOut,
 } from "lucide-react";
 
 const ImportModal = React.lazy(() =>
@@ -38,8 +40,12 @@ const AboutModal = React.lazy(() =>
 const ResetTripModal = React.lazy(() =>
   import("./ResetTripModal").then((m) => ({ default: m.ResetTripModal }))
 );
+const AuthModal = React.lazy(() =>
+  import("../auth/AuthModal").then((m) => ({ default: m.AuthModal }))
+);
 import { toast } from "../../services/toastService";
 import { apiUsageService, ApiUsageStats, ApiBudgetLimits } from "../../services/apiUsageService";
+import { authService } from "../../services/authService";
 
 export const Header: React.FC = React.memo(() => {
   const appMode = useRouteStore((s) => s.appMode);
@@ -50,6 +56,17 @@ export const Header: React.FC = React.memo(() => {
   const exportTripAsJson = useRouteStore((s) => s.exportTripAsJson);
   const exportTripAsExcel = useRouteStore((s) => s.exportTripAsExcel);
 
+  const user = useRouteStore((s) => s.user);
+  const setUser = useRouteStore((s) => s.setUser);
+  const syncStatus = useRouteStore((s) => s.syncStatus);
+  const isAutoSyncEnabled = useRouteStore((s) => s.isAutoSyncEnabled);
+  const setAutoSyncEnabled = useRouteStore((s) => s.setAutoSyncEnabled);
+  const saveActiveTripToCloud = useRouteStore((s) => s.saveActiveTripToCloud);
+  const cloudTrips = useRouteStore((s) => s.cloudTrips);
+
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const accountMenuRef = React.useRef<HTMLDivElement>(null);
 
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isLoadOpen, setIsLoadOpen] = useState(false);
@@ -68,12 +85,26 @@ export const Header: React.FC = React.memo(() => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
         setIsExportMenuOpen(false);
       }
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
+        setIsAccountMenuOpen(false);
+      }
     };
-    if (isExportMenuOpen) {
+    if (isExportMenuOpen || isAccountMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [isExportMenuOpen]);
+  }, [isExportMenuOpen, isAccountMenuOpen]);
+
+  // Restore auth session & subscribe to OAuth redirects
+  React.useEffect(() => {
+    authService.getSessionUser().then((u) => {
+      if (u) setUser(u);
+    });
+    const unsub = authService.onAuthStateChange((u) => {
+      setUser(u);
+    });
+    return unsub;
+  }, [setUser]);
 
   // Sync #about and #about-limitations URL hash
   React.useEffect(() => {
@@ -301,6 +332,175 @@ export const Header: React.FC = React.memo(() => {
             </>
           )}
         </button>
+
+        {/* Cloud Account & Sync Dropdown */}
+        <div className="relative" ref={accountMenuRef}>
+          {user ? (
+            <button
+              onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+              className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 sm:py-1.5 rounded-full text-xs font-semibold border outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-700 transition-all shadow-2xs cursor-pointer"
+              title="Manage Account & Multi-Device Cloud Sync"
+            >
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.displayName || "User"}
+                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-surface-200 dark:border-surface-600"
+                />
+              ) : (
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary-600 text-white flex items-center justify-center text-[10px] sm:text-[11px] font-bold">
+                  {(user.displayName || user.email || "U")[0].toUpperCase()}
+                </div>
+              )}
+              <span className="hidden sm:inline max-w-[90px] truncate text-xs font-bold text-surface-800 dark:text-surface-100">
+                {user.displayName?.split(" ")[0] || "Account"}
+              </span>
+              <div className="flex items-center">
+                {syncStatus === "syncing" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-500" />
+                ) : (
+                  <Cloud className="w-3.5 h-3.5 text-emerald-500" />
+                )}
+              </div>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsAuthOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all border outline-none focus:ring-2 focus:ring-primary-500 bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300 border-primary-200 dark:border-primary-800/80 hover:bg-primary-100 dark:hover:bg-primary-900/60 shadow-2xs cursor-pointer"
+              title="Sign in with Google to sync your trip across devices"
+            >
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              <span>Sign In</span>
+            </button>
+          )}
+
+          {/* User Dropdown Menu */}
+          {user && isAccountMenuOpen && (
+            <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-surface-800 rounded-2xl shadow-xl border border-surface-200 dark:border-surface-700 py-3 z-50 animate-in fade-in zoom-in-95 duration-100">
+              {/* Profile Header */}
+              <div className="px-4 pb-3 border-b border-surface-100 dark:border-surface-700/80 flex items-center gap-3">
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.displayName}
+                    className="w-10 h-10 rounded-full object-cover border border-surface-200 dark:border-surface-700 shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold shrink-0">
+                    {(user.displayName || user.email)[0].toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-surface-900 dark:text-white truncate">
+                    {user.displayName}
+                  </div>
+                  <div className="text-xs text-surface-500 dark:text-surface-400 truncate">
+                    {user.email}
+                  </div>
+                </div>
+              </div>
+
+              {/* Cloud Sync Status & Manual Save */}
+              <div className="p-3 bg-surface-50/70 dark:bg-surface-900/40 m-2 rounded-xl border border-surface-200/60 dark:border-surface-700/60 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-surface-600 dark:text-surface-300 flex items-center gap-1.5">
+                    <Cloud className="w-3.5 h-3.5 text-primary-500" />
+                    Cloud Sync
+                  </span>
+                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                    syncStatus === "syncing"
+                      ? "bg-primary-100 dark:bg-primary-950/60 text-primary-600"
+                      : syncStatus === "error"
+                      ? "bg-red-100 dark:bg-red-950/60 text-red-600"
+                      : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600"
+                  }`}>
+                    {syncStatus === "syncing" ? "Syncing..." : syncStatus === "error" ? "Error" : "Synced"}
+                  </span>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    await saveActiveTripToCloud(false);
+                  }}
+                  disabled={syncStatus === "syncing"}
+                  className="w-full py-2 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  {syncStatus === "syncing" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Cloud className="w-3.5 h-3.5" />
+                  )}
+                  <span>Save to Cloud</span>
+                </button>
+
+                {/* Auto-sync Toggle (Off by default, user can toggle on demand) */}
+                <div className="flex items-center justify-between pt-1 border-t border-surface-200/50 dark:border-surface-700/50">
+                  <div>
+                    <div className="text-xs font-semibold text-surface-800 dark:text-surface-200">
+                      Auto-sync changes
+                    </div>
+                    <div className="text-[10px] text-surface-400 dark:text-surface-500">
+                      Sync edits in background
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isAutoSyncEnabled}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setAutoSyncEnabled(checked);
+                        if (checked) {
+                          toast.success("Auto-sync enabled. Edits will sync to cloud.", "Auto-Sync On");
+                        } else {
+                          toast.info("Auto-sync disabled. Use 'Save to Cloud' button.", "Manual Save");
+                        }
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-4 bg-surface-300 peer-focus:outline-none rounded-full peer dark:bg-surface-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="px-2 pt-1 space-y-1">
+                <button
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    setIsLoadOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <FolderOpen className="w-3.5 h-3.5 text-surface-400" />
+                    My Cloud Trips
+                  </span>
+                  <span className="text-[10px] bg-primary-100 dark:bg-primary-950/60 text-primary-600 dark:text-primary-400 font-bold px-1.5 py-0.5 rounded">
+                    {cloudTrips.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={async () => {
+                    setIsAccountMenuOpen(false);
+                    await authService.signOut();
+                    setUser(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <button
           onClick={() => setIsCategorySettingsOpen(true)}
@@ -541,6 +741,14 @@ export const Header: React.FC = React.memo(() => {
           <ResetTripModal
             isOpen={isResetOpen}
             onClose={() => setIsResetOpen(false)}
+          />
+        </React.Suspense>
+      )}
+      {isAuthOpen && (
+        <React.Suspense fallback={null}>
+          <AuthModal
+            isOpen={isAuthOpen}
+            onClose={() => setIsAuthOpen(false)}
           />
         </React.Suspense>
       )}

@@ -10,12 +10,16 @@ import {
   TripExportFile,
   CategoryConfig,
   CustomBuffer,
+  User,
+  SyncStatus,
 } from "../types";
 import { solveSingleDay } from "../services/tspSolver";
 import { estimateTime } from "../utils/distance";
 import { format, addDays, parseISO, differenceInDays } from "date-fns";
 import { CATEGORY_DEFAULTS, ALL_CATEGORIES } from "../utils/categoryConstants";
 import { PlaceCategory } from "../types";
+import { cloudTripService } from "../services/cloudTripService";
+import { toast } from "../services/toastService";
 
 interface ModeData {
   places: Place[];
@@ -62,6 +66,14 @@ interface RouteState extends ModeData {
   savedTrips: ItinerarySnapshot[];
   isCalculating: boolean;
   calculatingText: string;
+
+  // Cloud Sync & Auth
+  user: User | null;
+  isAutoSyncEnabled: boolean;
+  syncStatus: SyncStatus;
+  lastSyncedAt: number | null;
+  activeCloudTripId: string | null;
+  cloudTrips: ItinerarySnapshot[];
 
   // Per-mode persistence
   mockData: ModeData;
@@ -155,6 +167,15 @@ interface RouteState extends ModeData {
   exportTripAsExcel: (tripId?: string) => Promise<void>;
   importTripFromJson: (jsonString: string) => { success: boolean; error?: string; tripTitle?: string };
   resetTrip: () => void;
+
+  // Cloud Actions
+  setUser: (user: User | null) => void;
+  setAutoSyncEnabled: (enabled: boolean) => void;
+  setSyncStatus: (status: SyncStatus) => void;
+  fetchCloudTrips: () => Promise<void>;
+  saveActiveTripToCloud: (silent?: boolean) => Promise<boolean>;
+  loadTripFromCloud: (tripId: string) => Promise<boolean>;
+  deleteCloudTrip: (tripId: string) => Promise<boolean>;
 }
 
 let setTimer: any = null;
@@ -244,6 +265,14 @@ export const useRouteStore = create<RouteState>()(
       savedTrips: [],
       isCalculating: false,
       calculatingText: "",
+
+      // Cloud Sync & Auth
+      user: null,
+      isAutoSyncEnabled: typeof localStorage !== "undefined" ? localStorage.getItem("reroute_auto_sync_enabled") === "true" : false,
+      syncStatus: "idle",
+      lastSyncedAt: null,
+      activeCloudTripId: null,
+      cloudTrips: [],
       mockData: {
         places: [],
         hotels: [],
@@ -1448,6 +1477,133 @@ export const useRouteStore = create<RouteState>()(
         set((state) => ({
           savedTrips: state.savedTrips.filter((t) => t.id !== id),
         })),
+
+      // Cloud Actions
+      setUser: (user) => {
+        set({ user });
+        if (user) {
+          get().fetchCloudTrips();
+        } else {
+          set({ cloudTrips: [], syncStatus: "idle", activeCloudTripId: null });
+        }
+      },
+
+      setAutoSyncEnabled: (enabled) => {
+        set({ isAutoSyncEnabled: enabled });
+        try {
+          localStorage.setItem("reroute_auto_sync_enabled", String(enabled));
+        } catch {}
+        if (enabled && get().user) {
+          get().saveActiveTripToCloud(true);
+        }
+      },
+
+      setSyncStatus: (syncStatus) => set({ syncStatus }),
+
+      fetchCloudTrips: async () => {
+        const user = get().user;
+        if (!user) return;
+        const { trips, error } = await cloudTripService.fetchUserTrips();
+        if (!error) {
+          set({ cloudTrips: trips });
+        }
+      },
+
+      saveActiveTripToCloud: async (silent = false): Promise<boolean> => {
+        const state = get();
+        if (!state.user) {
+          if (!silent) toast.error("Please sign in with Google to save to cloud.", "Sign In Required");
+          return false;
+        }
+
+        set({ syncStatus: "syncing" });
+
+        const activeTripSnapshot: ItinerarySnapshot = {
+          id: state.activeCloudTripId || `trip_${Date.now()}`,
+          cloudId: state.activeCloudTripId || undefined,
+          title: state.title,
+          days: state.days,
+          startDate: state.startDate,
+          endDate: state.endDate,
+          dateMode: state.dateMode,
+          dayStartTime: state.dayStartTime,
+          dayEndTime: state.dayEndTime,
+          showFlights: state.showFlights,
+          arrivalFlight: state.arrivalFlight,
+          departureFlight: state.departureFlight,
+          travelMode: state.travelMode,
+          dailyBudget: state.dailyBudget,
+          strictBudget: state.strictBudget,
+          avoidClosedHours: state.avoidClosedHours,
+          places: state.places,
+          hotels: state.hotels,
+          missingPlaces: state.missingPlaces,
+          categoryDurations: state.categoryDurations,
+          categoryConfigs: state.categoryConfigs,
+          customBuffers: state.customBuffers,
+          dayTitles: state.dayTitles,
+          optimizedRoutes: state.optimizedRoutes,
+          savedAt: Date.now(),
+        };
+
+        const res = await cloudTripService.saveTripToCloud(activeTripSnapshot);
+
+        if (res.success && res.trip) {
+          const updatedSnapshot = res.trip;
+          set((s) => ({
+            activeCloudTripId: updatedSnapshot.id,
+            syncStatus: "synced",
+            lastSyncedAt: Date.now(),
+            cloudTrips: [
+              updatedSnapshot,
+              ...s.cloudTrips.filter((t) => t.id !== updatedSnapshot.id),
+            ],
+          }));
+          if (!silent) {
+            toast.success(`"${state.title || "Trip"}" saved to your cloud account!`, "Cloud Synced");
+          }
+          return true;
+        } else {
+          set({ syncStatus: "error" });
+          if (!silent) {
+            toast.error(res.error || "Failed to save trip to cloud.", "Sync Error");
+          }
+          return false;
+        }
+      },
+
+      loadTripFromCloud: async (tripId: string): Promise<boolean> => {
+        const state = get();
+        const trip = state.cloudTrips.find((t) => t.id === tripId || t.cloudId === tripId);
+        if (!trip) {
+          toast.error("Cloud trip not found.", "Load Error");
+          return false;
+        }
+
+        get().applyTripSnapshot(trip);
+        set({
+          activeCloudTripId: trip.id,
+          syncStatus: "synced",
+          lastSyncedAt: trip.updatedAt || Date.now(),
+        });
+        toast.success(`Loaded "${trip.title}" from cloud.`, "Trip Loaded");
+        return true;
+      },
+
+      deleteCloudTrip: async (tripId: string): Promise<boolean> => {
+        const res = await cloudTripService.deleteTripFromCloud(tripId);
+        if (res.success) {
+          set((s) => ({
+            cloudTrips: s.cloudTrips.filter((t) => t.id !== tripId && t.cloudId !== tripId),
+            activeCloudTripId: s.activeCloudTripId === tripId ? null : s.activeCloudTripId,
+          }));
+          toast.info("Trip deleted from cloud.", "Cloud Trip Deleted");
+          return true;
+        } else {
+          toast.error(res.error || "Failed to delete cloud trip", "Delete Error");
+          return false;
+        }
+      },
     }),
     {
       name: "reroute-storage",
@@ -1483,8 +1639,35 @@ export const useRouteStore = create<RouteState>()(
         timeFormat: state.timeFormat,
         mockData: state.mockData,
         realData: state.realData,
+        isAutoSyncEnabled: state.isAutoSyncEnabled,
       }),
     },
   ),
 );
+
+// Auto-sync debounced watcher
+let autoSyncDebounceTimer: any = null;
+useRouteStore.subscribe((state, prevState) => {
+  if (!state.isAutoSyncEnabled || !state.user) return;
+  // Trigger only when meaningful trip content changes
+  if (
+    state.places !== prevState.places ||
+    state.hotels !== prevState.hotels ||
+    state.title !== prevState.title ||
+    state.days !== prevState.days ||
+    state.startDate !== prevState.startDate ||
+    state.endDate !== prevState.endDate ||
+    state.dayStartTime !== prevState.dayStartTime ||
+    state.dayEndTime !== prevState.dayEndTime ||
+    state.optimizedRoutes !== prevState.optimizedRoutes ||
+    state.dayTitles !== prevState.dayTitles ||
+    state.customBuffers !== prevState.customBuffers
+  ) {
+    if (autoSyncDebounceTimer) clearTimeout(autoSyncDebounceTimer);
+    useRouteStore.setState({ syncStatus: "syncing" });
+    autoSyncDebounceTimer = setTimeout(() => {
+      useRouteStore.getState().saveActiveTripToCloud(true);
+    }, 2000);
+  }
+});
 

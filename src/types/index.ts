@@ -156,6 +156,10 @@ export interface ItinerarySnapshot {
   dayTitles?: Record<number, string>;
   optimizedRoutes: DayRoute[];
   savedAt: number;
+  cloudId?: string; // ID in Supabase trips table
+  version?: number; // Monotonic counter for cross-device sync
+  updatedAt?: number; // Last remote modification timestamp
+  isCloudSynced?: boolean;
 }
 
 export interface TripExportFile {
@@ -163,5 +167,25 @@ export interface TripExportFile {
   app: "RE-ROUTE";
   exportedAt: string;
   trip: ItinerarySnapshot;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  displayName?: string;
+  avatarUrl?: string;
+  createdAt?: string;
+}
+
+export type SyncStatus = "idle" | "syncing" | "synced" | "error" | "offline";
+
+export interface CloudTripRecord {
+  id: string;
+  user_id: string;
+  title: string;
+  data: ItinerarySnapshot;
+  version: number;
+  created_at: string;
+  updated_at: string;
 }
 
