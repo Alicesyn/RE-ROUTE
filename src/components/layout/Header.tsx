@@ -101,7 +101,10 @@ export const Header: React.FC = React.memo(() => {
       if (u) setUser(u);
     });
     const unsub = authService.onAuthStateChange((u) => {
-      setUser(u);
+      const current = useRouteStore.getState().user;
+      if (u?.id !== current?.id) {
+        setUser(u);
+      }
     });
     return unsub;
   }, [setUser]);

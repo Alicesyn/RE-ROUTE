@@ -180,6 +180,7 @@ interface RouteState extends ModeData {
 
 let setTimer: any = null;
 let pendingWrite: { name: string; value: string } | null = null;
+let isStoreHydrated = false;
 
 const idbStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
@@ -190,7 +191,12 @@ const idbStorage: StateStorage = {
     if (value) {
       return value;
     }
-    // Fallback to localStorage for migration
+    // Fallback to localStorage safety backup or original migration key
+    const backupValue = localStorage.getItem("reroute_safety_backup");
+    if (backupValue) {
+      await setIDB(name, backupValue);
+      return backupValue;
+    }
     const localValue = localStorage.getItem(name);
     if (localValue) {
       await setIDB(name, localValue);
@@ -199,7 +205,24 @@ const idbStorage: StateStorage = {
     return null;
   },
   setItem: async (name: string, value: string): Promise<void> => {
+    // CRITICAL: Block writes until initial hydration from IndexedDB is complete.
+    // Early dispatches (e.g. auth callbacks on mount) would otherwise serialize the empty initial state
+    // and wipe out the user's persisted trip in IndexedDB.
+    if (!isStoreHydrated) {
+      return;
+    }
     pendingWrite = { name, value };
+    // Safety backup to localStorage whenever state contains places or saved trips
+    try {
+      const parsed = JSON.parse(value);
+      if (
+        (parsed?.state?.places && parsed.state.places.length > 0) ||
+        (parsed?.state?.savedTrips && parsed.state.savedTrips.length > 0)
+      ) {
+        localStorage.setItem("reroute_safety_backup", value);
+      }
+    } catch {}
+
     if (setTimer) clearTimeout(setTimer);
     setTimer = setTimeout(async () => {
       try {
@@ -1641,6 +1664,9 @@ export const useRouteStore = create<RouteState>()(
         realData: state.realData,
         isAutoSyncEnabled: state.isAutoSyncEnabled,
       }),
+      onRehydrateStorage: () => () => {
+        isStoreHydrated = true;
+      },
     },
   ),
 );
@@ -1670,4 +1696,6 @@ useRouteStore.subscribe((state, prevState) => {
     }, 2000);
   }
 });
-
+if (typeof window !== "undefined") {
+  (window as any).useRouteStore = useRouteStore;
+}
