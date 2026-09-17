@@ -19,6 +19,7 @@ import { format, addDays, parseISO, differenceInDays } from "date-fns";
 import { CATEGORY_DEFAULTS, ALL_CATEGORIES } from "../utils/categoryConstants";
 import { PlaceCategory } from "../types";
 import { cloudTripService } from "../services/cloudTripService";
+import { isSupabaseConfigured } from "../services/supabaseClient";
 import { toast } from "../services/toastService";
 
 interface ModeData {
@@ -67,13 +68,14 @@ interface RouteState extends ModeData {
   isCalculating: boolean;
   calculatingText: string;
 
-  // Cloud Sync & Auth
+  // Cloud Sync & Auth & Quick Save
   user: User | null;
   isAutoSyncEnabled: boolean;
   syncStatus: SyncStatus;
   lastSyncedAt: number | null;
   activeCloudTripId: string | null;
   cloudTrips: ItinerarySnapshot[];
+  quickSave: ItinerarySnapshot | null;
 
   // Per-mode persistence
   mockData: ModeData;
@@ -168,7 +170,7 @@ interface RouteState extends ModeData {
   importTripFromJson: (jsonString: string) => { success: boolean; error?: string; tripTitle?: string };
   resetTrip: () => void;
 
-  // Cloud Actions
+  // Cloud & Quick Save Actions
   setUser: (user: User | null) => void;
   setAutoSyncEnabled: (enabled: boolean) => void;
   setSyncStatus: (status: SyncStatus) => void;
@@ -176,6 +178,9 @@ interface RouteState extends ModeData {
   saveActiveTripToCloud: (silent?: boolean) => Promise<boolean>;
   loadTripFromCloud: (tripId: string) => Promise<boolean>;
   deleteCloudTrip: (tripId: string) => Promise<boolean>;
+  createQuickSave: (silent?: boolean) => Promise<boolean>;
+  loadQuickSave: () => void;
+  deleteQuickSave: () => Promise<void>;
 }
 
 let setTimer: any = null;
@@ -289,13 +294,14 @@ export const useRouteStore = create<RouteState>()(
       isCalculating: false,
       calculatingText: "",
 
-      // Cloud Sync & Auth
+      // Cloud Sync & Auth & Quick Save
       user: null,
       isAutoSyncEnabled: typeof localStorage !== "undefined" ? localStorage.getItem("reroute_auto_sync_enabled") === "true" : false,
       syncStatus: "idle",
       lastSyncedAt: null,
       activeCloudTripId: null,
       cloudTrips: [],
+      quickSave: null,
       mockData: {
         places: [],
         hotels: [],
@@ -1501,13 +1507,18 @@ export const useRouteStore = create<RouteState>()(
           savedTrips: state.savedTrips.filter((t) => t.id !== id),
         })),
 
-      // Cloud Actions
+      // Cloud Actions & Quick Save
       setUser: (user) => {
         set({ user });
         if (user) {
-          get().fetchCloudTrips();
+          get().fetchCloudTrips().then(() => {
+            const state = get();
+            if (state.places.length > 0 || state.hotels.length > 0) {
+              state.createQuickSave(true);
+            }
+          });
         } else {
-          set({ cloudTrips: [], syncStatus: "idle", activeCloudTripId: null });
+          set({ cloudTrips: [], syncStatus: "idle", activeCloudTripId: null, quickSave: null });
         }
       },
 
@@ -1528,8 +1539,128 @@ export const useRouteStore = create<RouteState>()(
         if (!user) return;
         const { trips, error } = await cloudTripService.fetchUserTrips();
         if (!error) {
-          set({ cloudTrips: trips });
+          const quickSaveTrip = trips.find(
+            (t) => t.isQuickSave || t.id === `quicksave_${user.id}` || t.id.startsWith("quicksave_")
+          );
+          const regularTrips = trips.filter(
+            (t) => !t.isQuickSave && t.id !== `quicksave_${user.id}` && !t.id.startsWith("quicksave_")
+          );
+          set({
+            cloudTrips: regularTrips,
+            quickSave: quickSaveTrip
+              ? (!get().quickSave || (quickSaveTrip.updatedAt || quickSaveTrip.savedAt) >= (get().quickSave?.updatedAt || get().quickSave?.savedAt || 0)
+                  ? { ...quickSaveTrip, isQuickSave: true }
+                  : get().quickSave)
+              : get().quickSave,
+          });
         }
+      },
+
+      createQuickSave: async (silent = true): Promise<boolean> => {
+        const state = get();
+        if (!state.user) return false;
+        if (state.places.length === 0 && state.hotels.length === 0 && !state.title) {
+          return false;
+        }
+
+        const now = Date.now();
+        const quickSaveId = `quicksave_${state.user.id}`;
+        const quickSaveSnapshot: ItinerarySnapshot = {
+          id: quickSaveId,
+          cloudId: quickSaveId,
+          title: state.title ? `${state.title} (Quick Save)` : "Quick Save",
+          days: state.days,
+          startDate: state.startDate,
+          endDate: state.endDate,
+          dateMode: state.dateMode,
+          dayStartTime: state.dayStartTime,
+          dayEndTime: state.dayEndTime,
+          showFlights: state.showFlights,
+          arrivalFlight: state.arrivalFlight,
+          departureFlight: state.departureFlight,
+          travelMode: state.travelMode,
+          dailyBudget: state.dailyBudget,
+          strictBudget: state.strictBudget,
+          avoidClosedHours: state.avoidClosedHours,
+          places: state.places,
+          hotels: state.hotels,
+          missingPlaces: state.missingPlaces,
+          categoryDurations: state.categoryDurations,
+          categoryConfigs: state.categoryConfigs,
+          customBuffers: state.customBuffers,
+          dayTitles: state.dayTitles,
+          optimizedRoutes: state.optimizedRoutes,
+          savedAt: now,
+          updatedAt: now,
+          isQuickSave: true,
+          quickSaveUserEmail: state.user.email,
+        };
+
+        set({ quickSave: quickSaveSnapshot });
+
+        if (isSupabaseConfigured()) {
+          try {
+            const res = await cloudTripService.saveTripToCloud(quickSaveSnapshot);
+            if (res.success && res.trip) {
+              set((s) => ({
+                quickSave: { ...quickSaveSnapshot, ...res.trip, isQuickSave: true },
+                cloudTrips: s.cloudTrips.filter((t) => t.id !== quickSaveId && !t.isQuickSave),
+              }));
+            }
+          } catch (err) {
+            console.warn("Could not sync quick save to cloud:", err);
+          }
+        }
+
+        if (!silent) {
+          toast.success("Quick save updated.", "Quick Save");
+        }
+        return true;
+      },
+
+      loadQuickSave: () => {
+        const state = get();
+        const trip = state.quickSave;
+        if (!trip) return;
+        set({
+          title: trip.title ? trip.title.replace(/\s*\(Quick Save\)$/i, "") : state.title,
+          days: trip.days ?? state.days,
+          startDate: trip.startDate || state.startDate,
+          endDate: trip.endDate || state.endDate,
+          dateMode: trip.dateMode || state.dateMode,
+          dayStartTime: trip.dayStartTime || state.dayStartTime,
+          dayEndTime: trip.dayEndTime || state.dayEndTime,
+          showFlights: trip.showFlights ?? state.showFlights,
+          arrivalFlight: trip.arrivalFlight ?? state.arrivalFlight,
+          departureFlight: trip.departureFlight ?? state.departureFlight,
+          travelMode: trip.travelMode || state.travelMode,
+          dailyBudget: trip.dailyBudget ?? state.dailyBudget,
+          strictBudget: trip.strictBudget ?? state.strictBudget,
+          avoidClosedHours: trip.avoidClosedHours ?? state.avoidClosedHours,
+          places: trip.places || [],
+          hotels: trip.hotels || [],
+          missingPlaces: trip.missingPlaces || [],
+          categoryDurations: trip.categoryDurations || state.categoryDurations,
+          categoryConfigs: trip.categoryConfigs || state.categoryConfigs,
+          customBuffers: trip.customBuffers || [],
+          dayTitles: trip.dayTitles || {},
+          optimizedRoutes: trip.optimizedRoutes || [],
+        });
+        toast.success("Restored your Quick Save itinerary.", "Quick Save Loaded");
+      },
+
+      deleteQuickSave: async () => {
+        const state = get();
+        const qId = state.quickSave?.id || (state.user ? `quicksave_${state.user.id}` : null);
+        set({ quickSave: null });
+        if (qId && isSupabaseConfigured()) {
+          try {
+            await cloudTripService.deleteTripFromCloud(qId);
+          } catch (err) {
+            console.warn("Failed to delete quick save from cloud", err);
+          }
+        }
+        toast.info("Quick save removed.", "Quick Save");
       },
 
       saveActiveTripToCloud: async (silent = false): Promise<boolean> => {
@@ -1655,6 +1786,7 @@ export const useRouteStore = create<RouteState>()(
         categoryConfigs: state.categoryConfigs,
         optimizedRoutes: state.optimizedRoutes,
         savedTrips: state.savedTrips,
+        quickSave: state.quickSave,
         appMode: state.appMode,
         theme: state.theme,
         showImages: state.showImages,
@@ -1671,12 +1803,13 @@ export const useRouteStore = create<RouteState>()(
   ),
 );
 
-// Auto-sync debounced watcher
+// Auto-sync & Google Quick-Save debounced watcher
 let autoSyncDebounceTimer: any = null;
+let quickSaveDebounceTimer: any = null;
+
 useRouteStore.subscribe((state, prevState) => {
-  if (!state.isAutoSyncEnabled || !state.user) return;
   // Trigger only when meaningful trip content changes
-  if (
+  const hasContentChanged =
     state.places !== prevState.places ||
     state.hotels !== prevState.hotels ||
     state.title !== prevState.title ||
@@ -1687,8 +1820,20 @@ useRouteStore.subscribe((state, prevState) => {
     state.dayEndTime !== prevState.dayEndTime ||
     state.optimizedRoutes !== prevState.optimizedRoutes ||
     state.dayTitles !== prevState.dayTitles ||
-    state.customBuffers !== prevState.customBuffers
-  ) {
+    state.customBuffers !== prevState.customBuffers;
+
+  if (!hasContentChanged) return;
+
+  // 1. Google Quick Save: If user is signed into Google, automatically create/update quick save after 5 minutes of inactivity
+  if (state.user && (state.places.length > 0 || state.hotels.length > 0)) {
+    if (quickSaveDebounceTimer) clearTimeout(quickSaveDebounceTimer);
+    quickSaveDebounceTimer = setTimeout(() => {
+      useRouteStore.getState().createQuickSave(true);
+    }, 5 * 60 * 1000); // 5 minutes of inactivity
+  }
+
+  // 2. Cloud Auto-sync for active cloud trip (if explicitly toggled on)
+  if (state.isAutoSyncEnabled && state.user) {
     if (autoSyncDebounceTimer) clearTimeout(autoSyncDebounceTimer);
     useRouteStore.setState({ syncStatus: "syncing" });
     autoSyncDebounceTimer = setTimeout(() => {

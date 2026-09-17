@@ -87,6 +87,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                 <span><strong>Control Your Sync:</strong> Save manually by default, or enable one-click automatic background sync.</span>
               </div>
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span><strong>Automatic Quick Save:</strong> Keeps an auto-saved copy of your working route, separate from your other saved trips.</span>
+              </div>
             </div>
 
             {/* Supabase Missing Setup Warning */}

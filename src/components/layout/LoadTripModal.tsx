@@ -14,6 +14,7 @@ import {
   Cloud,
   HardDrive,
   CloudUpload,
+  Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "../../services/toastService";
@@ -41,6 +42,9 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
     loadTripFromCloud,
     deleteCloudTrip,
     fetchCloudTrips,
+    quickSave,
+    loadQuickSave,
+    deleteQuickSave,
   } = useRouteStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<"all" | "cloud" | "local">("all");
@@ -137,16 +141,20 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Build unified trip list
+  // Build unified trip list (excluding quickSave to keep it completely separate)
   const cloudIds = new Set(cloudTrips.map((ct) => ct.id));
   const allTripsMap = new Map<string, ItinerarySnapshot & { isCloud?: boolean }>();
 
   savedTrips.forEach((t) => {
-    allTripsMap.set(t.id, { ...t, isCloud: cloudIds.has(t.id) || !!t.cloudId });
+    if (!t.isQuickSave && !t.id.startsWith("quicksave_")) {
+      allTripsMap.set(t.id, { ...t, isCloud: cloudIds.has(t.id) || !!t.cloudId });
+    }
   });
 
   cloudTrips.forEach((t) => {
-    allTripsMap.set(t.id, { ...t, isCloud: true });
+    if (!t.isQuickSave && !t.id.startsWith("quicksave_")) {
+      allTripsMap.set(t.id, { ...t, isCloud: true });
+    }
   });
 
   const mergedTrips = Array.from(allTripsMap.values()).sort(
@@ -255,7 +263,86 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
             />
           </div>
 
-          <div className="p-4 overflow-y-auto custom-scrollbar flex-1 bg-surface-50 dark:bg-surface-900/50 transition-colors">
+          <div className="p-4 overflow-y-auto custom-scrollbar flex-1 bg-surface-50 dark:bg-surface-900/50 transition-colors space-y-3">
+            {/* Dedicated Google Quick Save Card */}
+            {quickSave && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent border border-amber-300 dark:border-amber-700/80 shadow-xs relative group overflow-hidden">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-2xs">
+                        <Zap className="w-3 h-3 fill-current" />
+                        Quick Save
+                      </span>
+                      <span className="text-[11px] font-semibold text-surface-600 dark:text-surface-300">
+                        {quickSave.quickSaveUserEmail ? `Auto-saved for ${quickSave.quickSaveUserEmail}` : "Google Auto-Save"}
+                      </span>
+                      <span className="text-[10px] text-surface-400 dark:text-surface-500">
+                        • {new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{" "}
+                        ({new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleDateString()})
+                      </span>
+                    </div>
+
+                    <h4 className="font-bold text-base text-surface-900 dark:text-white truncate">
+                      {quickSave.title ? quickSave.title.replace(/\s*\(Quick Save\)$/i, "") : "Untitled Itinerary"}
+                    </h4>
+
+                    <div className="flex items-center gap-3 text-xs font-medium text-surface-600 dark:text-surface-300">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-primary-500" />
+                        {quickSave.days} Days
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                        {quickSave.places.length} Places
+                      </span>
+                      {quickSave.optimizedRoutes && quickSave.optimizedRoutes.length > 0 && (
+                        <span className="flex items-center gap-1 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/40 px-1.5 py-0.5 rounded">
+                          <Clock className="w-3.5 h-3.5" />
+                          Optimized
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        loadQuickSave();
+                        onClose();
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      title="Restore Quick Save into workspace"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      <span>Restore</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await deleteQuickSave();
+                      }}
+                      className="p-1.5 text-surface-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors cursor-pointer"
+                      title="Delete Quick Save"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Separator / Title for Other Saves */}
+            {quickSave && displayTrips.length > 0 && (
+              <div className="pt-1 flex items-center justify-between">
+                <span className="text-xs font-bold text-surface-400 uppercase tracking-wider">
+                  Saved Itineraries
+                </span>
+                <span className="text-xs text-surface-400">
+                  {displayTrips.length} {displayTrips.length === 1 ? "trip" : "trips"}
+                </span>
+              </div>
+            )}
+
             {displayTrips.length === 0 ? (
               <div className="text-center py-12 px-4 bg-white dark:bg-surface-800 rounded-xl border border-dashed border-surface-200 dark:border-surface-700">
                 <p className="text-surface-500 dark:text-surface-400 font-medium">

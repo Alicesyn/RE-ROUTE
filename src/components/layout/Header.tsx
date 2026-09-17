@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Cloud,
   LogOut,
+  Zap,
 } from "lucide-react";
 
 const ImportModal = React.lazy(() =>
@@ -64,6 +65,8 @@ export const Header: React.FC = React.memo(() => {
   const setAutoSyncEnabled = useRouteStore((s) => s.setAutoSyncEnabled);
   const saveActiveTripToCloud = useRouteStore((s) => s.saveActiveTripToCloud);
   const cloudTrips = useRouteStore((s) => s.cloudTrips);
+  const quickSave = useRouteStore((s) => s.quickSave);
+  const loadQuickSave = useRouteStore((s) => s.loadQuickSave);
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
@@ -475,6 +478,35 @@ export const Header: React.FC = React.memo(() => {
                   </label>
                 </div>
               </div>
+
+              {/* Quick Save Status in Account Menu */}
+              {quickSave && (
+                <div className="p-2.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl mx-2 mb-1 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-bold text-amber-900 dark:text-amber-200 truncate">
+                        Google Quick Save
+                      </div>
+                      <div className="text-[10px] text-surface-500 dark:text-surface-400 truncate">
+                        {quickSave.places.length} places • {new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsAccountMenuOpen(false);
+                      loadQuickSave();
+                    }}
+                    className="px-2 py-1 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-md transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    title="Restore your Google Quick Save"
+                  >
+                    Restore
+                  </button>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="px-2 pt-1 space-y-1">

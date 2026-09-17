@@ -160,6 +160,8 @@ export interface ItinerarySnapshot {
   version?: number; // Monotonic counter for cross-device sync
   updatedAt?: number; // Last remote modification timestamp
   isCloudSynced?: boolean;
+  isQuickSave?: boolean;
+  quickSaveUserEmail?: string;
 }
 
 export interface TripExportFile {
