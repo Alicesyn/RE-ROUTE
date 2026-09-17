@@ -4,7 +4,6 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   AlertTriangle,
   Utensils,
-  Star,
   Pin,
   X,
   Lock,
@@ -176,31 +175,6 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
                     <span className="hidden sm:inline">Closed</span>
                   </div>
                 )}
-                {mealGapAlert && (
-                  <div
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 text-[10px] font-bold border border-amber-200 dark:border-amber-800"
-                    title={`Only ${mealGapAlert.gap}m since previous meal (minimum recommended: ${mealGapAlert.minGap}m)`}
-                  >
-                    <Utensils className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                    <span className="hidden sm:inline">{mealGapAlert.gap}m meal gap</span>
-                  </div>
-                )}
-                {/* Star / Must-Visit Priority Toggle Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    updatePlace(stop.id, { isStarred: !stop.isStarred });
-                  }}
-                  className={`p-1 rounded transition-colors ${stop.isStarred
-                    ? "bg-amber-50 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50"
-                    : "text-surface-300 dark:text-surface-600 hover:text-amber-500 dark:hover:text-amber-400 opacity-0 group-hover:opacity-100 hover:bg-surface-100 dark:hover:bg-surface-700"
-                    }`}
-                  title={stop.isStarred ? "Must-visit (Starred). Optimizer prioritizes and will never drop this stop." : "Star as Must-Visit (optimizer prioritizes and guarantees this place)"}
-                  aria-label={stop.isStarred ? "Unstar stop" : "Star stop as must-visit"}
-                >
-                  <Star className={`w-3.5 h-3.5 ${stop.isStarred ? "fill-amber-400 text-amber-500" : ""}`} />
-                </button>
                 {/* Pin Toggle Button */}
                 <button
                   type="button"
@@ -406,6 +380,15 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
                     <span>View Hours</span>
                   </div>
                 )}
+              </div>
+            )}
+            {mealGapAlert && (
+              <div
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 text-[10px] font-bold border border-amber-200 dark:border-amber-800"
+                title={`Only ${mealGapAlert.gap}m since previous meal (minimum recommended: ${mealGapAlert.minGap}m)`}
+              >
+                <Utensils className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                <span className="hidden sm:inline">{mealGapAlert.gap}m meal gap</span>
               </div>
             )}
 
