@@ -134,7 +134,7 @@ function computeDaySchedule(
   trip: ItinerarySnapshot,
   route: DayRoute,
   dayIndex: number
-): { items: ComputedScheduleItem[]; totalVisitMin: number; totalTravelMin: number } {
+): { items: ComputedScheduleItem[]; totalVisitMin: number; totalTravelMin: number; totalBufferMin: number } {
   const isFirstDay = dayIndex === 0;
   const isLastDay = dayIndex === trip.days - 1;
   const dayStartTime = trip.dayStartTime || "09:00";
@@ -149,7 +149,7 @@ function computeDaySchedule(
     currentTime = Math.max(currentTime, arrivalTotal);
   }
 
-  // Determine item sequence
+  // Determine item sequence — matches DailySchedule.tsx getDayItemSequence exactly
   let ids: string[] = route.manualSequence ? [...route.manualSequence] : [];
   const dayCustoms = customBuffers.filter((b) => b.dayIndex === dayIndex);
 
@@ -179,6 +179,8 @@ function computeDaySchedule(
     });
     if (trip.showFlights && isFirstDay && trip.arrivalFlight && !ids.includes("arrival")) {
       ids.unshift("arrival");
+    } else if (!trip.showFlights) {
+      ids = ids.filter((id) => id !== "arrival" && id !== "departure");
     }
     if (trip.showFlights && isLastDay && trip.departureFlight && !ids.includes("departure")) {
       ids.push("departure");
@@ -190,190 +192,223 @@ function computeDaySchedule(
   }
 
   const items: ComputedScheduleItem[] = [];
-  let physicalSegmentIdx = 0;
+  let simSegIdx = 0;
   let currentDate: Date | null = null;
   if (trip.dateMode === "fixed" && trip.startDate) {
     currentDate = addDays(parseISO(trip.startDate), dayIndex);
   }
 
-  ids.forEach((itemId) => {
+  let simTime = currentTime;
+  let autoWaitBufferMin = 0;
+
+  ids.forEach((itemId, idx) => {
+    let preWaitMin = 0;
+    let preWaitType: "reservation" | "wait" | undefined = undefined;
+    let itemDuration = 0;
+    let createdItem: ComputedScheduleItem | null = null;
+
+    const stop = route.stops.find((s) => s.id === itemId);
+
     if (itemId === "arrival" && trip.arrivalFlight) {
-      const arrMin = parseTimeToMinutes(trip.arrivalFlight.time);
-      const arrBuffer = trip.arrivalFlight.buffer ?? 30;
-      const startT = arrMin;
-      const endT = arrMin + arrBuffer;
-      items.push({
+      itemDuration = trip.arrivalFlight.buffer ?? 30;
+      const startT = simTime;
+      const endT = simTime + itemDuration;
+      createdItem = {
         id: "arrival",
         type: "flight-arrival",
         name: trip.arrivalFlight.location?.name
           ? `Flight Arrival (${trip.arrivalFlight.location.name})`
           : "Flight Arrival",
         startTime: startT,
-        duration: arrBuffer,
+        duration: itemDuration,
         endTime: endT,
         highlight: "Clear customs, baggage claim & ground transfer",
         address: trip.arrivalFlight.location?.address || "",
         googleMapsUrl: trip.arrivalFlight.location?.address
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.arrivalFlight.location.name + " " + trip.arrivalFlight.location.address)}`
           : undefined,
-      });
-      currentTime = Math.max(currentTime, endT);
+      };
+      simTime = endT;
     } else if (itemId === "departure" && trip.departureFlight) {
+      itemDuration = trip.departureFlight.buffer ?? 90;
       const depMin = parseTimeToMinutes(trip.departureFlight.time);
-      const depBuffer = trip.departureFlight.buffer ?? 90;
-      const startT = depMin - depBuffer;
-      items.push({
+      const startT = Math.max(simTime, depMin - itemDuration);
+      const endT = depMin;
+      createdItem = {
         id: "departure",
         type: "flight-departure",
         name: trip.departureFlight.location?.name
           ? `Flight Departure (${trip.departureFlight.location.name})`
           : "Flight Departure",
         startTime: startT,
-        duration: depBuffer,
-        endTime: depMin,
+        duration: itemDuration,
+        endTime: endT,
         highlight: "Airport check-in, security screening & boarding",
         address: trip.departureFlight.location?.address || "",
         googleMapsUrl: trip.departureFlight.location?.address
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.departureFlight.location.name + " " + trip.departureFlight.location.address)}`
           : undefined,
-      });
+      };
+      simTime = endT;
     } else if (itemId === "start-hotel" && route.startHotel) {
-      items.push({
+      itemDuration = 0;
+      createdItem = {
         id: "start-hotel",
         type: "hotel-start",
         name: `Depart ${route.startHotel.name}`,
-        startTime: currentTime,
+        startTime: simTime,
         duration: 0,
-        endTime: currentTime,
+        endTime: simTime,
         address: route.startHotel.address,
         highlight: "Start day from hotel",
         googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(route.startHotel.name + " " + route.startHotel.address)}`,
-      });
+      };
     } else if (itemId === "end-hotel" && route.endHotel && !isLastDay) {
-      items.push({
+      itemDuration = 0;
+      createdItem = {
         id: "end-hotel",
         type: "hotel-end",
         name: `Arrive at ${route.endHotel.name}`,
-        startTime: currentTime,
+        startTime: simTime,
         duration: 0,
-        endTime: currentTime,
+        endTime: simTime,
         address: route.endHotel.address,
         highlight: "Nightly rest & recharge",
         googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(route.endHotel.name + " " + route.endHotel.address)}`,
-      });
+      };
     } else if (itemId.startsWith("custom-buffer-")) {
       const customBuf = customBuffers.find((b) => b.id === itemId);
       if (customBuf) {
-        items.push({
+        itemDuration = customBuf.duration;
+        createdItem = {
           id: customBuf.id,
           type: "buffer",
           name: customBuf.label || "Custom Break",
-          startTime: currentTime,
+          startTime: simTime,
           duration: customBuf.duration,
-          endTime: currentTime + customBuf.duration,
+          endTime: simTime + customBuf.duration,
           highlight: "Scheduled leisure / buffer time",
-        });
-        currentTime += customBuf.duration;
+        };
+        simTime += customBuf.duration;
       }
-    } else {
-      const stop = route.stops.find((s) => s.id === itemId);
-      if (stop) {
-        // Check custom time or wait times
-        if (stop.customTime) {
-          const customMin = parseTimeToMinutes(stop.customTime);
-          if (customMin > currentTime) {
-            const waitTime = customMin - currentTime;
-            items.push({
-              id: `wait-${stop.id}`,
-              type: "buffer",
-              name: `Free Time before ${stop.name}`,
-              startTime: currentTime,
-              duration: waitTime,
-              endTime: customMin,
-              highlight: "Waiting buffer before reserved time slot",
-            });
-            currentTime = customMin;
-          }
-        } else if (currentDate && stop.openingHours) {
-          const tc = checkTimeConflict(
-            currentTime,
-            stop.estimatedDuration || 60,
-            stop.openingHours,
-            currentDate
-          );
-          if (tc.waitMinutes && tc.waitMinutes > 0) {
-            items.push({
-              id: `wait-opening-${stop.id}`,
-              type: "buffer",
-              name: `Wait for Opening (${stop.name})`,
-              startTime: currentTime,
-              duration: tc.waitMinutes,
-              endTime: currentTime + tc.waitMinutes,
-              highlight: "Place opens later; brief buffer/walk around area",
-            });
-            currentTime += tc.waitMinutes;
-          }
+    } else if (stop) {
+      // Check pre-wait time: custom locked time or opening hours
+      if (stop.customTime) {
+        const customMin = parseTimeToMinutes(stop.customTime);
+        if (customMin > simTime) {
+          preWaitMin = customMin - simTime;
+          preWaitType = "reservation";
+          simTime = customMin;
         }
-
-        const duration = stop.estimatedDuration || 60;
-        const stopStart = currentTime;
-        const stopEnd = stopStart + duration;
-        currentTime = stopEnd;
-
-        let transitInfo: ComputedScheduleItem["transitToNext"] = undefined;
-        if (physicalSegmentIdx < route.segments.length) {
-          const seg = route.segments[physicalSegmentIdx];
-          transitInfo = {
-            mode: seg.travelMode,
-            time: seg.time,
-            distance: seg.distance,
-          };
-          physicalSegmentIdx++;
-          currentTime += Math.round(seg.time / 60);
+      } else if (trip.dateMode === "fixed" && currentDate && stop.openingHours) {
+        const tc = checkTimeConflict(
+          simTime,
+          stop.estimatedDuration || 60,
+          stop.openingHours,
+          currentDate
+        );
+        if (tc.waitMinutes && tc.waitMinutes > 0) {
+          preWaitMin = tc.waitMinutes;
+          preWaitType = "wait";
+          simTime += tc.waitMinutes;
         }
+      }
 
-        let reservationDesc = "";
-        if (stop.reservation) {
-          if (stop.reservation.requirement === "required") {
-            reservationDesc = "Required";
-          } else if (stop.reservation.requirement === "recommended") {
-            reservationDesc = "Recommended";
-          } else if (stop.reservation.requirement === "walk_ins_only") {
-            reservationDesc = "Walk-ins Only";
-          }
-          if (stop.reservation.advanceTime) {
-            reservationDesc += ` (${stop.reservation.advanceTime})`;
-          }
-        }
+      autoWaitBufferMin += preWaitMin;
 
+      // If there was a wait buffer, emit the buffer item immediately before the stop
+      if (preWaitMin > 0) {
+        const isRes = preWaitType === "reservation";
+        const waitStart = simTime - preWaitMin;
+        const waitEnd = simTime;
         items.push({
-          id: stop.id,
-          type: "place",
-          category: stop.category,
-          name: stop.name,
-          romanizedName: stop.romanizedName,
-          startTime: stopStart,
-          duration,
-          endTime: stopEnd,
-          highlight: stop.highlight?.text || stop.description || "",
-          reservation: reservationDesc || undefined,
-          price: stop.priceEstimate || undefined,
-          address: stop.address || "",
-          notes: stop.notes || undefined,
-          openingHours: stop.openingHours ? stop.openingHours.join(" | ") : undefined,
-          transitToNext: transitInfo,
-          googleMapsUrl: stop.address
-            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.name + " " + stop.address)}`
-            : undefined,
+          id: isRes ? `wait-${stop.id}` : `wait-opening-${stop.id}`,
+          type: "buffer",
+          name: isRes
+            ? `Buffer: Free time before ${stop.name}`
+            : `Buffer: Wait until opening (${stop.name})`,
+          startTime: waitStart,
+          duration: preWaitMin,
+          endTime: waitEnd,
+          highlight: isRes
+            ? `Leisure / buffer before locked reservation at ${formatMinutesToDisplay(simTime, "12h")}`
+            : `Place opens at ${formatMinutesToDisplay(simTime, "12h")}; leisure / walk around area`,
         });
       }
+
+      itemDuration = stop.estimatedDuration || 60;
+      const stopStart = simTime;
+      const stopEnd = stopStart + itemDuration;
+      simTime = stopEnd;
+
+      let reservationDesc = "";
+      if (stop.reservation) {
+        if (stop.reservation.requirement === "required") {
+          reservationDesc = "🔴 Required";
+        } else if (stop.reservation.requirement === "recommended") {
+          reservationDesc = "🟡 Recommended";
+        } else if (stop.reservation.requirement === "walk_ins_only") {
+          reservationDesc = "🔵 Walk-ins Only";
+        }
+        if (stop.reservation.advanceTime) {
+          reservationDesc += ` • ${stop.reservation.advanceTime}`;
+        }
+        if (stop.reservation.isBooked) {
+          reservationDesc = "✅ Booked & Confirmed" + (stop.reservation.confirmationNumber ? ` (${stop.reservation.confirmationNumber})` : "");
+        }
+      }
+
+      createdItem = {
+        id: stop.id,
+        type: "place",
+        category: stop.category,
+        name: stop.name,
+        romanizedName: stop.romanizedName,
+        startTime: stopStart,
+        duration: itemDuration,
+        endTime: stopEnd,
+        highlight: stop.highlight?.text || stop.description || "",
+        reservation: reservationDesc || undefined,
+        price: stop.priceEstimate || undefined,
+        address: stop.address || "",
+        notes: stop.reservation?.notes || stop.notes || undefined,
+        openingHours: stop.openingHours ? stop.openingHours.join(" | ") : undefined,
+        googleMapsUrl: stop.address
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.name + " " + stop.address)}`
+          : undefined,
+      };
+    }
+
+    // Segment calculation (segment renders right before the next physical stop)
+    // Exactly matches DailySchedule.tsx lines 581-592
+    const nextPhysicalIdx = ids.slice(idx + 1).findIndex((id) => !id.startsWith("custom-buffer-"));
+    const hasPrevPhysical = ids.slice(0, idx + 1).some((id) => !id.startsWith("custom-buffer-"));
+
+    if (createdItem) {
+      if (hasPrevPhysical && nextPhysicalIdx === 0 && simSegIdx < route.segments.length) {
+        const seg = route.segments[simSegIdx];
+        simSegIdx++;
+        const segTimeMin = Math.round(seg.time / 60);
+        createdItem.transitToNext = {
+          mode: seg.travelMode,
+          time: seg.time,
+          distance: seg.distance,
+        };
+        simTime += segTimeMin;
+      }
+      items.push(createdItem);
     }
   });
 
   const totalVisitMin = route.stops.reduce((acc, s) => acc + (s.estimatedDuration || 0), 0);
+  const dayCustomBuffers = customBuffers.filter((b) => b.dayIndex === dayIndex);
+  const customBufferMin = dayCustomBuffers.reduce((acc, b) => acc + (b.duration || 0), 0);
+  const arrivalFlightBuffer = trip.showFlights && isFirstDay && trip.arrivalFlight ? (trip.arrivalFlight.buffer ?? 30) : 0;
+  const departureFlightBuffer = trip.showFlights && isLastDay && trip.departureFlight ? (trip.departureFlight.buffer ?? 90) : 0;
+  const totalBufferMin = customBufferMin + autoWaitBufferMin + arrivalFlightBuffer + departureFlightBuffer;
   const totalTravelMin = Math.round(route.totalTime / 60);
 
-  return { items, totalVisitMin, totalTravelMin };
+  return { items, totalVisitMin, totalTravelMin, totalBufferMin };
 }
 
 export async function exportTripToExcel(
@@ -490,7 +525,15 @@ export async function exportTripToExcel(
     (p) => p.dayIndex === null && !p.isDisabled
   ).length;
 
-  const kpiData = [
+  let totalBufferMinAcrossTrip = 0;
+  trip.optimizedRoutes.forEach((r, i) => {
+    const { totalBufferMin } = computeDaySchedule(trip, r, i);
+    totalBufferMinAcrossTrip += totalBufferMin;
+  });
+  const totalPlannedMin =
+    Math.round((totalTravelSec + totalVisitSec) / 60) + totalBufferMinAcrossTrip;
+
+  const kpiData: [string, string, string, string][] = [
     ["Total Duration", `${trip.days} Days`, "Primary Travel Mode", getTravelModeIcon(trip.travelMode)],
     ["Scheduled Sights", `${assignedPlacesCount} Places`, "Reserve / Unassigned", `${unassignedPlacesCount} Places`],
     [
@@ -502,8 +545,14 @@ export async function exportTripToExcel(
     [
       "Total Activity Time",
       formatDuration(Math.round(totalVisitSec / 60)),
+      "Total Buffers / Breaks",
+      formatDuration(totalBufferMinAcrossTrip),
+    ],
+    [
       "Total Planned Time",
-      formatDuration(Math.round((totalTravelSec + totalVisitSec) / 60)),
+      formatDuration(totalPlannedMin),
+      "Buffer Accounting",
+      totalBufferMinAcrossTrip > 0 ? "Includes custom & wait buffers" : "Direct transit & visits only",
     ],
   ];
 
@@ -703,7 +752,9 @@ export async function exportTripToExcel(
     }
     const stopsList = route.stops.map((s) => s.name).join(" → ");
     const distanceStr = formatDistance(route.totalDistance, distanceUnit);
-    const durationStr = `${formatDuration(Math.round(route.totalVisitTime / 60))} visit + ${formatDuration(Math.round(route.totalTime / 60))} travel`;
+    const { totalBufferMin } = computeDaySchedule(trip, route, i);
+    const bufferStr = totalBufferMin > 0 ? ` + ${formatDuration(totalBufferMin)} buffer` : "";
+    const durationStr = `${formatDuration(Math.round(route.totalVisitTime / 60))} visit + ${formatDuration(Math.round(route.totalTime / 60))} travel${bufferStr}`;
 
     const r = overviewSheet.addRow([
       "",
@@ -823,7 +874,7 @@ export async function exportTripToExcel(
     ];
 
     routesToInclude.forEach(({ route, dayIdx }) => {
-      const { items, totalVisitMin, totalTravelMin } = computeDaySchedule(trip, route, dayIdx);
+      const { items, totalVisitMin, totalTravelMin, totalBufferMin } = computeDaySchedule(trip, route, dayIdx);
 
       let dayTitle = `DAY ${dayIdx + 1}`;
       if (trip.dateMode === "fixed" && trip.startDate) {
@@ -833,7 +884,8 @@ export async function exportTripToExcel(
 
       // Hotel accommodation indicator
       const hotelInfo = route.startHotel ? `🏨 Base: ${route.startHotel.name}` : "";
-      const statsInfo = `📍 ${route.stops.length} Stops  •  ⏱️ ${formatDuration(totalVisitMin)} visit + ${formatDuration(totalTravelMin)} travel  •  📏 ${formatDistance(route.totalDistance, distanceUnit)}`;
+      const bufferStats = totalBufferMin > 0 ? ` + ${formatDuration(totalBufferMin)} buffer` : "";
+      const statsInfo = `📍 ${route.stops.length} Stops  •  ⏱️ ${formatDuration(totalVisitMin)} visit + ${formatDuration(totalTravelMin)} travel${bufferStats}  •  📏 ${formatDistance(route.totalDistance, distanceUnit)}`;
 
       // Day Header Banner Row
       const dayHeaderRow = sheet.addRow([`${dayTitle}   ${hotelInfo ? "  |  " + hotelInfo : ""}`]);
@@ -1001,12 +1053,13 @@ export async function exportTripToExcel(
       });
 
       // Day subtotal row
+      const bufferCol = totalBufferMin > 0 ? `${formatDuration(totalVisitMin)} (+${formatDuration(totalBufferMin)} buf)` : formatDuration(totalVisitMin);
       const subtotalRow = sheet.addRow([
         `End of Day ${dayIdx + 1} Summary`,
         "",
         "",
         "",
-        formatDuration(totalVisitMin),
+        bufferCol,
         "",
         "",
         "",
