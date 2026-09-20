@@ -99,10 +99,12 @@ export interface CustomBuffer {
 
 export interface RouteSegment {
   distance: number;
-  time: number;
+  time: number; // in seconds (active time used in routing & schedule)
   travelMode: TravelMode;
   isHeuristic?: boolean;
   heuristicReason?: string;
+  customDuration?: number; // in seconds, set when user customizes transit time
+  originalTime?: number; // in seconds, original calculated/estimated duration
 }
 
 export interface DayRoute {

@@ -1157,10 +1157,12 @@ export async function fetchAccurateRouteTimes(
         seg.travelMode,
         estimatedDeparture
       );
+      const accurateTime = seg.customDuration !== undefined ? seg.customDuration : result.durationS;
       return {
         ...seg,
         distance: result.distanceM,
-        time: result.durationS,
+        time: accurateTime,
+        originalTime: result.durationS,
         isHeuristic: result.isHeuristic ?? false,
         heuristicReason: result.heuristicReason,
       };
@@ -1168,6 +1170,7 @@ export async function fetchAccurateRouteTimes(
       console.warn("Failed to fetch accurate segment, using estimate", e);
       return {
         ...seg,
+        time: seg.customDuration !== undefined ? seg.customDuration : seg.time,
         isHeuristic: true,
         heuristicReason: seg.travelMode === "transit"
           ? "Live route unavailable; estimated geometrically."

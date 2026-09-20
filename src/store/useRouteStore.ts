@@ -155,6 +155,11 @@ interface RouteState extends ModeData {
     segmentIndex: number,
     mode: TravelMode,
   ) => void;
+  updateSegmentTransitTime: (
+    dayIndex: number,
+    segmentIndex: number,
+    customMinutes: number | null,
+  ) => void;
 
   // Per-day optimization
   optimizeDay: (dayIndex: number) => void;
@@ -1018,10 +1023,48 @@ export const useRouteStore = create<RouteState>()(
             if (segments[segmentIndex]) {
               const seg = { ...segments[segmentIndex] };
               seg.travelMode = mode;
-              seg.time = estimateTime(seg.distance, mode);
+              const estimated = estimateTime(seg.distance, mode);
               seg.isHeuristic = true;
               if (mode === "transit") {
                 seg.heuristicReason = "Transit time recalculated using geometric velocity heuristic.";
+              }
+              if (seg.customDuration !== undefined) {
+                seg.originalTime = estimated;
+              } else {
+                seg.time = estimated;
+              }
+              segments[segmentIndex] = seg;
+
+              // Recalculate total time
+              route.segments = segments;
+              route.totalTime = segments.reduce((sum, s) => sum + s.time, 0);
+              newRoutes[routeIdx] = route;
+            }
+          }
+          return { optimizedRoutes: newRoutes };
+        }),
+
+      updateSegmentTransitTime: (dayIndex, segmentIndex, customMinutes) =>
+        set((state) => {
+          const newRoutes = [...state.optimizedRoutes];
+          const routeIdx = newRoutes.findIndex((r) => r.day === dayIndex);
+          if (routeIdx >= 0) {
+            const route = { ...newRoutes[routeIdx] };
+            const segments = [...route.segments];
+            if (segments[segmentIndex]) {
+              const seg = { ...segments[segmentIndex] };
+              if (customMinutes === null) {
+                // Reset to calculated/estimated time
+                seg.time = seg.originalTime ?? estimateTime(seg.distance, seg.travelMode);
+                delete seg.customDuration;
+                delete seg.originalTime;
+              } else {
+                if (seg.originalTime === undefined) {
+                  seg.originalTime = seg.time;
+                }
+                const customSeconds = Math.max(60, Math.round(customMinutes * 60));
+                seg.customDuration = customSeconds;
+                seg.time = customSeconds;
               }
               segments[segmentIndex] = seg;
 

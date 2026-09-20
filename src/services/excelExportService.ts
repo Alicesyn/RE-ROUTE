@@ -126,6 +126,7 @@ interface ComputedScheduleItem {
     mode: TravelMode;
     time: number; // seconds
     distance: number; // meters
+    isCustom?: boolean;
   };
   googleMapsUrl?: string;
 }
@@ -393,6 +394,7 @@ function computeDaySchedule(
           mode: seg.travelMode,
           time: seg.time,
           distance: seg.distance,
+          isCustom: seg.customDuration !== undefined,
         };
         simTime += segTimeMin;
       }
@@ -990,7 +992,8 @@ export async function exportTripToExcel(
               : item.transitToNext.mode === "driving"
                 ? "🚗"
                 : "🚇";
-          transitStr = `${modeIcon} ${formatDuration(Math.round(item.transitToNext.time / 60))} (${formatDistance(item.transitToNext.distance, distanceUnit)})`;
+          const customTag = item.transitToNext.isCustom ? " [Custom]" : "";
+          transitStr = `${modeIcon} ${formatDuration(Math.round(item.transitToNext.time / 60))}${customTag} (${formatDistance(item.transitToNext.distance, distanceUnit)})`;
         }
 
         const r = sheet.addRow([
