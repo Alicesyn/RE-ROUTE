@@ -29,9 +29,9 @@ interface Props {
 }
 
 export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { 
-    categoryDurations, setCategoryDuration, 
-    categoryConfigs, setCategoryConfig, 
+  const {
+    categoryDurations, setCategoryDuration,
+    categoryConfigs, setCategoryConfig,
     applyCategoryDurationsToPlaces,
     distanceUnit, setDistanceUnit,
     timeFormat, setTimeFormat,
@@ -245,7 +245,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <h3 className="text-sm font-bold text-surface-900 dark:text-white uppercase tracking-wider mb-2">
               General
             </h3>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Appearance / Theme */}
               <div className="p-3 bg-surface-50 dark:bg-surface-700/30 rounded-xl border border-surface-200 dark:border-surface-700/50 flex items-center justify-between">
@@ -256,22 +256,20 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setTheme("light")}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      theme === "light"
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${theme === "light"
                         ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     <Sun className="w-3.5 h-3.5 text-amber-500" />
                     Light
                   </button>
                   <button
                     onClick={() => setTheme("dark")}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      theme === "dark"
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all ${theme === "dark"
                         ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     <Moon className="w-3.5 h-3.5 text-surface-400" />
                     Dark
@@ -288,22 +286,20 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setShowImages(true)}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      showImages
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all ${showImages
                         ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     <Image className="w-3.5 h-3.5" />
                     On
                   </button>
                   <button
                     onClick={() => setShowImages(false)}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      !showImages
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all ${!showImages
                         ? "bg-white dark:bg-surface-700 text-surface-900 dark:text-white shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     <ImageOff className="w-3.5 h-3.5" />
                     Off
@@ -320,21 +316,19 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setDistanceUnit("metric")}
-                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      distanceUnit === "metric"
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${distanceUnit === "metric"
                         ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     km
                   </button>
                   <button
                     onClick={() => setDistanceUnit("imperial")}
-                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      distanceUnit === "imperial"
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${distanceUnit === "imperial"
                         ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     miles
                   </button>
@@ -350,21 +344,19 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <div className="flex items-center gap-1 bg-surface-200 dark:bg-surface-800 p-1 rounded-lg">
                   <button
                     onClick={() => setTimeFormat("12h")}
-                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      timeFormat === "12h"
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${timeFormat === "12h"
                         ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     12h (AM/PM)
                   </button>
                   <button
                     onClick={() => setTimeFormat("24h")}
-                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                      timeFormat === "24h"
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${timeFormat === "24h"
                         ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-400 shadow-xs"
                         : "text-surface-500 hover:text-surface-900 dark:hover:text-white"
-                    }`}
+                      }`}
                   >
                     24-hour
                   </button>
@@ -377,10 +369,10 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <div className="col-span-4 flex flex-col">
               <span>Category Limits</span>
             </div>
-            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Timer className="w-3 h-3"/> Default Duration</div>
-            <div className="col-span-2 text-center flex items-center justify-center gap-1" title="Minimum minutes between visits of this category on the same day"><Utensils className="w-3 h-3"/> Min Spacing</div>
-            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Minimize2 className="w-3 h-3"/> Min/Day</div>
-            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Maximize2 className="w-3 h-3"/> Max/Day</div>
+            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Timer className="w-3 h-3" /> Default Duration</div>
+            <div className="col-span-2 text-center flex items-center justify-center gap-1" title="Minimum minutes between visits of this category on the same day"><Utensils className="w-3 h-3" /> Min Spacing</div>
+            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Minimize2 className="w-3 h-3" /> Min/Day</div>
+            <div className="col-span-2 text-center flex items-center justify-center gap-1"><Maximize2 className="w-3 h-3" /> Max/Day</div>
           </div>
 
           <div className="mt-2 space-y-1 px-6 pb-6">
@@ -571,7 +563,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                           if (dateMode === "fixed" && startDate) {
                             try {
                               dayDateLabel = ` (${format(addDays(parseISO(startDate), d), "MMM d")})`;
-                            } catch {}
+                            } catch { }
                           }
                           const customKey = `${category}_${d}`;
 
@@ -641,7 +633,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                               if (dateMode === "fixed" && startDate) {
                                 try {
                                   label += ` (${format(addDays(parseISO(startDate), i), "MMM d")})`;
-                                } catch {}
+                                } catch { }
                               }
                               return (
                                 <option key={i} value={i} disabled={isAdded}>
@@ -718,7 +710,7 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             }}
             className="px-4 py-2 text-sm font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
           >
-            Apply to Current PTVs
+            Apply Category Defaults to Current PTVs
           </button>
           <button
             onClick={onClose}

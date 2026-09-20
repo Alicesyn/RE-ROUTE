@@ -602,13 +602,13 @@ function App() {
 
   const handleUnassignAll = () => {
     unassignAll();
-    toast.info("All places unassigned from schedule.", "Schedule Cleared");
+    toast.info("Unpinned places returned to pool. Restrictions, pins, and reservations preserved.", "Schedule Cleared");
   };
 
   const handleClearOptimizedSchedule = () => {
-    if (window.confirm("Are you sure you want to clear the optimized schedule? Places will return to the unassigned pool.")) {
+    if (window.confirm("Are you sure you want to clear the optimized schedule? Unpinned places will return to the unassigned pool; restrictions, pins, and reservations will be preserved.")) {
       clearOptimizedSchedule();
-      toast.info("Optimized schedule cleared. All places returned to unassigned pool.", "Schedule Cleared");
+      toast.info("Schedule cleared. Restrictions, pins, and reservations preserved.", "Schedule Cleared");
     }
   };
 

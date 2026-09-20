@@ -73,6 +73,12 @@ export interface Place {
   isStarred?: boolean; // If true, optimizer will force this place into the schedule (never leave unassigned)
   dismissedDuplicate?: boolean; // If true, user manually removed/dismissed the duplicate flag for this place
   allowedDayRanges?: DayRangeConstraint[]; // Multiple disjoint day range constraints (e.g., Oct 3–6 AND Oct 9–12)
+  allowedTimeRange?: TimeRangeConstraint; // User-defined scheduling time window (e.g., only visit between 7 AM – 5 PM)
+}
+
+export interface TimeRangeConstraint {
+  startTime: string; // "HH:mm" format (e.g. "07:00")
+  endTime: string;   // "HH:mm" format (e.g. "17:00")
 }
 
 export interface DayRangeConstraint {

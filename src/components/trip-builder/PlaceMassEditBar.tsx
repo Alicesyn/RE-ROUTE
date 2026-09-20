@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Layers, X, Star, EyeOff, CheckCircle2, Trash2, CalendarDays, Plus } from "lucide-react";
-import type { DayRangeConstraint } from "../../types";
+import { Layers, X, Star, EyeOff, CheckCircle2, Trash2, CalendarDays, Plus, Clock } from "lucide-react";
+import type { DayRangeConstraint, TimeRangeConstraint } from "../../types";
 import { formatDayIndexLabel, mergeOverlappingRanges, MAX_DAY_RANGES } from "../../utils/dayRangeUtils";
 
 export interface PlaceMassEditBarProps {
@@ -15,6 +15,7 @@ export interface PlaceMassEditBarProps {
   allFilteredDisabled: boolean;
   onMassDisabled: () => void;
   onApplyDayRestriction: (ranges: DayRangeConstraint[] | null) => void;
+  onApplyTimeRestriction: (range: TimeRangeConstraint | null) => void;
   onMassAssignDay: (targetDay: number | "unassign") => void;
   onMassDelete: () => void;
   onClose: () => void;
@@ -38,14 +39,18 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
     allFilteredDisabled,
     onMassDisabled,
     onApplyDayRestriction,
+    onApplyTimeRestriction,
     onMassAssignDay,
     onMassDelete,
     onClose,
   }) => {
     const [showDateRangePicker, setShowDateRangePicker] = useState(false);
+    const [showTimeRangePicker, setShowTimeRangePicker] = useState(false);
     const [rangeRows, setRangeRows] = useState<RangeRow[]>([
       { startDay: 0, endDay: Math.max(0, days - 1) },
     ]);
+    const [timeStart, setTimeStart] = useState("09:00");
+    const [timeEnd, setTimeEnd] = useState("21:00");
 
     if (!showMassEditBar) return null;
 
@@ -99,8 +104,26 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
       setShowDateRangePicker(false);
     };
 
+    const handleApplyTimeRange = () => {
+      onApplyTimeRestriction({ startTime: timeStart, endTime: timeEnd });
+      setShowTimeRangePicker(false);
+    };
+
+    const handleClearTimeRestriction = () => {
+      onApplyTimeRestriction(null);
+      setShowTimeRangePicker(false);
+    };
+
+    const formatTimeLabel = (time: string) => {
+      const [h, m] = time.split(":").map(Number);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return m === 0 ? `${h12} ${ampm}` : `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+    };
+
     const handleClose = () => {
       setShowDateRangePicker(false);
+      setShowTimeRangePicker(false);
       onClose();
     };
 
@@ -155,7 +178,22 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
             title="Restrict all results to specific date or day ranges"
           >
             <CalendarDays className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>Restrict Date Range</span>
+            <span>Restrict Dates</span>
+          </button>
+
+          {/* Restrict Time Window Button */}
+          <button
+            type="button"
+            onClick={() => setShowTimeRangePicker((prev) => !prev)}
+            className={`h-8 px-2.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+              showTimeRangePicker
+                ? "bg-teal-100 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 border-teal-300 dark:border-teal-700 shadow-xs"
+                : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
+            }`}
+            title="Restrict all results to a specific time window"
+          >
+            <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <span>Restrict Time</span>
           </button>
 
           {/* Star All / Unstar All */}
@@ -374,6 +412,83 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
                   Overlapping ranges will be merged automatically
                 </span>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Time Restriction Panel */}
+        {showTimeRangePicker && (
+          <div className="mt-3 pt-3 border-t border-primary-200/60 dark:border-primary-800/50 space-y-3 bg-white/60 dark:bg-surface-900/40 rounded-lg p-3 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+              <div>
+                <span className="font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  Restrict {filteredPlacesCount} Place{filteredPlacesCount === 1 ? "" : "s"} to Time Window
+                </span>
+                <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5">
+                  The optimizer will only schedule these places within the specified time window each day.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearTimeRestriction}
+                className="text-[11px] font-semibold text-red-600 dark:text-red-400 hover:underline self-start sm:self-auto cursor-pointer shrink-0"
+                title="Remove all time window constraints"
+              >
+                Clear All Time Restrictions
+              </button>
+            </div>
+
+            <div className="flex items-end gap-3 p-2 rounded-lg bg-surface-50/80 dark:bg-surface-800/60 border border-surface-200/80 dark:border-surface-700/60">
+              <div className="flex-1 min-w-0">
+                <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
+                  Earliest
+                </label>
+                <input
+                  type="time"
+                  value={timeStart}
+                  onChange={(e) => setTimeStart(e.target.value)}
+                  className="w-full h-7 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-md px-2 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                  style={{ colorScheme: "dark light" }}
+                />
+              </div>
+
+              <span className="text-surface-400 dark:text-surface-500 text-xs font-bold pb-1">→</span>
+
+              <div className="flex-1 min-w-0">
+                <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
+                  Latest
+                </label>
+                <input
+                  type="time"
+                  value={timeEnd}
+                  onChange={(e) => setTimeEnd(e.target.value)}
+                  className="w-full h-7 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-md px-2 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                  style={{ colorScheme: "dark light" }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[11px] text-surface-500 dark:text-surface-400">
+              <span>Preview:</span>
+              <span className="font-semibold text-teal-700 dark:text-teal-300">{formatTimeLabel(timeStart)} – {formatTimeLabel(timeEnd)}</span>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 border-t border-surface-200/50 dark:border-surface-700/50">
+              <button
+                type="button"
+                onClick={handleApplyTimeRange}
+                className="h-7 px-3.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
+              >
+                Apply Time Window
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTimeRangePicker(false)}
+                className="h-7 px-2.5 rounded-lg bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-300 dark:hover:bg-surface-600 font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}

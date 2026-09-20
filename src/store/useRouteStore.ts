@@ -21,6 +21,7 @@ import { PlaceCategory } from "../types";
 import { cloudTripService } from "../services/cloudTripService";
 import { isSupabaseConfigured } from "../services/supabaseClient";
 import { toast } from "../services/toastService";
+import { isReservationRelevant } from "../utils/reservationUtils";
 
 interface ModeData {
   places: Place[];
@@ -780,26 +781,54 @@ export const useRouteStore = create<RouteState>()(
 
       unassignAll: () =>
         set((state) => ({
-          places: state.places.map((p) => ({
-            ...p,
-            dayIndex: null,
-            orderInDay: null,
-            pinnedToDay: false,
-            unfeasibleReason: undefined,
-          })),
+          places: state.places.map((p) => {
+            const isExempt = p.dayIndex !== null && state.exemptDays.includes(p.dayIndex);
+            const isPinned = Boolean(p.pinnedToDay && p.dayIndex !== null);
+            const hasReservationOrLock = p.dayIndex !== null && isReservationRelevant(p);
+
+            if (isPinned || hasReservationOrLock || isExempt) {
+              return {
+                ...p,
+                pinnedToDay: true,
+                unfeasibleReason: undefined,
+              };
+            }
+
+            return {
+              ...p,
+              dayIndex: null,
+              orderInDay: null,
+              pinnedToDay: false,
+              unfeasibleReason: undefined,
+            };
+          }),
           optimizedRoutes: [],
           customBuffers: [],
         })),
 
       clearOptimizedSchedule: () =>
         set((state) => ({
-          places: state.places.map((p) => ({
-            ...p,
-            dayIndex: null,
-            orderInDay: null,
-            pinnedToDay: false,
-            unfeasibleReason: undefined,
-          })),
+          places: state.places.map((p) => {
+            const isExempt = p.dayIndex !== null && state.exemptDays.includes(p.dayIndex);
+            const isPinned = Boolean(p.pinnedToDay && p.dayIndex !== null);
+            const hasReservationOrLock = p.dayIndex !== null && isReservationRelevant(p);
+
+            if (isPinned || hasReservationOrLock || isExempt) {
+              return {
+                ...p,
+                pinnedToDay: true,
+                unfeasibleReason: undefined,
+              };
+            }
+
+            return {
+              ...p,
+              dayIndex: null,
+              orderInDay: null,
+              pinnedToDay: false,
+              unfeasibleReason: undefined,
+            };
+          }),
           optimizedRoutes: [],
           customBuffers: [],
         })),

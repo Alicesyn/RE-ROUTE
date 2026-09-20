@@ -23,7 +23,7 @@ import { PlaceListToolbar, SortOption } from "./PlaceListToolbar";
 import { PlaceMassEditBar } from "./PlaceMassEditBar";
 import { PlaceListEmptyState } from "./PlaceListEmptyState";
 import { useRouteStore } from "../../store/useRouteStore";
-import { Place, PlaceCategory, DayRangeConstraint } from "../../types";
+import { Place, PlaceCategory, DayRangeConstraint, TimeRangeConstraint } from "../../types";
 import { findDuplicatePlaceIds, getDuplicatePlaceIdsToRemove } from "../../utils/duplicateUtils";
 import { formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
@@ -409,6 +409,37 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       }
     };
 
+    const handleApplyTimeRestriction = (range: TimeRangeConstraint | null) => {
+      if (filteredPlaces.length === 0) return;
+
+      const updates = filteredPlaces.map((p) => ({
+        id: p.id,
+        updates: {
+          allowedTimeRange: range ?? undefined,
+        },
+      }));
+
+      updatePlacesBulk(updates);
+
+      if (range) {
+        const formatTime = (t: string) => {
+          const [h, m] = t.split(":").map(Number);
+          const ampm = h >= 12 ? "PM" : "AM";
+          const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+          return m === 0 ? `${h12} ${ampm}` : `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+        };
+        toast.success(
+          `Restricted ${filteredPlaces.length} place(s) to ${formatTime(range.startTime)} – ${formatTime(range.endTime)}.`,
+          "Time Restriction Applied"
+        );
+      } else {
+        toast.info(
+          `Cleared time restrictions for ${filteredPlaces.length} place(s).`,
+          "Time Restrictions Cleared"
+        );
+      }
+    };
+
     const handleMassAssignDay = (targetDay: number | "unassign") => {
       if (filteredPlaces.length === 0) return;
 
@@ -536,6 +567,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           allFilteredDisabled={allFilteredDisabled}
           onMassDisabled={handleMassDisabled}
           onApplyDayRestriction={handleApplyDayRestriction}
+          onApplyTimeRestriction={handleApplyTimeRestriction}
           onMassAssignDay={handleMassAssignDay}
           onMassDelete={handleMassDelete}
           onClose={() => setIsMassEditOpen(false)}

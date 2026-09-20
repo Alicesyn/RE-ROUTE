@@ -49,17 +49,19 @@ export function getEffectiveCategoryConfig(
   const isFirstDay = dayIndex === 0;
   const isLastDay = dayIndex === totalDays - 1;
   const customOverride = base.customDayOverrides?.[dayIndex];
-  const dayOverride = customOverride ?? (isFirstDay ? base.firstDayOverride : isLastDay ? base.lastDayOverride : undefined);
+  const positionalOverride = isFirstDay ? base.firstDayOverride : isLastDay ? base.lastDayOverride : undefined;
 
-  if (!dayOverride) return base;
+  const effectiveMin = (customOverride?.minPerDay !== undefined && customOverride?.minPerDay !== null)
+    ? customOverride.minPerDay
+    : (positionalOverride?.minPerDay !== undefined && positionalOverride?.minPerDay !== null)
+      ? positionalOverride.minPerDay
+      : base.minPerDay;
 
-  const effectiveMin = dayOverride.minPerDay !== undefined && dayOverride.minPerDay !== null
-    ? dayOverride.minPerDay
-    : base.minPerDay;
-
-  let effectiveMax = dayOverride.maxPerDay !== undefined && dayOverride.maxPerDay !== null
-    ? dayOverride.maxPerDay
-    : base.maxPerDay;
+  let effectiveMax = (customOverride?.maxPerDay !== undefined && customOverride?.maxPerDay !== null)
+    ? customOverride.maxPerDay
+    : (positionalOverride?.maxPerDay !== undefined && positionalOverride?.maxPerDay !== null)
+      ? positionalOverride.maxPerDay
+      : base.maxPerDay;
 
   if (effectiveMin != null && effectiveMax != null && effectiveMax < effectiveMin) {
     effectiveMax = effectiveMin;

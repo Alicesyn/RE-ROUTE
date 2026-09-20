@@ -270,7 +270,7 @@ export const DailySchedule: React.FC = () => {
   const handleClearSchedule = () => {
     clearOptimizedSchedule();
     setShowClearConfirm(false);
-    toast.info("Optimized schedule cleared. All places returned to unassigned pool.", "Schedule Cleared");
+    toast.info("Schedule cleared. Restrictions, pins, and reservations preserved.", "Schedule Cleared");
   };
 
   const sensors = useSensors(
