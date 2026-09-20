@@ -722,10 +722,30 @@ function optimizeDayRoute(
         dist = getDistance(place.lat, place.lng, endAnchor.lat, endAnchor.lng);
       }
 
-      // Penalize windows that would severely overflow their time window
+      // Capacity check: prevent assigning stops into a window that precedes a locked reservation if they won't fit
       const currentBucketDuration = windowBuckets[w].reduce((sum, p) => sum + (p.estimatedDuration || 60), 0);
-      const isTight = currentBucketDuration + duration > wCapacity && wCapacity > 0;
-      let score = dist * (isTight ? 2.5 : 1.0);
+      let score = dist;
+
+      if (w < numWindows - 1) {
+        // Window ends at a locked reservation (e.g. Shibuya Sky at 10:00 AM)
+        // Hard constraint: do not cram stops into this window if they would cause arrival past the reservation
+        const estTransitPadding = (windowBuckets[w].length + 1) * 15; // ~15 min transit per leg
+        const totalTimeNeeded = currentBucketDuration + duration + estTransitPadding;
+
+        if (currentBucketDuration + duration > wCapacity) {
+          // Hard overflow: Impossible to visit and still arrive on time even with 0 travel time
+          score += 10000000 + (currentBucketDuration + duration - wCapacity) * 50000;
+        } else if (totalTimeNeeded > wCapacity) {
+          // Tight overflow: Place duration technically fits, but transit travel time would cause late arrival
+          score += 3000000 + (totalTimeNeeded - wCapacity) * 20000;
+        }
+      } else {
+        // Last window of the day (after all locked reservations)
+        const isTight = currentBucketDuration + duration > wCapacity && wCapacity > 0;
+        if (isTight) {
+          score *= 2.5;
+        }
+      }
 
       // Penalize assigning to a window where the place is closed
       if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
