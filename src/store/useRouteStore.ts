@@ -1563,6 +1563,8 @@ export const useRouteStore = create<RouteState>()(
             categoryConfigs: state.categoryConfigs,
             customBuffers: state.customBuffers,
             dayTitles: state.dayTitles,
+            exemptDays: state.exemptDays,
+            customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
           };
@@ -1638,6 +1640,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: Array.isArray(trip.customBuffers) ? trip.customBuffers : [],
             dayTitles: trip.dayTitles && typeof trip.dayTitles === "object" ? trip.dayTitles : {},
             exemptDays: Array.isArray(trip.exemptDays) ? trip.exemptDays : [],
+            customTransitTimes: trip.customTransitTimes || {},
             optimizedRoutes: Array.isArray(trip.optimizedRoutes)
               ? trip.optimizedRoutes
               : [],
