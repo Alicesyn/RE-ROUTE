@@ -12,7 +12,8 @@ import { useRouteStore } from "./store/useRouteStore";
 import { solveTSP } from "./services/tspSolver";
 import { clearMapsCache, fetchFreshPhoto } from "./services/mapsService";
 import { analyticsService } from "./services/analyticsService";
-import { Wand2, Sparkles, RefreshCw, Loader2, MapPin, RotateCcw, Trash2 } from "lucide-react";
+import { Wand2, Sparkles, RefreshCw, Loader2, MapPin, RotateCcw, Trash2, Lock, X } from "lucide-react";
+import { format, addDays, parseISO } from "date-fns";
 
 const MapView = React.lazy(() =>
   import("./components/map/MapView").then((m) => ({ default: m.MapView }))
@@ -53,11 +54,16 @@ function App() {
     dayStartTime,
     dayEndTime,
     categoryConfigs,
+    exemptDays,
+    toggleDayExemption,
+    setExemptDays,
+    dayTitles,
   } = useRouteStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showMobileMap, setShowMobileMap] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
+  const [showExemptPopover, setShowExemptPopover] = useState(false);
 
   // Apply dark mode
   useEffect(() => {
@@ -138,6 +144,15 @@ function App() {
   const handleOptimize = async () => {
     const activePlaces = places.filter((p) => !p.isDisabled);
     if (activePlaces.length === 0 || isOptimizing) return;
+
+    if (exemptDays.length >= days) {
+      toast.warning(
+        "All days are currently exempt from optimization. Uncheck at least one day in Exempt Days to optimize.",
+        "All Days Exempt",
+      );
+      return;
+    }
+
     setIsOptimizing(true);
     try {
       const [startH, startM] = dayStartTime.split(":").map(Number);
@@ -176,6 +191,8 @@ function App() {
         return dayAvailableMinutes;
       });
 
+      const { categoryConfigs: latestConfigs, customTransitTimes } = useRouteStore.getState();
+
       const result = await solveTSP(
         activePlaces,
         hotels,
@@ -185,13 +202,16 @@ function App() {
         strictBudget,
         showFlights ? arrivalFlight?.location : null,
         showFlights ? departureFlight?.location : null,
-        categoryConfigs,
+        latestConfigs || categoryConfigs,
         startDate,
         dayStartTime,
         avoidClosedHours,
         showFlights ? arrivalFlight : null,
         showFlights ? departureFlight : null,
         dayEndTime,
+        exemptDays,
+        optimizedRoutes,
+        customTransitTimes,
       );
 
       if (result.success) {
@@ -209,12 +229,15 @@ function App() {
         });
         uniqueCities.forEach((city) => analyticsService.trackDestination(city));
 
-        // Update places with their optimizer-assigned days and order
+        // Update places with their optimizer-assigned days and order (skip exempt days)
         const placeUpdates: {
           id: string;
           updates: Partial<(typeof places)[0]>;
         }[] = [];
         result.days.forEach((dayRoute: DayRoute) => {
+          if (exemptDays.includes(dayRoute.day)) {
+            return;
+          }
           dayRoute.stops.forEach((stop: Place, idx: number) => {
             const originalPlace = places.find((p) => p.id === stop.id);
             if (originalPlace) {
@@ -247,14 +270,19 @@ function App() {
           updatePlacesBulk(placeUpdates);
         }
 
+        const exemptMsg =
+          exemptDays.length > 0
+            ? ` (${exemptDays.length} ${exemptDays.length === 1 ? "day" : "days"} exempt)`
+            : "";
+
         if (result.unassignedPlaces && result.unassignedPlaces.length > 0) {
           toast.warning(
-            `${result.unassignedPlaces.length} of ${activePlaces.length} places could not fit within the daily time budget.`,
+            `${result.unassignedPlaces.length} of ${activePlaces.length} places could not fit within the daily time budget${exemptMsg}.`,
             "Schedule Over Capacity",
           );
         } else {
           toast.success(
-            `Optimized ${activePlaces.length} places across ${days} days!`,
+            `Optimized ${activePlaces.length} places across ${days - exemptDays.length} days${exemptMsg}!`,
             "Route Optimized",
           );
         }
@@ -764,7 +792,11 @@ function App() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleOptimize}
-              disabled={places.filter((p) => !p.isDisabled).length === 0 || isOptimizing}
+              disabled={
+                places.filter((p) => !p.isDisabled).length === 0 ||
+                isOptimizing ||
+                exemptDays.length >= days
+              }
               className="btn-primary flex-1 flex items-center justify-center gap-2 group py-4 text-lg rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isOptimizing ? (
@@ -778,14 +810,115 @@ function App() {
                 <>
                   <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
                   <span>
-                    {optimizedRoutes.length > 0 ? "Re-Optimize Route" : "Optimize Route"}
-                    {places.some((p) => p.isDisabled)
+                    {exemptDays.length >= days
+                      ? "All Days Exempt (Locked)"
+                      : optimizedRoutes.length > 0
+                        ? "Re-Optimize Route"
+                        : "Optimize Route"}
+                    {exemptDays.length < days && places.some((p) => p.isDisabled)
                       ? ` (${places.filter((p) => !p.isDisabled).length} active)`
                       : ""}
+                    {exemptDays.length > 0 && exemptDays.length < days && (
+                      <span className="ml-1.5 text-xs font-medium opacity-90">
+                        ({days - exemptDays.length}/{days} days)
+                      </span>
+                    )}
                   </span>
                 </>
               )}
             </button>
+
+            {/* Exempt Days Toggle Popover Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowExemptPopover((v) => !v)}
+                className={`flex items-center gap-2 py-4 px-3.5 sm:px-4 text-sm font-bold border rounded-xl transition-all shadow-2xs cursor-pointer shrink-0 ${
+                  exemptDays.length > 0
+                    ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 text-amber-800 dark:text-amber-200 hover:bg-amber-100/80 dark:hover:bg-amber-900/60"
+                    : "bg-white dark:bg-surface-800 border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700"
+                }`}
+                title="Select days to exempt/lock from route optimization"
+                aria-label="Exempt days from route optimization"
+              >
+                <Lock
+                  className={`w-4 h-4 ${
+                    exemptDays.length > 0
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-surface-400"
+                  }`}
+                />
+                <span className="hidden sm:inline">
+                  {exemptDays.length === 0
+                    ? "Exempt Days"
+                    : `${exemptDays.length} ${exemptDays.length === 1 ? "Day" : "Days"} Exempt`}
+                </span>
+                {exemptDays.length > 0 && (
+                  <span className="sm:hidden text-xs bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded-full font-black">
+                    {exemptDays.length}
+                  </span>
+                )}
+              </button>
+
+              {showExemptPopover && (
+                <div className="absolute bottom-full mb-2 right-0 sm:left-auto z-50 w-72 bg-white dark:bg-surface-800 rounded-xl shadow-2xl border border-surface-200 dark:border-surface-700 p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 text-left">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-surface-100 dark:border-surface-700">
+                    <span className="text-xs font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-500" />
+                      Exempt from Optimization
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowExemptPopover(false)}
+                      className="text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-surface-500 dark:text-surface-400 leading-tight">
+                    Checked days will not be altered or reordered when you click <strong>Optimize Route</strong>.
+                  </p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pt-1">
+                    {Array.from({ length: days }).map((_, idx) => {
+                      const isExempt = exemptDays.includes(idx);
+                      const dateStr = startDate ? format(addDays(parseISO(startDate), idx), "MMM d") : null;
+                      const dayName = dayTitles[idx]
+                        ? (dateStr ? `${dayTitles[idx]} (${dateStr})` : `Day ${idx + 1}: ${dayTitles[idx]}`)
+                        : (dateStr ? `${dateStr} (Day ${idx + 1})` : `Day ${idx + 1}`);
+                      return (
+                        <label
+                          key={idx}
+                          className={`flex items-center justify-between p-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                            isExempt
+                              ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/60"
+                              : "hover:bg-surface-100 dark:hover:bg-surface-700/50 text-surface-700 dark:text-surface-300"
+                          }`}
+                        >
+                          <span className="truncate pr-2">{dayName}</span>
+                          <input
+                            type="checkbox"
+                            checked={isExempt}
+                            onChange={() => toggleDayExemption(idx)}
+                            className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {exemptDays.length > 0 && (
+                    <div className="pt-1 border-t border-surface-100 dark:border-surface-700">
+                      <button
+                        type="button"
+                        onClick={() => setExemptDays([])}
+                        className="w-full text-center text-[11px] font-bold text-red-600 hover:text-red-700 dark:text-red-400 py-0.5 cursor-pointer"
+                      >
+                        Clear all exemptions
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {optimizedRoutes.length > 0 && (
               <button

@@ -30,6 +30,48 @@ function parseTimeToMinutes(timeStr: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
+/**
+ * Resolves the effective category configuration for a given place category on a specific day,
+ * taking into account customDayOverrides, firstDayOverride, and lastDayOverride.
+ * Crucially guarantees that effective maxPerDay is at least effective minPerDay so a higher min
+ * override is not accidentally throttled by a lower default/inherited max.
+ */
+export function getEffectiveCategoryConfig(
+  categoryConfigs: Partial<Record<PlaceCategory, CategoryConfig>> | undefined,
+  category: PlaceCategory,
+  dayIndex: number,
+  totalDays: number,
+): CategoryConfig | undefined {
+  if (!categoryConfigs) return undefined;
+  const base = categoryConfigs[category];
+  if (!base) return undefined;
+
+  const isFirstDay = dayIndex === 0;
+  const isLastDay = dayIndex === totalDays - 1;
+  const customOverride = base.customDayOverrides?.[dayIndex];
+  const dayOverride = customOverride ?? (isFirstDay ? base.firstDayOverride : isLastDay ? base.lastDayOverride : undefined);
+
+  if (!dayOverride) return base;
+
+  const effectiveMin = dayOverride.minPerDay !== undefined && dayOverride.minPerDay !== null
+    ? dayOverride.minPerDay
+    : base.minPerDay;
+
+  let effectiveMax = dayOverride.maxPerDay !== undefined && dayOverride.maxPerDay !== null
+    ? dayOverride.maxPerDay
+    : base.maxPerDay;
+
+  if (effectiveMin != null && effectiveMax != null && effectiveMax < effectiveMin) {
+    effectiveMax = effectiveMin;
+  }
+
+  return {
+    ...base,
+    minPerDay: effectiveMin,
+    maxPerDay: effectiveMax,
+  };
+}
+
 // Time-budget-aware clustering
 // Distributes places across days so no single day exceeds the budget
 // Respects pinnedToDay: pinned places stay on their assigned day
@@ -49,10 +91,12 @@ function clusterPlaces(
   dayEndTime: string = "21:00",
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
+  exemptDays: number[] = [],
 ): Place[] {
-  const pinned = places.filter((p) => p.dayIndex !== null && p.pinnedToDay);
+  const isExempt = (dayIdx: number | null) => dayIdx !== null && exemptDays.includes(dayIdx);
+  const pinned = places.filter((p) => p.dayIndex !== null && (p.pinnedToDay || isExempt(p.dayIndex)));
   const unassigned = places.filter(
-    (p) => p.dayIndex === null || (p.dayIndex !== null && !p.pinnedToDay),
+    (p) => (p.dayIndex === null || !p.pinnedToDay) && !isExempt(p.dayIndex),
   );
 
   if (unassigned.length === 0) return places;
@@ -138,14 +182,38 @@ function clusterPlaces(
     });
   }
 
-  // Sort starred places first (must-visit priority), then places with locked custom arrival times, then by longest duration (greedy packing)
+  // Collect categories that have active minPerDay targets across any non-exempt day
+  const categoriesWithMinTarget = new Set<string>();
+  if (categoryConfigs) {
+    for (const [cat, cfg] of Object.entries(categoryConfigs)) {
+      if (!cfg) continue;
+      for (let d = 0; d < days; d++) {
+        if (exemptDays.includes(d)) continue;
+        const eff = getEffectiveCategoryConfig(categoryConfigs, cat as PlaceCategory, d, days);
+        if (eff?.minPerDay != null && eff.minPerDay > 0) {
+          categoriesWithMinTarget.add(cat);
+          break;
+        }
+      }
+    }
+  }
+
+  // Sort starred places first (must-visit priority), then places with locked custom arrival times,
+  // then categories that have minimum requirements (to guarantee slots before budget fills up),
+  // then by longest duration (greedy packing)
   toAssign.sort((a, b) => {
     const aStarred = a.isStarred ? 1 : 0;
     const bStarred = b.isStarred ? 1 : 0;
     if (aStarred !== bStarred) return bStarred - aStarred; // starred first
+
     const aCustom = a.customTime ? 1 : 0;
     const bCustom = b.customTime ? 1 : 0;
     if (aCustom !== bCustom) return bCustom - aCustom; // locked time places next
+
+    const aHasMin = categoriesWithMinTarget.has(a.category) ? 1 : 0;
+    const bHasMin = categoriesWithMinTarget.has(b.category) ? 1 : 0;
+    if (aHasMin !== bHasMin) return bHasMin - aHasMin; // categories needing quotas next
+
     return (b.estimatedDuration ?? 60) - (a.estimatedDuration ?? 60);
   });
 
@@ -164,6 +232,11 @@ function clusterPlaces(
     let maxScore = -Infinity;
 
     for (let d = 0; d < days; d++) {
+      // Days marked exempt are protected from receiving unassigned places
+      if (exemptDays.includes(d)) {
+        continue;
+      }
+
       // Unified check: respects both hard-pinning (pinnedToDay) and allowedDayRange
       if (!isDayAllowedForPlace(place, d, days)) {
         continue;
@@ -173,21 +246,25 @@ function clusterPlaces(
       if (place.customTime) {
         const customMin = parseTimeToMinutes(place.customTime);
         const duration = place.estimatedDuration || 60;
-        const dayPlacesSoFar = [
+        const customEnd = customMin + duration;
+
+        // Conflict check: against other places on day d with locked customTime
+        const dayPlaces = [
           ...pinned.filter((p) => p.dayIndex === d),
           ...toAssign.filter((p) => p.dayIndex === d),
         ];
-        const hasTimeConflict = dayPlacesSoFar.some((p) => {
+        const hasTimeOverlap = dayPlaces.some((p) => {
           if (!p.customTime) return false;
           const pMin = parseTimeToMinutes(p.customTime);
-          const pDur = p.estimatedDuration || 60;
-          return Math.abs(customMin - pMin) < Math.min(duration, pDur);
+          const pEnd = pMin + (p.estimatedDuration || 60);
+          return customMin < pEnd && customEnd > pMin;
         });
-        if (hasTimeConflict) {
-          continue; // Skip day d, conflicting locked reservation time
+
+        if (hasTimeOverlap) {
+          continue; // Cannot place two locked-time stops at the same hour
         }
 
-        // Verify operating hours overlap with the locked arrival time if avoidClosedHours
+        // Verify customTime falls within place's operating hours on day d
         if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
           const dayDate = addDays(parseISO(startDateISO), d);
           const dayHours = getPlaceDayHours(place.openingHours, dayDate);
@@ -203,37 +280,40 @@ function clusterPlaces(
         }
       }
 
-      // Resolve effective category config — check custom day override first, then first/last day
+      // Resolve effective category config with day overrides
       const isFirstDay = d === 0;
       const isLastDay = d === days - 1;
       const baseCatConfig = categoryConfigs?.[place.category];
       const customDayOverride = baseCatConfig?.customDayOverrides?.[d];
-      const dayOverride = customDayOverride ?? (isFirstDay
-        ? baseCatConfig?.firstDayOverride
-        : isLastDay
-          ? baseCatConfig?.lastDayOverride
-          : undefined);
-      const catConfig = dayOverride
-        ? { ...baseCatConfig, ...dayOverride }
-        : baseCatConfig;
+      const hasSpecificDayOverride = !!customDayOverride || (isFirstDay && !!baseCatConfig?.firstDayOverride) || (isLastDay && !!baseCatConfig?.lastDayOverride);
+      const catConfig = getEffectiveCategoryConfig(categoryConfigs, place.category, d, days);
+
+      const minTarget = catConfig?.minPerDay;
+      const maxTarget = catConfig?.maxPerDay;
+      const currentCount = categoryCounts[d]?.[place.category] || 0;
 
       // 1. Check max limit constraint
-      const currentCount = categoryCounts[d]?.[place.category] || 0;
-      if (catConfig && catConfig.maxPerDay !== undefined && catConfig.maxPerDay !== null) {
-        if (currentCount >= catConfig.maxPerDay) {
+      if (maxTarget != null) {
+        if (currentCount >= maxTarget) {
           continue; // Skip this day, it's at max capacity for this category
         }
       }
 
       // 1b. Check minTimeBetween feasibility (e.g. minimum time between restaurants)
       const minSpacing = catConfig?.minTimeBetween ?? (place.category === "restaurant" ? 180 : 0);
+      const isUnderMinQuota = minTarget != null && currentCount < minTarget;
+
       if (minSpacing > 0 && currentCount > 0) {
         const duration = place.estimatedDuration || 60;
-        const totalMealSpan = (currentCount + 1) * duration + currentCount * minSpacing;
         const dayWindow = dayWindows[d] || { start: baseDayStartMin, end: baseDayEndMin };
         const availableWindow = dayWindow.end - dayWindow.start;
+        // If fulfilling a user-configured minimum quota, adapt spacing so we don't arbitrarily reject required meals
+        const effectiveSpacing = isUnderMinQuota
+          ? Math.max(30, Math.min(minSpacing, Math.floor((availableWindow - (currentCount + 1) * duration) / currentCount)))
+          : minSpacing;
+        const totalMealSpan = (currentCount + 1) * duration + currentCount * effectiveSpacing;
         if (totalMealSpan > availableWindow) {
-          continue; // Day window physically cannot fit another visit with minimum spacing
+          continue; // Day window physically cannot fit another visit even with reduced spacing
         }
       }
 
@@ -278,18 +358,24 @@ function clusterPlaces(
       const dayIsConstrained = dailyBudgets[d] < baseBudget;
       const forceStrict = strictBudget || dayIsConstrained;
 
-      if (!forceStrict || remaining >= 0) {
+      // If this day is below the user's min target, prioritize fulfilling it!
+      // Allow slight budget flexibility for required minimums (e.g. remaining >= -45)
+      const canConsiderDay = !forceStrict || remaining >= 0 || (isUnderMinQuota && remaining >= -45);
+
+      if (canConsiderDay) {
         let score = remaining;
 
         // Apply min limit boost if this day is below the minimum
-        if (catConfig && catConfig.minPerDay !== undefined && catConfig.minPerDay !== null) {
-          if (currentCount < catConfig.minPerDay) {
-            score += 10000; // Massive artificial boost to prioritize filling the minimum
+        if (isUnderMinQuota && minTarget != null) {
+          const deficit = minTarget - currentCount;
+          // Scale heavily by deficit so days needing 2 restaurants win over days needing 1!
+          score += deficit * 50000;
+          // Bonus for explicit day-specific override (e.g. user specifically configured First Day override)
+          if (hasSpecificDayOverride) {
+            score += 15000;
           }
-        }
-
-        // Encourage balanced distribution of meals across days rather than clustering all onto 1 day
-        if (minSpacing > 0 && currentCount > 0) {
+        } else if (minSpacing > 0 && currentCount > 0) {
+          // Encourage balanced distribution ONLY after minimum quotas are already satisfied
           score -= currentCount * 2000;
         }
 
@@ -397,6 +483,19 @@ function clusterPlaces(
   return [...pinned, ...successfullyAssigned, ...rejectedUnassigned];
 }
 
+/**
+ * Retrieves custom transit duration in seconds between two points if defined,
+ * checking both directions: `${fromId}->${toId}` and `${toId}->${fromId}`.
+ */
+export function getCustomTransitDuration(
+  fromId?: string,
+  toId?: string,
+  customTransitTimes?: Record<string, number>,
+): number | undefined {
+  if (!fromId || !toId || !customTransitTimes) return undefined;
+  return customTransitTimes[`${fromId}->${toId}`] ?? customTransitTimes[`${toId}->${fromId}`];
+}
+
 function evaluateRouteCost(
   points: (Hotel | Place)[],
   startMinutes: number,
@@ -404,6 +503,7 @@ function evaluateRouteCost(
   avoidClosedHours: boolean,
   travelMode: TravelMode,
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
+  customTransitTimes?: Record<string, number>,
 ): { totalDistance: number; totalCost: number; conflicts: number; mealSpacingConflicts: number } {
   let totalDist = 0;
   let currentTime = startMinutes;
@@ -419,7 +519,13 @@ function evaluateRouteCost(
     const segDist = getDistance(from.lat, from.lng, to.lat, to.lng);
     totalDist += segDist;
 
-    const travelMin = Math.round(estimateTime(segDist, travelMode) / 60);
+    const fromId = "id" in from && from.id ? String(from.id) : (i === 0 ? "start-hotel" : undefined);
+    const toId = "id" in to && to.id ? String(to.id) : (i + 1 === points.length - 1 ? "end-hotel" : undefined);
+    const customSec = getCustomTransitDuration(fromId, toId, customTransitTimes);
+
+    const travelMin = customSec !== undefined
+      ? Math.round(customSec / 60)
+      : Math.round(estimateTime(segDist, travelMode) / 60);
     currentTime += travelMin;
 
     const isPlace =
@@ -475,6 +581,7 @@ function optimize2OptSub(
   avoidClosedHours: boolean = true,
   travelMode: TravelMode = "driving",
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
+  customTransitTimes?: Record<string, number>,
 ): Place[] {
   if (places.length <= 1) return places;
 
@@ -497,6 +604,7 @@ function optimize2OptSub(
           avoidClosedHours,
           travelMode,
           categoryConfigs,
+          customTransitTimes,
         );
 
         if (totalCost < bestCost) {
@@ -577,6 +685,7 @@ function optimize2OptSub(
     avoidClosedHours,
     travelMode,
     categoryConfigs,
+    customTransitTimes,
   );
 
   let improved = true;
@@ -598,6 +707,7 @@ function optimize2OptSub(
           avoidClosedHours,
           travelMode,
           categoryConfigs,
+          customTransitTimes,
         );
 
         if (newCost < bestCost) {
@@ -623,6 +733,7 @@ function optimize2OptSub(
           avoidClosedHours,
           travelMode,
           categoryConfigs,
+          customTransitTimes,
         );
 
         if (newCost < bestCost) {
@@ -650,6 +761,7 @@ function optimizeDayRoute(
   travelMode: TravelMode = "driving",
   startMinutesOverride?: number,
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
+  customTransitTimes?: Record<string, number>,
 ): Place[] {
   if (dayPlaces.length <= 1) return dayPlaces;
 
@@ -670,6 +782,7 @@ function optimizeDayRoute(
       avoidClosedHours,
       travelMode,
       categoryConfigs,
+      customTransitTimes,
     );
     return optimized.map((p, idx) => ({ ...p, orderInDay: idx }));
   }
@@ -796,6 +909,7 @@ function optimizeDayRoute(
       avoidClosedHours,
       travelMode,
       categoryConfigs,
+      customTransitTimes,
     );
     finalizedPlaces.push(...optimizedSub);
 
@@ -832,6 +946,7 @@ function buildDayRoute(
   _departureFlight?: FlightInfo | null,
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
   existingSegments?: RouteSegment[],
+  customTransitTimes?: Record<string, number>,
 ): DayRoute {
   // On the last day, travelers check out in the morning, so there is no Day End / Hotel
   const endHotelRaw = (!isLastDay && (hotels.find((h) => h.dayIndex === dayIndex) || null)) || null;
@@ -872,6 +987,7 @@ function buildDayRoute(
         travelMode,
         startMinutes,
         categoryConfigs,
+        customTransitTimes,
       );
 
   let dayDist = 0;
@@ -956,12 +1072,14 @@ function buildDayRoute(
     let customDuration: number | undefined = undefined;
     let originalTime: number | undefined = undefined;
 
-    if (existing) {
-      if (existing.customDuration !== undefined) {
-        customDuration = existing.customDuration;
-        originalTime = existing.originalTime ?? segTime;
-        segTime = existing.customDuration;
-      }
+    const customSec = existing?.customDuration ?? getCustomTransitDuration(fromId, toId, customTransitTimes);
+
+    if (customSec !== undefined) {
+      customDuration = customSec;
+      originalTime = existing?.originalTime ?? segTime;
+      segTime = customSec;
+    } else if (existing?.originalTime !== undefined) {
+      originalTime = existing.originalTime;
     }
 
     segments.push({
@@ -1015,6 +1133,8 @@ function evictClosedHourConflicts(
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
+  existingSegments?: RouteSegment[],
+  customTransitTimes?: Record<string, number>,
 ): { route: DayRoute; evicted: { place: Place; reason: string }[]; remainingPlaces: Place[] } {
   let currentPlaces = [...dayPlaces];
   const evicted: { place: Place; reason: string }[] = [];
@@ -1044,25 +1164,18 @@ function evictClosedHourConflicts(
       dayIndex === 0 ? arrivalFlight : null,
       isLastDay ? departureFlight : null,
       categoryConfigs,
+      existingSegments,
+      customTransitTimes,
     );
 
-    // Compute arrival time at each stop exactly as DailySchedule does
+    // Compute arrival time at each stop using actual segment durations (including custom transit times)
     let currTime = dayStartTotal;
     const conflictedStops: { place: Place; reason: string }[] = [];
 
-    // Find starting point anchor
-    let prevPoint: Place | Hotel | null =
-      dayIndex === 0 && arrivalLocation
-        ? arrivalLocation
-        : hotels.find((h) => h.dayIndex === (dayIndex > 0 ? dayIndex - 1 : 0)) || null;
-
     for (let sIdx = 0; sIdx < route.stops.length; sIdx++) {
       const stop = route.stops[sIdx];
-      let travelMin = 0;
-      if (prevPoint && !(prevPoint.lat === 0 && prevPoint.lng === 0)) {
-        const dist = getDistance(prevPoint.lat, prevPoint.lng, stop.lat, stop.lng);
-        travelMin = Math.round(estimateTime(dist, travelMode) / 60);
-      }
+      const seg = route.segments[sIdx];
+      const travelMin = seg ? Math.round(seg.time / 60) : 0;
       currTime += travelMin;
 
       const isPinnedOrCustom = stop.pinnedToDay || !!stop.customTime || !!stop.isStarred;
@@ -1086,7 +1199,6 @@ function evictClosedHourConflicts(
       }
 
       currTime += stop.estimatedDuration || 60;
-      prevPoint = stop;
     }
 
     if (conflictedStops.length === 0) {
@@ -1115,6 +1227,8 @@ function evictClosedHourConflicts(
         dayIndex === 0 ? arrivalFlight : null,
         isLastDay ? departureFlight : null,
         categoryConfigs,
+        existingSegments,
+        customTransitTimes,
       );
       return { route: emptyRoute, evicted, remainingPlaces: [] };
     }
@@ -1125,7 +1239,8 @@ function evictClosedHourConflicts(
 export async function fetchAccurateRouteTimes(
   route: DayRoute,
   startDateISO: string,
-  dayStartTime: string // HH:mm
+  dayStartTime: string, // HH:mm
+  customTransitTimes?: Record<string, number>,
 ): Promise<DayRoute> {
   const newSegments = [...route.segments];
   let currentDistance = 0;
@@ -1159,6 +1274,17 @@ export async function fetchAccurateRouteTimes(
 
   const segmentPromises = newSegments.map(async (seg, i) => {
     if (!points[i] || !points[i + 1]) return seg;
+
+    const customSec = seg.customDuration ?? getCustomTransitDuration(seg.fromId, seg.toId, customTransitTimes);
+    if (customSec !== undefined) {
+      return {
+        ...seg,
+        time: customSec,
+        customDuration: customSec,
+        originalTime: seg.originalTime ?? seg.time,
+      };
+    }
+
     try {
       // Calculate departure time for this segment
       // (baseDate + accumulated time so far + visit time of stops)
@@ -1238,6 +1364,7 @@ export async function solveSingleDay(
   departureFlight?: FlightInfo | null,
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
   existingSegments?: RouteSegment[],
+  customTransitTimes?: Record<string, number>,
 ): Promise<DayRoute> {
   let route: DayRoute;
 
@@ -1255,6 +1382,8 @@ export async function solveSingleDay(
       arrivalFlight,
       departureFlight,
       categoryConfigs,
+      existingSegments,
+      customTransitTimes,
     );
     route = conflictResult.route;
   } else {
@@ -1275,10 +1404,11 @@ export async function solveSingleDay(
       departureFlight,
       categoryConfigs,
       existingSegments,
+      customTransitTimes,
     );
   }
 
-  return await fetchAccurateRouteTimes(route, startDateISO, dayStartTime);
+  return await fetchAccurateRouteTimes(route, startDateISO, dayStartTime, customTransitTimes);
 }
 
 export async function solveTSP(
@@ -1297,10 +1427,23 @@ export async function solveTSP(
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
   dayEndTime: string = "21:00",
+  exemptDays: number[] = [],
+  existingRoutes: DayRoute[] = [],
+  customTransitTimes?: Record<string, number>,
 ): Promise<OptimizationResult> {
   const startTime = performance.now();
 
-  // 1. Cluster unassigned places (time-budget-aware, respects pinnedToDay and customTime)
+  // Index all known custom transit times across existing routes and passed dictionary
+  const allCustomTimes: Record<string, number> = { ...(customTransitTimes ?? {}) };
+  for (const r of existingRoutes) {
+    for (const s of r.segments) {
+      if (s.customDuration !== undefined && s.fromId && s.toId) {
+        allCustomTimes[`${s.fromId}->${s.toId}`] = s.customDuration;
+      }
+    }
+  }
+
+  // 1. Cluster unassigned places (time-budget-aware, respects pinnedToDay, exemptDays, and customTime)
   const clusteredPlaces = clusterPlaces(
     places,
     hotels,
@@ -1317,6 +1460,7 @@ export async function solveTSP(
     dayEndTime,
     arrivalFlight,
     departureFlight,
+    exemptDays,
   );
 
   // 2. Build initial routes for each day
@@ -1325,9 +1469,21 @@ export async function solveTSP(
   let totalTripTime = 0;
 
   for (let d = 0; d < days; d++) {
+    // If day is exempt and already has a route, preserve it completely
+    if (exemptDays.includes(d)) {
+      const existing = existingRoutes.find((r) => r.day === d);
+      if (existing) {
+        dayRoutes.push(existing);
+        continue;
+      }
+    }
+
     const isLastDay = d === days - 1;
     let dayPlaces = clusteredPlaces.filter((p) => p.dayIndex === d);
     let route: DayRoute;
+
+    const existingDayRoute = existingRoutes.find((r) => r.day === d);
+    const existingDaySegments = existingDayRoute?.segments;
 
     // A. Post-optimization Closed Hours Conflict Eviction:
     // If avoidClosedHours is active, strictly evict any unpinned places with conflicts
@@ -1345,6 +1501,8 @@ export async function solveTSP(
         d === 0 ? arrivalFlight : null,
         isLastDay ? departureFlight : null,
         categoryConfigs,
+        existingDaySegments,
+        allCustomTimes,
       );
 
       route = conflictResult.route;
@@ -1376,6 +1534,8 @@ export async function solveTSP(
         d === 0 ? arrivalFlight : null,
         isLastDay ? departureFlight : null,
         categoryConfigs,
+        existingDaySegments,
+        allCustomTimes,
       );
     }
 
@@ -1403,8 +1563,23 @@ export async function solveTSP(
           break; // only pinned places left and not a flight day
         }
 
-        // Evict the last evictable place (lowest priority/greedy order)
-        const toEvict = evictable[evictable.length - 1];
+        // Count places per category in this day to identify surplus vs required quota places
+        const catCountsInDay: Record<string, number> = {};
+        dayPlaces.forEach((p) => {
+          catCountsInDay[p.category] = (catCountsInDay[p.category] || 0) + 1;
+        });
+
+        // Evict places that are not needed to fulfill category minPerDay quotas first
+        const nonQuotaEvictable = evictable.filter((p) => {
+          const cfg = getEffectiveCategoryConfig(categoryConfigs, p.category, d, days);
+          const minRequired = cfg?.minPerDay ?? 0;
+          const count = catCountsInDay[p.category] || 0;
+          return count > minRequired;
+        });
+
+        const candidates = nonQuotaEvictable.length > 0 ? nonQuotaEvictable : evictable;
+        // Evict the last evictable place from candidate pool (lowest priority/greedy order)
+        const toEvict = candidates[candidates.length - 1];
 
         // Mutate original object in clusteredPlaces so it gets returned as unassigned
         const matched = clusteredPlaces.find((p) => p.id === toEvict.id);
@@ -1432,6 +1607,8 @@ export async function solveTSP(
             d === 0 ? arrivalFlight : null,
             isLastDay ? departureFlight : null,
             categoryConfigs,
+            existingDaySegments,
+            allCustomTimes,
           );
           route = conflictResult.route;
           dayPlaces = conflictResult.remainingPlaces;
@@ -1460,6 +1637,8 @@ export async function solveTSP(
             d === 0 ? arrivalFlight : null,
             isLastDay ? departureFlight : null,
             categoryConfigs,
+            existingDaySegments,
+            allCustomTimes,
           );
         }
 
@@ -1473,9 +1652,14 @@ export async function solveTSP(
     dayRoutes.push(route);
   }
 
-  // 3. Post-process routes to use accurate APIs
+  // 3. Post-process non-exempt routes to use accurate APIs
   const finalRoutes = await Promise.all(
-    dayRoutes.map(r => fetchAccurateRouteTimes(r, startDateISO, dayStartTime))
+    dayRoutes.map((r) => {
+      if (exemptDays.includes(r.day) && existingRoutes.some((er) => er.day === r.day)) {
+        return r;
+      }
+      return fetchAccurateRouteTimes(r, startDateISO, dayStartTime, allCustomTimes);
+    })
   );
 
   totalTripDistance = finalRoutes.reduce((sum, r) => sum + r.totalDistance, 0);

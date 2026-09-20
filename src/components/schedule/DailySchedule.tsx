@@ -16,6 +16,8 @@ import {
   ChevronRight,
   Maximize2,
   Minimize2,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { toast } from "../../services/toastService";
 import { RouteSegment, CustomBuffer, Place } from "../../types";
@@ -82,6 +84,8 @@ export const DailySchedule: React.FC = () => {
   const categoryConfigs = useRouteStore((s) => s.categoryConfigs);
   const dayTitles = useRouteStore((s) => s.dayTitles);
   const setDayTitle = useRouteStore((s) => s.setDayTitle);
+  const exemptDays = useRouteStore((s) => s.exemptDays);
+  const toggleDayExemption = useRouteStore((s) => s.toggleDayExemption);
 
   const [editingDayTitleIndex, setEditingDayTitleIndex] = useState<number | null>(null);
   const [editingDayTitleText, setEditingDayTitleText] = useState<string>("");
@@ -490,19 +494,25 @@ export const DailySchedule: React.FC = () => {
                   <button
                     key={i}
                     onClick={() => scrollToDay(i)}
-                    title={customName ? `${customName} (Day ${i + 1})` : `Day ${i + 1}`}
+                    title={
+                      customName
+                        ? `${customName} (Day ${i + 1})`
+                        : dateMode === "fixed"
+                          ? `${format(btnDate, "MMM d")} (Day ${i + 1})`
+                          : `Day ${i + 1}`
+                    }
                     className={`px-3 py-1.5 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 font-bold text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600 transition-all whitespace-nowrap flex flex-col items-center justify-center min-w-[60px] max-w-[120px] ${dateMode === "fixed" ? "text-[10px]" : "text-xs"}`}
                   >
                     {customName ? (
                       <>
                         <span className="truncate w-full font-black text-primary-600 dark:text-primary-400 text-center">{customName}</span>
-                        <span className="text-[9px] opacity-60">D{i + 1}{dateMode === "fixed" ? ` • ${format(btnDate, "MMM d")}` : ""}</span>
+                        <span className="text-[9px] opacity-60">Day {i + 1}{dateMode === "fixed" ? ` • ${format(btnDate, "MMM d")}` : ""}</span>
                       </>
                     ) : (
                       dateMode === "fixed" ? (
                         <>
-                          <span className="opacity-50">D{i + 1}</span>
-                          <span>{format(btnDate, "MMM d")}</span>
+                          <span className="font-bold text-surface-900 dark:text-white">{format(btnDate, "MMM d")}</span>
+                          <span className="text-[9px] opacity-60">Day {i + 1}</span>
                         </>
                       ) : (
                         <span>Day {i + 1}</span>
@@ -765,6 +775,7 @@ export const DailySchedule: React.FC = () => {
             );
 
             const isExpanded = expandedDays.has(i);
+            const isDayExempt = exemptDays.includes(i);
 
             return (
               <div
@@ -773,7 +784,11 @@ export const DailySchedule: React.FC = () => {
                 className={`flex-shrink-0 w-80 md:w-96 snap-start ${i >= 3 && !isExpanded ? "content-auto-day" : ""}`}
               >
                 <div
-                  className={`bg-white dark:bg-surface-800 rounded-2xl border border-surface-100 dark:border-surface-700 shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[600px]"
+                  className={`bg-white dark:bg-surface-800 rounded-2xl border ${
+                    isDayExempt
+                      ? "border-amber-300/90 dark:border-amber-700/80 ring-1 ring-amber-400/20"
+                      : "border-surface-100 dark:border-surface-700"
+                  } shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[600px]"
                     }`}
                 >
                   <div className="p-4 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">
@@ -814,6 +829,7 @@ export const DailySchedule: React.FC = () => {
                         ) : (
                           (() => {
                             const customName = route.title || dayTitles[i];
+
                             return (
                               <div className="flex flex-col min-w-0">
                                 <div
@@ -837,25 +853,22 @@ export const DailySchedule: React.FC = () => {
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
-                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-surface-500 dark:text-surface-400">
-                                  {customName ? (
-                                    <>
-                                      <span>Day {i + 1}</span>
-                                      {dateMode === "fixed" && (
-                                        <>
-                                          <span>•</span>
-                                          <span className="text-primary-600 dark:text-primary-400 uppercase tracking-wider">
-                                            {format(currentDate, "MMM d (EEE)")}
-                                          </span>
-                                        </>
-                                      )}
-                                    </>
+                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-surface-500 dark:text-surface-400 flex-wrap">
+                                  {dateMode === "fixed" && startDate ? (
+                                    <span className="text-primary-600 dark:text-primary-400 uppercase tracking-wider">
+                                      {format(currentDate, "MMM d")} (Day {i + 1})
+                                    </span>
                                   ) : (
-                                    dateMode === "fixed" && (
-                                      <span className="text-primary-600 dark:text-primary-400 uppercase tracking-wider">
-                                        {format(currentDate, "MMM d (EEE)")}
-                                      </span>
-                                    )
+                                    <span>Day {i + 1}</span>
+                                  )}
+                                  {isDayExempt && (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 rounded-full"
+                                      title="This day is exempt from Optimize Route"
+                                    >
+                                      <Lock className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                      <span>Exempt</span>
+                                    </span>
                                   )}
                                 </div>
                               </div>
@@ -1031,6 +1044,35 @@ export const DailySchedule: React.FC = () => {
                             <Minimize2 className="w-4 h-4" />
                           ) : (
                             <Maximize2 className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toggleDayExemption(i);
+                            if (isDayExempt) {
+                              toast.info(`Day ${i + 1} will now be included when optimizing route.`);
+                            } else {
+                              toast.success(`Day ${i + 1} is now exempt from Optimize Route!`, "Day Exempted");
+                            }
+                          }}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                            isDayExempt
+                              ? "bg-amber-100 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-200/70 shadow-2xs"
+                              : "bg-white dark:bg-surface-700 border-surface-200 dark:border-surface-600 text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-600"
+                          }`}
+                          title={
+                            isDayExempt
+                              ? `Day ${i + 1} is exempt from Optimize Route. Click to include in optimization.`
+                              : `Exempt Day ${i + 1} from Optimize Route (locks this day's schedule).`
+                          }
+                          aria-label={isDayExempt ? `Include Day ${i + 1} in Optimize Route` : `Exempt Day ${i + 1} from Optimize Route`}
+                        >
+                          {isDayExempt ? (
+                            <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                          ) : (
+                            <Unlock className="w-4 h-4" />
                           )}
                         </button>
                       </div>

@@ -135,20 +135,23 @@ export function formatDayIndexLabel(
 ): string {
   const dayNum = dayIndex + 1;
   const customTitle = dayTitles?.[dayIndex]?.trim();
-  const titlePrefix = customTitle ? `: ${customTitle}` : "";
 
   if (startDateISO) {
     try {
       const parsed = parseISO(startDateISO);
       if (isValid(parsed)) {
         const d = addDays(parsed, dayIndex);
-        return `Day ${dayNum}${titlePrefix} (${format(d, "EEE, MMM d")})`;
+        const dateStr = format(d, "MMM d");
+        if (customTitle) {
+          return `${customTitle} (${dateStr}, Day ${dayNum})`;
+        }
+        return `${dateStr} (Day ${dayNum})`;
       }
     } catch {
       // fallback
     }
   }
-  return `Day ${dayNum}${titlePrefix}`;
+  return customTitle ? `${customTitle} (Day ${dayNum})` : `Day ${dayNum}`;
 }
 
 /**

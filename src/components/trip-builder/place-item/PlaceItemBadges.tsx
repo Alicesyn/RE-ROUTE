@@ -8,6 +8,7 @@ import {
 } from "../../../utils/categoryUtils";
 import { formatMultiRangeBadge } from "../../../utils/dayRangeUtils";
 import { ReservationBadge } from "../../common/ReservationBadge";
+import { format, addDays, parseISO } from "date-fns";
 
 const DAY_COLORS = [
   "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800",
@@ -127,7 +128,14 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
               <CalendarDays className="w-3.5 h-3.5 shrink-0" />
               <span>
                 {place.dayIndex !== null && place.dayIndex !== undefined
-                  ? `Day ${place.dayIndex + 1}${assignedDayTitle ? `: ${assignedDayTitle}` : ""}`
+                  ? (() => {
+                      const dayNum = place.dayIndex + 1;
+                      const dateStr = startDate ? format(addDays(parseISO(startDate), place.dayIndex), "MMM d") : null;
+                      if (assignedDayTitle) {
+                        return `${assignedDayTitle}${dateStr ? ` (${dateStr})` : ` (Day ${dayNum})`}`;
+                      }
+                      return dateStr ? `${dateStr} (Day ${dayNum})` : `Day ${dayNum}`;
+                    })()
                   : "+ Assign to Day"}
               </span>
               {place.dayIndex !== null && place.pinnedToDay && (
@@ -163,14 +171,17 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
               </option>
               {dayIndices.map((i) => {
                 const title = dayTitles?.[i]?.trim();
+                const dateStr = startDate ? format(addDays(parseISO(startDate), i), "MMM d") : null;
+                const label = title
+                  ? (dateStr ? `${title} (${dateStr}, Day ${i + 1})` : `${title} (Day ${i + 1})`)
+                  : (dateStr ? `${dateStr} (Day ${i + 1})` : `Day ${i + 1}`);
                 return (
                   <option
                     key={i}
                     value={i}
                     className="bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 py-1"
                   >
-                    Day {i + 1}
-                    {title ? `: ${title}` : ""}
+                    {label}
                   </option>
                 );
               })}

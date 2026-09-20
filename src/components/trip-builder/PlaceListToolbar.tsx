@@ -2,6 +2,8 @@ import React from "react";
 import { Search, ArrowUpDown, CalendarClock, Star, X, Layers, Ticket } from "lucide-react";
 import { PlaceCategory } from "../../types";
 import { ALL_CATEGORIES, getCategoryLabel, getCategoryEmoji } from "../../utils/categoryUtils";
+import { useRouteStore } from "../../store/useRouteStore";
+import { format, addDays, parseISO } from "date-fns";
 
 export type SortOption =
   | "default"
@@ -62,6 +64,7 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
   onResetFilters,
   onOpenReservationsHub,
 }) => {
+  const startDate = useRouteStore((s) => s.startDate);
   const dayIndices = React.useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
   const isSearching = searchQuery.trim().length > 0;
 
@@ -135,9 +138,13 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
             <option value="unassigned">Unassigned Only</option>
             {dayIndices.map((i) => {
               const title = dayTitles?.[i]?.trim();
+              const dateStr = startDate ? format(addDays(parseISO(startDate), i), "MMM d") : null;
+              const label = title
+                ? (dateStr ? `${title} (${dateStr}, Day ${i + 1})` : `${title} (Day ${i + 1})`)
+                : (dateStr ? `${dateStr} (Day ${i + 1})` : `Day ${i + 1}`);
               return (
                 <option key={i} value={i}>
-                  Day {i + 1}{title ? `: ${title}` : ""}
+                  {label}
                 </option>
               );
             })}
@@ -280,7 +287,13 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
                 Filter: <strong className="text-primary-700 dark:text-primary-300">
                   {dayFilter === "unassigned"
                     ? "Unassigned"
-                    : `Day ${(dayFilter as number) + 1}${dayTitles?.[dayFilter as number] ? `: ${dayTitles[dayFilter as number]}` : ""}`
+                    : (() => {
+                        const idx = dayFilter as number;
+                        const title = dayTitles?.[idx]?.trim();
+                        const dateStr = startDate ? format(addDays(parseISO(startDate), idx), "MMM d") : null;
+                        if (title) return `${title} (${dateStr ? `${dateStr}, ` : ""}Day ${idx + 1})`;
+                        return dateStr ? `${dateStr} (Day ${idx + 1})` : `Day ${idx + 1}`;
+                      })()
                   } ({filteredPlacesCount})
                 </strong>
               </span>

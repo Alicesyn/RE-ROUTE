@@ -364,13 +364,13 @@ export const apiUsageService = {
   getActiveMapsKey: (): string => {
     const custom = apiUsageService.getCustomMapsKey();
     if (custom) return custom;
-    return import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+    return import.meta.env?.VITE_GOOGLE_MAPS_API_KEY || "";
   },
 
   getActiveGeminiKey: (): string => {
     const custom = apiUsageService.getCustomGeminiKey();
     if (custom) return custom;
-    return import.meta.env.VITE_GEMINI_API_KEY || "";
+    return import.meta.env?.VITE_GEMINI_API_KEY || "";
   },
 
   isUsingCustomMapsKey: (): boolean => {

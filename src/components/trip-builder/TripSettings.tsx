@@ -12,6 +12,7 @@ import {
   Footprints,
   Train,
   ChevronDown,
+  Lock,
 } from "lucide-react";
 import { PlaceSearchInput } from "./PlaceSearchInput";
 import { useRouteStore } from "../../store/useRouteStore";
@@ -91,6 +92,9 @@ export const TripSettings: React.FC = React.memo(() => {
     hotels,
     setHotelRange,
     appMode,
+    exemptDays,
+    toggleDayExemption,
+    dayTitles,
   } = useRouteStore();
 
   const [daysInput, setDaysInput] = useState(days.toString());
@@ -398,6 +402,51 @@ export const TripSettings: React.FC = React.memo(() => {
             <p className="text-[10px] text-surface-500 dark:text-surface-400 pr-8">
               If ON, Optimize Route schedules places during their open hours and avoids days when places are closed.
             </p>
+          </div>
+
+          {/* Exempt Days From Route Optimization */}
+          <div className="pt-2 border-t border-surface-100 dark:border-surface-700/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold text-surface-900 dark:text-white flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-amber-500" />
+                Exempt Days from Optimization
+              </h4>
+              {exemptDays.length > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200">
+                  {exemptDays.length} {exemptDays.length === 1 ? "day" : "days"} exempt
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-surface-500 dark:text-surface-400">
+              Select days to lock so the global "Optimize Route" button never alters or moves their places.
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {Array.from({ length: days }).map((_, idx) => {
+                const isExempt = exemptDays.includes(idx);
+                const title = dayTitles?.[idx]?.trim();
+                const dateStr = startDate ? format(addDays(new Date(startDate + "T12:00:00"), idx), "MMM d") : null;
+                const label = title
+                  ? (dateStr ? `${title} (${dateStr})` : `D${idx + 1}: ${title}`)
+                  : (dateStr ? `${dateStr}` : `Day ${idx + 1}`);
+                const fullTooltip = `Day ${idx + 1}${dateStr ? ` • ${dateStr}` : ""}${title ? ` (${title})` : ""}`;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    title={fullTooltip}
+                    onClick={() => toggleDayExemption(idx)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                      isExempt
+                        ? "bg-amber-100 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 shadow-2xs"
+                        : "bg-surface-50 dark:bg-surface-800 border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700"
+                    }`}
+                  >
+                    {isExempt && <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400" />}
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

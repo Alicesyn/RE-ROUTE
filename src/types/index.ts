@@ -161,6 +161,8 @@ export interface ItinerarySnapshot {
   categoryConfigs?: Record<PlaceCategory, CategoryConfig>;
   customBuffers?: CustomBuffer[];
   dayTitles?: Record<number, string>;
+  exemptDays?: number[];
+  customTransitTimes?: Record<string, number>;
   optimizedRoutes: DayRoute[];
   savedAt: number;
   cloudId?: string; // ID in Supabase trips table

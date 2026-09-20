@@ -63,6 +63,8 @@ interface RouteState extends ModeData {
   categoryConfigs: Record<PlaceCategory, CategoryConfig>;
   customBuffers: CustomBuffer[];
   dayTitles: Record<number, string>;
+  exemptDays: number[];
+  customTransitTimes: Record<string, number>;
   optimizedRoutes: DayRoute[];
   savedTrips: ItinerarySnapshot[];
   isCalculating: boolean;
@@ -161,9 +163,11 @@ interface RouteState extends ModeData {
     customMinutes: number | null,
   ) => void;
 
-  // Per-day optimization
+  // Per-day optimization & exemptions
   optimizeDay: (dayIndex: number) => void;
   reorderDayStops: (dayIndex: number, activeId: string, overId: string) => void;
+  toggleDayExemption: (dayIndex: number) => void;
+  setExemptDays: (days: number[]) => void;
 
   // Trips & Export/Import
   saveTrip: () => void;
@@ -273,7 +277,7 @@ export const useRouteStore = create<RouteState>()(
       places: [],
       hotels: [],
       missingPlaces: [],
-      appMode: import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? "real" : "mock",
+      appMode: import.meta.env?.VITE_GOOGLE_MAPS_API_KEY ? "real" : "mock",
       theme: "light",
       showImages: true,
       distanceUnit: "metric",
@@ -294,6 +298,8 @@ export const useRouteStore = create<RouteState>()(
       ),
       customBuffers: [],
       dayTitles: {},
+      exemptDays: [],
+      customTransitTimes: {},
       optimizedRoutes: [],
       savedTrips: [],
       isCalculating: false,
@@ -346,11 +352,13 @@ export const useRouteStore = create<RouteState>()(
             addDays(parseISO(state.startDate), days - 1),
             "yyyy-MM-dd",
           );
+          const newExemptDays = state.exemptDays.filter((d) => d < days);
           return {
             days,
             hotels: newHotels,
             places: newPlaces,
             endDate: newEndDate,
+            exemptDays: newExemptDays,
           };
         }),
       setStartDate: (startDate) =>
@@ -614,6 +622,8 @@ export const useRouteStore = create<RouteState>()(
                 dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
                 dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
                 state.categoryConfigs,
+                idx >= 0 ? newRoutes[idx]?.segments : undefined,
+                state.customTransitTimes,
               );
               if (idx >= 0) newRoutes[idx] = result;
               set({ places: newPlaces, optimizedRoutes: newRoutes, isCalculating: false });
@@ -686,6 +696,8 @@ export const useRouteStore = create<RouteState>()(
                   dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
                   dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
                   state.categoryConfigs,
+                  idx >= 0 ? newRoutes[idx]?.segments : undefined,
+                  state.customTransitTimes,
                 );
                 if (idx >= 0) newRoutes[idx] = result;
               }
@@ -758,6 +770,8 @@ export const useRouteStore = create<RouteState>()(
             optimizedRoutes: [],
             customBuffers: [],
             dayTitles: {},
+            exemptDays: [],
+            customTransitTimes: {},
             mockData: state.appMode === "real" ? state.mockData : emptyModeData,
             realData: state.appMode === "real" ? emptyModeData : state.realData,
           };
@@ -850,6 +864,8 @@ export const useRouteStore = create<RouteState>()(
               oldDayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
               oldDayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
               state.categoryConfigs,
+              oldIdx >= 0 ? newRoutes[oldIdx]?.segments : undefined,
+              state.customTransitTimes,
             );
             if (oldIdx >= 0) newRoutes[oldIdx] = oldResult;
           }
@@ -879,6 +895,8 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
             state.categoryConfigs,
+            idx >= 0 ? newRoutes[idx]?.segments : undefined,
+            state.customTransitTimes,
           );
 
           if (idx >= 0) {
@@ -938,6 +956,8 @@ export const useRouteStore = create<RouteState>()(
               dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
               dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
               state.categoryConfigs,
+              idx >= 0 ? newRoutes[idx]?.segments : undefined,
+              state.customTransitTimes,
             );
             if (idx >= 0) newRoutes[idx] = result;
           }
@@ -1002,6 +1022,18 @@ export const useRouteStore = create<RouteState>()(
         });
       },
 
+      toggleDayExemption: (dayIndex: number) =>
+        set((state) => {
+          const isExempt = state.exemptDays.includes(dayIndex);
+          const newExempt = isExempt
+            ? state.exemptDays.filter((d) => d !== dayIndex)
+            : [...state.exemptDays, dayIndex].sort((a, b) => a - b);
+          return { exemptDays: newExempt };
+        }),
+
+      setExemptDays: (days: number[]) =>
+        set({ exemptDays: [...days].sort((a, b) => a - b) }),
+
       setOptimizedRoutes: (optimizedRoutes) =>
         set((state) => ({
           optimizedRoutes: optimizedRoutes.map((r, idx) => {
@@ -1065,19 +1097,6 @@ export const useRouteStore = create<RouteState>()(
             const segments = [...route.segments];
             if (segments[segmentIndex]) {
               const seg = { ...segments[segmentIndex] };
-              if (customMinutes === null) {
-                // Reset to calculated/estimated time
-                seg.time = seg.originalTime ?? estimateTime(seg.distance, seg.travelMode);
-                delete seg.customDuration;
-                delete seg.originalTime;
-              } else {
-                if (seg.originalTime === undefined) {
-                  seg.originalTime = seg.time;
-                }
-                const customSeconds = Math.max(60, Math.round(customMinutes * 60));
-                seg.customDuration = customSeconds;
-                seg.time = customSeconds;
-              }
               if (!seg.fromId || !seg.toId) {
                 let physicalIds: string[] = [];
                 if (route.manualSequence) {
@@ -1090,12 +1109,38 @@ export const useRouteStore = create<RouteState>()(
                 seg.fromId = seg.fromId ?? physicalIds[segmentIndex];
                 seg.toId = seg.toId ?? physicalIds[segmentIndex + 1];
               }
+
+              const newCustomTransitTimes = { ...state.customTransitTimes };
+              const pairKey = seg.fromId && seg.toId ? `${seg.fromId}->${seg.toId}` : null;
+
+              if (customMinutes === null) {
+                // Reset to calculated/estimated time
+                seg.time = seg.originalTime ?? estimateTime(seg.distance, seg.travelMode);
+                delete seg.customDuration;
+                delete seg.originalTime;
+                if (pairKey) {
+                  delete newCustomTransitTimes[pairKey];
+                  delete newCustomTransitTimes[`${seg.toId}->${seg.fromId}`];
+                }
+              } else {
+                if (seg.originalTime === undefined) {
+                  seg.originalTime = seg.time;
+                }
+                const customSeconds = Math.max(60, Math.round(customMinutes * 60));
+                seg.customDuration = customSeconds;
+                seg.time = customSeconds;
+                if (pairKey) {
+                  newCustomTransitTimes[pairKey] = customSeconds;
+                }
+              }
+
               segments[segmentIndex] = seg;
 
               // Recalculate total time
               route.segments = segments;
               route.totalTime = segments.reduce((sum, s) => sum + s.time, 0);
               newRoutes[routeIdx] = route;
+              return { optimizedRoutes: newRoutes, customTransitTimes: newCustomTransitTimes };
             }
           }
           return { optimizedRoutes: newRoutes };
@@ -1134,6 +1179,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
             state.categoryConfigs,
             existingRoute?.segments,
+            state.customTransitTimes,
           );
 
           const newRoutes = [...state.optimizedRoutes];
@@ -1263,6 +1309,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
             state.categoryConfigs,
             existingSegmentsWithIds,
+            state.customTransitTimes,
           );
 
           const existingTitle = state.dayTitles[dayIndex] || routes[routeIdx]?.title;
@@ -1308,6 +1355,8 @@ export const useRouteStore = create<RouteState>()(
             categoryConfigs: state.categoryConfigs,
             customBuffers: state.customBuffers,
             dayTitles: state.dayTitles,
+            exemptDays: state.exemptDays,
+            customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
           };
@@ -1352,6 +1401,18 @@ export const useRouteStore = create<RouteState>()(
             categoryConfigs: trip.categoryConfigs || state.categoryConfigs,
             customBuffers: trip.customBuffers || [],
             dayTitles: trip.dayTitles || {},
+            exemptDays: trip.exemptDays || [],
+            customTransitTimes: trip.customTransitTimes || (() => {
+              const times: Record<string, number> = {};
+              trip.optimizedRoutes?.forEach((r) => {
+                r.segments?.forEach((s) => {
+                  if (s.customDuration !== undefined && s.fromId && s.toId) {
+                    times[`${s.fromId}->${s.toId}`] = s.customDuration;
+                  }
+                });
+              });
+              return times;
+            })(),
             optimizedRoutes: trip.optimizedRoutes || [],
           };
         }),
@@ -1395,6 +1456,18 @@ export const useRouteStore = create<RouteState>()(
             categoryConfigs: trip.categoryConfigs || state.categoryConfigs,
             customBuffers: trip.customBuffers || [],
             dayTitles: trip.dayTitles || {},
+            exemptDays: trip.exemptDays || [],
+            customTransitTimes: trip.customTransitTimes || (() => {
+              const times: Record<string, number> = {};
+              trip.optimizedRoutes?.forEach((r) => {
+                r.segments?.forEach((s) => {
+                  if (s.customDuration !== undefined && s.fromId && s.toId) {
+                    times[`${s.fromId}->${s.toId}`] = s.customDuration;
+                  }
+                });
+              });
+              return times;
+            })(),
             optimizedRoutes: trip.optimizedRoutes || [],
             savedTrips: newSavedTrips,
           };
@@ -1431,6 +1504,8 @@ export const useRouteStore = create<RouteState>()(
             categoryConfigs: state.categoryConfigs,
             customBuffers: state.customBuffers,
             dayTitles: state.dayTitles,
+            exemptDays: state.exemptDays,
+            customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
           };
@@ -1562,6 +1637,7 @@ export const useRouteStore = create<RouteState>()(
               ),
             customBuffers: Array.isArray(trip.customBuffers) ? trip.customBuffers : [],
             dayTitles: trip.dayTitles && typeof trip.dayTitles === "object" ? trip.dayTitles : {},
+            exemptDays: Array.isArray(trip.exemptDays) ? trip.exemptDays : [],
             optimizedRoutes: Array.isArray(trip.optimizedRoutes)
               ? trip.optimizedRoutes
               : [],
@@ -1666,6 +1742,8 @@ export const useRouteStore = create<RouteState>()(
           categoryConfigs: state.categoryConfigs,
           customBuffers: state.customBuffers,
           dayTitles: state.dayTitles,
+          exemptDays: state.exemptDays,
+          customTransitTimes: state.customTransitTimes,
           optimizedRoutes: state.optimizedRoutes,
           savedAt: now,
           updatedAt: now,
@@ -1721,6 +1799,8 @@ export const useRouteStore = create<RouteState>()(
           categoryConfigs: trip.categoryConfigs || state.categoryConfigs,
           customBuffers: trip.customBuffers || [],
           dayTitles: trip.dayTitles || {},
+          exemptDays: trip.exemptDays || [],
+          customTransitTimes: trip.customTransitTimes || {},
           optimizedRoutes: trip.optimizedRoutes || [],
         });
         toast.success("Restored your Quick Save itinerary.", "Quick Save Loaded");
@@ -1773,6 +1853,8 @@ export const useRouteStore = create<RouteState>()(
           categoryConfigs: state.categoryConfigs,
           customBuffers: state.customBuffers,
           dayTitles: state.dayTitles,
+          exemptDays: state.exemptDays,
+          customTransitTimes: state.customTransitTimes,
           optimizedRoutes: state.optimizedRoutes,
           savedAt: Date.now(),
         };
@@ -1856,6 +1938,8 @@ export const useRouteStore = create<RouteState>()(
         avoidClosedHours: state.avoidClosedHours,
         customBuffers: state.customBuffers,
         dayTitles: state.dayTitles,
+        exemptDays: state.exemptDays,
+        customTransitTimes: state.customTransitTimes,
         places: state.places,
         hotels: state.hotels,
         missingPlaces: state.missingPlaces,
@@ -1897,6 +1981,7 @@ useRouteStore.subscribe((state, prevState) => {
     state.dayEndTime !== prevState.dayEndTime ||
     state.optimizedRoutes !== prevState.optimizedRoutes ||
     state.dayTitles !== prevState.dayTitles ||
+    state.exemptDays !== prevState.exemptDays ||
     state.customBuffers !== prevState.customBuffers;
 
   if (!hasContentChanged) return;
