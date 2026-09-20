@@ -105,6 +105,8 @@ export interface RouteSegment {
   heuristicReason?: string;
   customDuration?: number; // in seconds, set when user customizes transit time
   originalTime?: number; // in seconds, original calculated/estimated duration
+  fromId?: string; // ID of the origin place/hotel/flight
+  toId?: string; // ID of the destination place/hotel/flight
 }
 
 export interface DayRoute {

@@ -18,7 +18,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
 
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     const activeMinutes = Math.round(segment.time / 60);
-    const [customMinutesInput, setCustomMinutesInput] = useState(activeMinutes);
+    const [customMinutesInput, setCustomMinutesInput] = useState<string | number>(activeMinutes);
     const popoverRef = useRef<HTMLDivElement>(null);
 
     const isCustom = segment.customDuration !== undefined;
@@ -60,7 +60,8 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
     };
 
     const handleApplyCustomTime = () => {
-      const validMin = Math.max(1, Math.min(480, Number(customMinutesInput) || 1));
+      const num = Number(customMinutesInput);
+      const validMin = Math.max(1, Math.min(480, Number.isFinite(num) && num > 0 ? Math.round(num) : activeMinutes));
       updateSegmentTransitTime(dayIndex, segmentIndex, validMin);
       toast.success(`Transit time set to ${validMin} min.`);
       setIsPopoverOpen(false);
@@ -222,19 +223,33 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                 <div className="flex items-center border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden bg-surface-50 dark:bg-surface-900 shadow-2xs">
                   <button
                     type="button"
-                    onClick={() => setCustomMinutesInput((m) => Math.max(1, m - 5))}
+                    onClick={() => {
+                      const cur = Number(customMinutesInput) || activeMinutes;
+                      setCustomMinutesInput(Math.max(1, cur - 5));
+                    }}
                     className="px-2.5 py-1.5 hover:bg-surface-200 dark:hover:bg-surface-800 text-surface-600 dark:text-surface-300 text-xs font-bold transition-colors cursor-pointer"
                     title="-5 minutes"
                   >
                     -5
                   </button>
                   <input
-                    type="number"
-                    min="1"
-                    max="480"
-                    step="1"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={customMinutesInput}
-                    onChange={(e) => setCustomMinutesInput(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || /^\d+$/.test(val)) {
+                        setCustomMinutesInput(val);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (customMinutesInput === "" || Number(customMinutesInput) < 1) {
+                        setCustomMinutesInput(activeMinutes || 1);
+                      } else {
+                        setCustomMinutesInput(Math.min(480, Number(customMinutesInput)));
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleApplyCustomTime();
                     }}
@@ -246,7 +261,10 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                   </span>
                   <button
                     type="button"
-                    onClick={() => setCustomMinutesInput((m) => Math.min(480, m + 5))}
+                    onClick={() => {
+                      const cur = Number(customMinutesInput) || activeMinutes;
+                      setCustomMinutesInput(Math.min(480, cur + 5));
+                    }}
                     className="px-2.5 py-1.5 hover:bg-surface-200 dark:hover:bg-surface-800 text-surface-600 dark:text-surface-300 text-xs font-bold transition-colors cursor-pointer"
                     title="+5 minutes"
                   >
@@ -267,7 +285,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                       type="button"
                       onClick={() => setCustomMinutesInput(preset)}
                       className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                        customMinutesInput === preset
+                        Number(customMinutesInput) === preset
                           ? "bg-indigo-600 text-white border-indigo-600"
                           : "bg-surface-100 dark:bg-surface-700/80 text-surface-700 dark:text-surface-300 border-surface-200 dark:border-surface-600 hover:border-indigo-400"
                       }`}

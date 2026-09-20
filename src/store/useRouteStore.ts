@@ -1033,6 +1033,18 @@ export const useRouteStore = create<RouteState>()(
               } else {
                 seg.time = estimated;
               }
+              if (!seg.fromId || !seg.toId) {
+                let physicalIds: string[] = [];
+                if (route.manualSequence) {
+                  physicalIds = route.manualSequence.filter((id) => !id.startsWith("custom-buffer-"));
+                } else {
+                  if (route.startHotel) physicalIds.push("start-hotel");
+                  route.stops.forEach((s) => physicalIds.push(s.id));
+                  if (route.endHotel && route.day < state.days - 1) physicalIds.push("end-hotel");
+                }
+                seg.fromId = seg.fromId ?? physicalIds[segmentIndex];
+                seg.toId = seg.toId ?? physicalIds[segmentIndex + 1];
+              }
               segments[segmentIndex] = seg;
 
               // Recalculate total time
@@ -1066,6 +1078,18 @@ export const useRouteStore = create<RouteState>()(
                 seg.customDuration = customSeconds;
                 seg.time = customSeconds;
               }
+              if (!seg.fromId || !seg.toId) {
+                let physicalIds: string[] = [];
+                if (route.manualSequence) {
+                  physicalIds = route.manualSequence.filter((id) => !id.startsWith("custom-buffer-"));
+                } else {
+                  if (route.startHotel) physicalIds.push("start-hotel");
+                  route.stops.forEach((s) => physicalIds.push(s.id));
+                  if (route.endHotel && route.day < state.days - 1) physicalIds.push("end-hotel");
+                }
+                seg.fromId = seg.fromId ?? physicalIds[segmentIndex];
+                seg.toId = seg.toId ?? physicalIds[segmentIndex + 1];
+              }
               segments[segmentIndex] = seg;
 
               // Recalculate total time
@@ -1088,6 +1112,7 @@ export const useRouteStore = create<RouteState>()(
             return;
           }
 
+          const existingRoute = state.optimizedRoutes.find((r) => r.day === dayIndex);
           const result = await solveSingleDay(
             dayPlaces,
             state.hotels,
@@ -1108,6 +1133,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
             state.categoryConfigs,
+            existingRoute?.segments,
           );
 
           const newRoutes = [...state.optimizedRoutes];
@@ -1209,6 +1235,13 @@ export const useRouteStore = create<RouteState>()(
           });
           const dayPlaces = Array.from(dayPlaceMap.values());
 
+          const prevPhysicalIds = currentOrder.filter((id) => !id.startsWith("custom-buffer-"));
+          const existingSegmentsWithIds = route.segments.map((seg, idx) => ({
+            ...seg,
+            fromId: seg.fromId ?? prevPhysicalIds[idx],
+            toId: seg.toId ?? prevPhysicalIds[idx + 1],
+          }));
+
           const result = await solveSingleDay(
             dayPlaces,
             state.hotels,
@@ -1229,6 +1262,7 @@ export const useRouteStore = create<RouteState>()(
             dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
             dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
             state.categoryConfigs,
+            existingSegmentsWithIds,
           );
 
           const existingTitle = state.dayTitles[dayIndex] || routes[routeIdx]?.title;

@@ -831,6 +831,7 @@ function buildDayRoute(
   arrivalFlight?: FlightInfo | null,
   _departureFlight?: FlightInfo | null,
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
+  existingSegments?: RouteSegment[],
 ): DayRoute {
   // On the last day, travelers check out in the morning, so there is no Day End / Hotel
   const endHotelRaw = (!isLastDay && (hotels.find((h) => h.dayIndex === dayIndex) || null)) || null;
@@ -889,8 +890,10 @@ function buildDayRoute(
         return defaultIds;
       })();
 
+  const physicalIds: string[] = [];
   ids.forEach((id) => {
     if (id.startsWith("custom-buffer-")) return;
+    physicalIds.push(id);
     let loc = null;
     if (id === "arrival") loc = arrivalLoc;
     else if (id === "start-hotel") loc = startHotel;
@@ -942,12 +945,35 @@ function buildDayRoute(
       points[i + 1].lng,
     );
     dayDist += segDist;
+
+    const fromId = physicalIds[i];
+    const toId = physicalIds[i + 1];
+
+    const existing = existingSegments?.find((s) => s.fromId === fromId && s.toId === toId);
+
+    let segMode = existing?.travelMode ?? travelMode;
+    let segTime = estimateTime(segDist, segMode);
+    let customDuration: number | undefined = undefined;
+    let originalTime: number | undefined = undefined;
+
+    if (existing) {
+      if (existing.customDuration !== undefined) {
+        customDuration = existing.customDuration;
+        originalTime = existing.originalTime ?? segTime;
+        segTime = existing.customDuration;
+      }
+    }
+
     segments.push({
       distance: segDist,
-      time: estimateTime(segDist, travelMode),
-      travelMode,
+      time: segTime,
+      travelMode: segMode,
+      customDuration,
+      originalTime,
+      fromId,
+      toId,
       isHeuristic: true,
-      heuristicReason: travelMode === "transit"
+      heuristicReason: segMode === "transit"
         ? "Transit time estimated geometrically (~18 km/h local / ~162 km/h express)."
         : undefined,
     });
@@ -1211,6 +1237,7 @@ export async function solveSingleDay(
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
   categoryConfigs?: Partial<Record<PlaceCategory, CategoryConfig>>,
+  existingSegments?: RouteSegment[],
 ): Promise<DayRoute> {
   let route: DayRoute;
 
@@ -1247,6 +1274,7 @@ export async function solveSingleDay(
       arrivalFlight,
       departureFlight,
       categoryConfigs,
+      existingSegments,
     );
   }
 

@@ -14,6 +14,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { toast } from "../../services/toastService";
 import { RouteSegment, CustomBuffer, Place } from "../../types";
@@ -106,6 +108,119 @@ export const DailySchedule: React.FC = () => {
   };
 
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Day expansion states (allows seeing entire day without inner scrolling)
+  const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
+
+  const isAllExpanded =
+    optimizedRoutes.length > 0 && expandedDays.size === optimizedRoutes.length;
+
+  const toggleDayExpanded = (dayIndex: number) => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dayIndex)) {
+        next.delete(dayIndex);
+      } else {
+        next.add(dayIndex);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllExpanded = () => {
+    if (isAllExpanded) {
+      setExpandedDays(new Set());
+    } else {
+      setExpandedDays(new Set(optimizedRoutes.map((_, idx) => idx)));
+    }
+  };
+
+  // Drag-and-drop auto-scroll mechanism
+  const [activeDragDay, setActiveDragDay] = useState<number | null>(null);
+  const dayScrollRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
+  const lastPointerYRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    if (activeDragDay === null) return;
+
+    const container = dayScrollRefs.current.get(activeDragDay);
+
+    let animId: number;
+
+    const handlePointerMove = (e: MouseEvent | TouchEvent) => {
+      if ("touches" in e && e.touches.length > 0) {
+        lastPointerYRef.current = e.touches[0].clientY;
+      } else if ("clientY" in e) {
+        lastPointerYRef.current = (e as MouseEvent).clientY;
+      }
+    };
+
+    const handleEnd = () => {
+      lastPointerYRef.current = null;
+    };
+
+    window.addEventListener("mousemove", handlePointerMove, { passive: true });
+    window.addEventListener("touchmove", handlePointerMove, { passive: true });
+    window.addEventListener("mouseup", handleEnd, { passive: true });
+    window.addEventListener("touchend", handleEnd, { passive: true });
+    window.addEventListener("pointerup", handleEnd, { passive: true });
+    window.addEventListener("pointercancel", handleEnd, { passive: true });
+
+    const scrollLoop = () => {
+      if (lastPointerYRef.current !== null) {
+        const pointerY = lastPointerYRef.current;
+
+        // 1. Inner day card container auto-scroll (for collapsed scrollable cards)
+        if (container && container.scrollHeight > container.clientHeight) {
+          const rect = container.getBoundingClientRect();
+          const topThreshold = 90;
+          const topBoundary = rect.top + topThreshold;
+          // Extend ceiling into day header area so holding above top boundary still scrolls up smoothly
+          const topCeiling = rect.top - 160;
+
+          const bottomThreshold = 90;
+          const bottomBoundary = rect.bottom - bottomThreshold;
+          const bottomFloor = rect.bottom + 120;
+
+          if (pointerY <= topBoundary && pointerY >= topCeiling) {
+            const intensity = Math.min(1, Math.max(0.1, (topBoundary - pointerY) / topThreshold));
+            const speed = Math.round(5 + intensity * 25);
+            container.scrollTop = Math.max(0, container.scrollTop - speed);
+          } else if (pointerY >= bottomBoundary && pointerY <= bottomFloor) {
+            const intensity = Math.min(1, Math.max(0.1, (pointerY - bottomBoundary) / bottomThreshold));
+            const speed = Math.round(5 + intensity * 25);
+            container.scrollTop = Math.min(
+              container.scrollHeight - container.clientHeight,
+              container.scrollTop + speed
+            );
+          }
+        }
+
+        // 2. Window viewport auto-scroll (active especially in expanded full-day mode)
+        if (pointerY < 70) {
+          const intensity = Math.min(1, Math.max(0.1, (70 - pointerY) / 70));
+          window.scrollBy({ top: -Math.round(6 + intensity * 24), behavior: "auto" });
+        } else if (pointerY > window.innerHeight - 70) {
+          const intensity = Math.min(1, Math.max(0.1, (pointerY - (window.innerHeight - 70)) / 70));
+          window.scrollBy({ top: Math.round(6 + intensity * 24), behavior: "auto" });
+        }
+      }
+      animId = requestAnimationFrame(scrollLoop);
+    };
+
+    animId = requestAnimationFrame(scrollLoop);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("mouseup", handleEnd);
+      window.removeEventListener("touchend", handleEnd);
+      window.removeEventListener("pointerup", handleEnd);
+      window.removeEventListener("pointercancel", handleEnd);
+      lastPointerYRef.current = null;
+    };
+  }, [activeDragDay]);
 
   const handleEditPlace = React.useCallback((id: string) => {
     setEditingPlaceId(id);
@@ -269,6 +384,30 @@ export const DailySchedule: React.FC = () => {
                 </span>
               </button>
             )}
+
+            {/* Global Expand All / Compact View toggle */}
+            <button
+              type="button"
+              onClick={toggleAllExpanded}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all shadow-2xs cursor-pointer ${isAllExpanded
+                ? "bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300 border-primary-300 dark:border-primary-700 hover:bg-primary-100/80 dark:hover:bg-primary-900/60"
+                : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
+                }`}
+              title={isAllExpanded ? "Collapse all days to compact scrollable cards" : "Expand all days to see full itineraries without scrolling"}
+              aria-label={isAllExpanded ? "Collapse all days" : "Expand all days"}
+            >
+              {isAllExpanded ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
+                  <span>Compact View</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 text-surface-500 dark:text-surface-400" />
+                  <span>Expand All Days</span>
+                </>
+              )}
+            </button>
 
             {showClearConfirm ? (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/80 rounded-lg animate-in fade-in zoom-in-95 duration-150">
@@ -434,7 +573,7 @@ export const DailySchedule: React.FC = () => {
 
         <div
           ref={scrollContainerRef}
-          className="p-6 overflow-x-auto overflow-y-hidden custom-scrollbar flex gap-6 snap-x snap-proximity overscroll-x-contain"
+          className="p-6 overflow-x-auto overflow-y-hidden custom-scrollbar flex gap-6 snap-x snap-proximity overscroll-x-contain items-start"
         >
           {optimizedRoutes.map((route, i) => {
             const currentDate = addDays(parseISO(startDate), i);
@@ -625,13 +764,18 @@ export const DailySchedule: React.FC = () => {
               Math.round((totalDayMin / dayAvailableMinutes) * 100),
             );
 
+            const isExpanded = expandedDays.has(i);
+
             return (
               <div
                 key={i}
                 id={`schedule-day-${i}`}
-                className={`flex-shrink-0 w-80 md:w-96 snap-start ${i >= 3 ? "content-auto-day" : ""}`}
+                className={`flex-shrink-0 w-80 md:w-96 snap-start ${i >= 3 && !isExpanded ? "content-auto-day" : ""}`}
               >
-                <div className="bg-white dark:bg-surface-800 rounded-2xl border border-surface-100 dark:border-surface-700 shadow-xl overflow-hidden flex flex-col h-full max-h-[600px]">
+                <div
+                  className={`bg-white dark:bg-surface-800 rounded-2xl border border-surface-100 dark:border-surface-700 shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[600px]"
+                    }`}
+                >
                   <div className="p-4 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex-1 min-w-0 pr-2">
@@ -861,8 +1005,9 @@ export const DailySchedule: React.FC = () => {
                           <button
                             onClick={() => handleOptimizeSingleDay(i)}
                             disabled={optimizingDayIndex !== null}
-                            className="p-1.5 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-all disabled:opacity-50"
+                            className="p-1.5 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-all disabled:opacity-50 cursor-pointer"
                             title="Optimize this day's route"
+                            aria-label="Optimize route"
                           >
                             {optimizingDayIndex === i ? (
                               <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
@@ -871,6 +1016,23 @@ export const DailySchedule: React.FC = () => {
                             )}
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => toggleDayExpanded(i)}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${isExpanded
+                            ? "bg-primary-50 dark:bg-primary-900/40 border-primary-300 dark:border-primary-600 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/60"
+                            : "bg-white dark:bg-surface-700 border-surface-200 dark:border-surface-600 text-surface-500 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-600"
+                            }`}
+                          title={isExpanded ? "Collapse to compact scrollable card" : "Expand to view entire day without scrolling"}
+                          aria-label={isExpanded ? `Collapse Day ${i + 1}` : `Expand Day ${i + 1}`}
+                        >
+                          {isExpanded ? (
+                            <Minimize2 className="w-4 h-4" />
+                          ) : (
+                            <Maximize2 className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
                     </div>
 
@@ -926,11 +1088,21 @@ export const DailySchedule: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pl-8 pr-4 py-4 space-y-0 relative smooth-scroll-container">
+                  <div
+                    ref={(el) => {
+                      if (el) dayScrollRefs.current.set(i, el);
+                      else dayScrollRefs.current.delete(i);
+                    }}
+                    className={`flex-1 overflow-x-hidden pl-8 pr-4 py-4 space-y-0 relative smooth-scroll-container ${isExpanded ? "overflow-visible" : "overflow-y-auto custom-scrollbar"
+                      }`}
+                  >
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
+                      autoScroll={false}
+                      onDragStart={() => setActiveDragDay(i)}
                       onDragEnd={(event) => {
+                        setActiveDragDay(null);
                         const { active, over } = event;
                         if (over && active.id !== over.id) {
                           reorderDayStops(
@@ -940,6 +1112,7 @@ export const DailySchedule: React.FC = () => {
                           );
                         }
                       }}
+                      onDragCancel={() => setActiveDragDay(null)}
                     >
                       <SortableContext
                         items={dayItems}
