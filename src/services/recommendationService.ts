@@ -1,6 +1,7 @@
 import { Place, Hotel, PlaceCategory } from "../types";
 import { searchPlaces } from "./mapsService";
 import { getDistance } from "../utils/distance";
+import { isDuplicatePlace } from "../utils/duplicateUtils";
 import { suggestSights } from "./aiService";
 import {
   getSpecificMockHighlight,
@@ -301,17 +302,11 @@ export async function getSuggestedPlaces(
   customAnchor?: { lat: number; lng: number; label: string } | null,
   flights: (Place | null)[] = []
 ): Promise<(Place & { nearestHotel?: { name: string; distanceM: number } })[]> {
-  // Existing place names/coordinates to filter duplicates
+  // Existing place names to filter duplicates
   const existingNames = new Set(places.map((p) => p.name.toLowerCase()));
-  const existingCoords = places.map((p) => ({ lat: p.lat, lng: p.lng }));
 
   const isDuplicate = (name: string, lat: number, lng: number) => {
-    if (existingNames.has(name.toLowerCase())) return true;
-    for (const coord of existingCoords) {
-      const dist = getDistance(lat, lng, coord.lat, coord.lng);
-      if (dist < 100) return true;
-    }
-    return false;
+    return places.some((p) => isDuplicatePlace(p, { name, lat, lng }));
   };
 
   // Determine anchor points — prefer custom anchor, then unique hotels, then itinerary center
@@ -512,16 +507,10 @@ export function getCachedSuggestions(
 
   if (anchors.length === 0) return null;
 
-  const existingNames = new Set(places.map((p) => p.name.toLowerCase()));
-  const existingCoords = places.map((p) => ({ lat: p.lat, lng: p.lng }));
+
 
   const isDuplicate = (name: string, lat: number, lng: number) => {
-    if (existingNames.has(name.toLowerCase())) return true;
-    for (const coord of existingCoords) {
-      const dist = getDistance(lat, lng, coord.lat, coord.lng);
-      if (dist < 100) return true;
-    }
-    return false;
+    return places.some((p) => isDuplicatePlace(p, { name, lat, lng }));
   };
 
   const allSuggestions: any[] = [];

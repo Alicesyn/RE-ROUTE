@@ -24,6 +24,7 @@ const ImportModal = React.lazy(() =>
   import("./ImportModal").then((m) => ({ default: m.ImportModal }))
 );
 import { MissingPlacesList } from "./MissingPlacesList";
+import { isDuplicatePlace } from "../../utils/duplicateUtils";
 
 export const PlaceSearch: React.FC = () => {
   const [query, setQuery] = useState("");
@@ -101,27 +102,14 @@ export const PlaceSearch: React.FC = () => {
   const findExistingPlace = (candidate: any) => {
     if (!candidate) return undefined;
     return places.find((p) => {
-      if (p.googlePlaceId && candidate.id && p.googlePlaceId === candidate.id) return true;
       if (p.id && candidate.id && p.id === candidate.id) return true;
-      const pName = (p.name || "").trim().toLowerCase();
-      const cName = (candidate.name || "").trim().toLowerCase();
-      if (pName && cName && pName === cName) {
-        if (p.address && candidate.address && p.address.trim().toLowerCase() === candidate.address.trim().toLowerCase()) {
-          return true;
-        }
-        if (
-          typeof p.lat === "number" &&
-          typeof candidate.lat === "number" &&
-          typeof p.lng === "number" &&
-          typeof candidate.lng === "number"
-        ) {
-          const dLat = Math.abs(p.lat - candidate.lat);
-          const dLng = Math.abs(p.lng - candidate.lng);
-          if (dLat < 0.001 && dLng < 0.001) return true;
-        }
-        if (!p.address || !candidate.address) return true;
-      }
-      return false;
+      if (p.googlePlaceId && candidate.id && p.googlePlaceId === candidate.id) return true;
+      if (candidate.googlePlaceId && p.googlePlaceId && candidate.googlePlaceId === p.googlePlaceId) return true;
+
+      return isDuplicatePlace(p, {
+        ...candidate,
+        googlePlaceId: candidate.googlePlaceId || candidate.id,
+      });
     });
   };
 

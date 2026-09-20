@@ -1,34 +1,111 @@
 import { Place } from "../types";
+import { hasNonLatinScript } from "./textUtils";
 
 /**
- * Normalizes text for comparison by removing accents, punctuation, and extra whitespace.
+ * Normalizes text for comparison by standardizing Unicode, removing accents,
+ * normalizing punctuation/symbols to separators, collapsing whitespace, and lowercasing.
+ * Preserves letters and digits from all alphabets and scripts (Latin, CJK, Cyrillic, Arabic, etc.).
  */
-const normalizeString = (str: string): string => {
-  return (str || "")
-    .toLowerCase()
+export const normalizeString = (str: string): string => {
+  if (!str) return "";
+  const cleaned = str
+    .normalize("NFKC")
+    .replace(/[đĐ]/g, "d")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w\s]/gi, "")
+    .toLowerCase()
+    .replace(/['’‘`]/g, "") // Remove apostrophes so McDonald's matches McDonalds
+    .replace(/[^\p{L}\p{N}\s]/gu, " ") // Convert punctuation, separators, and symbols to space
+    .replace(/\s+/g, " ")
     .trim();
+
+  // If text only consisted of symbols (e.g. "???" or "***"), fallback to trimmed lowercase
+  return cleaned || str.trim().toLowerCase();
+};
+
+/**
+ * Simplifies name by standardizing English connectors (e.g., "and" created or typed)
+ */
+const simplifyName = (norm: string): string =>
+  norm.replace(/\band\b/gi, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Compares two normalized place names, checking exact match, simplified match,
+ * space-collapsed match, and nearby substring/prefix matches.
+ */
+export const isNameMatch = (aName: string, bName: string, isNearby: boolean): boolean => {
+  if (!aName || !bName) return false;
+  if (aName === bName) return true;
+
+  const aSimple = simplifyName(aName);
+  const bSimple = simplifyName(bName);
+  if (aSimple === bSimple) return true;
+
+  const aNoSpace = aSimple.replace(/\s+/g, "");
+  const bNoSpace = bSimple.replace(/\s+/g, "");
+  if (aNoSpace && aNoSpace === bNoSpace) return true;
+
+  if (isNearby) {
+    const shorter = aSimple.length <= bSimple.length ? aSimple : bSimple;
+    const longer = aSimple.length <= bSimple.length ? bSimple : aSimple;
+    const isForeign = hasNonLatinScript(shorter);
+    const minLen = isForeign ? 2 : 3;
+    const minRatio = isForeign ? 0.35 : 0.4;
+
+    if (shorter.length >= minLen && longer.includes(shorter) && shorter.length / longer.length >= minRatio) {
+      return true;
+    }
+
+    const shorterNoSpace = aNoSpace.length <= bNoSpace.length ? aNoSpace : bNoSpace;
+    const longerNoSpace = aNoSpace.length <= bNoSpace.length ? bNoSpace : aNoSpace;
+    if (shorterNoSpace.length >= minLen && longerNoSpace.includes(shorterNoSpace) && shorterNoSpace.length / longerNoSpace.length >= minRatio) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 /**
  * Checks whether two places are considered duplicates of each other.
  */
 export const isDuplicatePlace = (
-  a: { id?: string; name: string; address?: string; lat?: number; lng?: number; googlePlaceId?: string },
-  b: { id?: string; name: string; address?: string; lat?: number; lng?: number; googlePlaceId?: string }
+  a: {
+    id?: string;
+    name: string;
+    address?: string;
+    lat?: number;
+    lng?: number;
+    googlePlaceId?: string;
+    romanizedName?: string;
+  },
+  b: {
+    id?: string;
+    name: string;
+    address?: string;
+    lat?: number;
+    lng?: number;
+    googlePlaceId?: string;
+    romanizedName?: string;
+  }
 ): boolean => {
   if (!a || !b) return false;
   if (a.id && b.id && a.id === b.id) return false; // Not a duplicate of self
 
   // 1. Google Place ID match
-  if (a.googlePlaceId && b.googlePlaceId && a.googlePlaceId === b.googlePlaceId) {
+  if (
+    (a.googlePlaceId && b.googlePlaceId && a.googlePlaceId === b.googlePlaceId) ||
+    (a.googlePlaceId && b.id && a.googlePlaceId === b.id) ||
+    (a.id && b.googlePlaceId && a.id === b.googlePlaceId)
+  ) {
     return true;
   }
 
   const aName = normalizeString(a.name);
   const bName = normalizeString(b.name);
+  const aRom = a.romanizedName ? normalizeString(a.romanizedName) : "";
+  const bRom = b.romanizedName ? normalizeString(b.romanizedName) : "";
+
   if (!aName || !bName) return false;
 
   const hasCoordsA = typeof a.lat === "number" && typeof a.lng === "number";
@@ -45,15 +122,13 @@ export const isDuplicatePlace = (
       return false;
     }
 
-    // Exact name match at the same location
-    if (aName === bName) {
-      return true;
-    }
-
-    // Substring name match at the same location (e.g., "Senso-ji" vs "Senso-ji Temple")
-    const shorter = aName.length <= bName.length ? aName : bName;
-    const longer = aName.length <= bName.length ? bName : aName;
-    if (shorter.length >= 4 && longer.includes(shorter) && shorter.length / longer.length >= 0.5) {
+    // Name match at the same location
+    if (
+      isNameMatch(aName, bName, true) ||
+      (aRom && isNameMatch(aRom, bName, true)) ||
+      (bRom && isNameMatch(aName, bRom, true)) ||
+      (aRom && bRom && isNameMatch(aRom, bRom, true))
+    ) {
       return true;
     }
 
@@ -61,14 +136,28 @@ export const isDuplicatePlace = (
   }
 
   // 3. Fallback when coordinates are missing on one or both:
-  // Must have exact normalized name match
-  if (aName === bName) {
+  // Must have name match (without relaxed substring matching)
+  if (
+    isNameMatch(aName, bName, false) ||
+    (aRom && isNameMatch(aRom, bName, false)) ||
+    (bRom && isNameMatch(aName, bRom, false)) ||
+    (aRom && bRom && isNameMatch(aRom, bRom, false))
+  ) {
     const aAddr = normalizeString(a.address || "");
     const bAddr = normalizeString(b.address || "");
 
     // If both have addresses, ensure they don't clearly conflict
     if (aAddr && bAddr) {
-      return aAddr === bAddr || aAddr.includes(bAddr) || bAddr.includes(aAddr);
+      const aAddrNoSpace = aAddr.replace(/\s+/g, "");
+      const bAddrNoSpace = bAddr.replace(/\s+/g, "");
+      return (
+        aAddr === bAddr ||
+        aAddrNoSpace === bAddrNoSpace ||
+        aAddr.includes(bAddr) ||
+        bAddr.includes(aAddr) ||
+        aAddrNoSpace.includes(bAddrNoSpace) ||
+        bAddrNoSpace.includes(aAddrNoSpace)
+      );
     }
     return true;
   }

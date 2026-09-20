@@ -22,6 +22,7 @@ import { useRouteStore } from "../../store/useRouteStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { autoCategorize, getDefaultDuration } from "../../utils/categoryUtils";
 import { ItinerarySnapshot } from "../../types";
+import { isDuplicatePlace } from "../../utils/duplicateUtils";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -258,8 +259,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       const line = lines[i];
       setProgress((prev) => ({ ...prev, current: i + 1, currentName: line }));
 
-      const existingPlace = places.find(
-        (p) => p.name.toLowerCase() === line.toLowerCase(),
+      const existingPlace = places.find((p) =>
+        isDuplicatePlace(p, { name: line }),
       );
 
       if (existingPlace) {
@@ -299,10 +300,11 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
         if (mapsResults.length > 0) {
           const match = mapsResults[0];
-          const isDuplicate = places.some(
-            (p) =>
-              p.name.toLowerCase() === match.name.toLowerCase() &&
-              p.address.toLowerCase() === match.address.toLowerCase(),
+          const isDuplicate = places.some((p) =>
+            isDuplicatePlace(p, {
+              ...match,
+              googlePlaceId: match.id,
+            }),
           );
 
           searchResults.push({
