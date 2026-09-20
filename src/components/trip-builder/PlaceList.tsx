@@ -31,6 +31,9 @@ import { toast } from "../../services/toastService";
 const EditPlaceModal = React.lazy(() =>
   import("../schedule/EditPlaceModal").then((m) => ({ default: m.EditPlaceModal }))
 );
+const ReservationsModal = React.lazy(() =>
+  import("../schedule/ReservationsModal").then((m) => ({ default: m.ReservationsModal }))
+);
 
 interface PlaceListProps {
   isExpanded?: boolean;
@@ -75,6 +78,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
     const [starredOnly, setStarredOnly] = useState(false);
     const [duplicatesOnly, setDuplicatesOnly] = useState(false);
     const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
+    const [isReservationsOpen, setIsReservationsOpen] = useState(false);
 
     // Mass Edit State
     const [isMassEditOpen, setIsMassEditOpen] = useState(false);
@@ -509,6 +513,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           onToggleMassEdit={() => setIsMassEditOpen((prev) => !prev)}
           filteredPlacesCount={filteredPlaces.length}
           duplicatesOnly={duplicatesOnly}
+          onOpenReservationsHub={() => setIsReservationsOpen(true)}
           onResetFilters={() => {
             setSortBy("default");
             setReservationOnly(false);
@@ -613,6 +618,16 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
             <EditPlaceModal
               placeId={editingPlaceId}
               onClose={() => setEditingPlaceId(null)}
+            />
+          </React.Suspense>
+        )}
+
+        {/* Reservations & Booking Hub Modal */}
+        {isReservationsOpen && (
+          <React.Suspense fallback={null}>
+            <ReservationsModal
+              isOpen={isReservationsOpen}
+              onClose={() => setIsReservationsOpen(false)}
             />
           </React.Suspense>
         )}

@@ -21,10 +21,14 @@ import {
   Cloud,
   LogOut,
   Zap,
+  Ticket,
 } from "lucide-react";
 
 const ImportModal = React.lazy(() =>
   import("../trip-builder/ImportModal").then((m) => ({ default: m.ImportModal }))
+);
+const ReservationsModal = React.lazy(() =>
+  import("../schedule/ReservationsModal").then((m) => ({ default: m.ReservationsModal }))
 );
 const CategorySettingsModal = React.lazy(() =>
   import("./CategorySettingsModal").then((m) => ({ default: m.CategorySettingsModal }))
@@ -44,6 +48,7 @@ const ResetTripModal = React.lazy(() =>
 const AuthModal = React.lazy(() =>
   import("../auth/AuthModal").then((m) => ({ default: m.AuthModal }))
 );
+import { isReservationRelevant } from "../../utils/reservationUtils";
 import { analyticsService } from "../../services/analyticsService";
 import { toast } from "../../services/toastService";
 import { apiUsageService, ApiUsageStats, ApiBudgetLimits } from "../../services/apiUsageService";
@@ -67,11 +72,13 @@ export const Header: React.FC = React.memo(() => {
   const cloudTrips = useRouteStore((s) => s.cloudTrips);
   const quickSave = useRouteStore((s) => s.quickSave);
   const loadQuickSave = useRouteStore((s) => s.loadQuickSave);
+  const places = useRouteStore((s) => s.places);
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const accountMenuRef = React.useRef<HTMLDivElement>(null);
 
+  const [isReservationsOpen, setIsReservationsOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isLoadOpen, setIsLoadOpen] = useState(false);
   const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false);
@@ -82,6 +89,14 @@ export const Header: React.FC = React.memo(() => {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
+
+  const reservationPlaces = React.useMemo(() => {
+    return places.filter((p) => !p.isDisabled && isReservationRelevant(p));
+  }, [places]);
+
+  const pendingReservationsCount = React.useMemo(() => {
+    return reservationPlaces.filter((p) => !p.reservation?.isBooked).length;
+  }, [reservationPlaces]);
 
   // Close export dropdown when clicking outside
   React.useEffect(() => {
@@ -593,6 +608,31 @@ export const Header: React.FC = React.memo(() => {
           <FolderOpen className="w-4 h-4" /> <span className="hidden sm:inline">Load</span>
         </button>
 
+        {/* Reservations & Booking Hub Button */}
+        <button
+          onClick={() => setIsReservationsOpen(true)}
+          className={`flex items-center gap-1.5 font-semibold text-xs sm:text-sm transition-all px-2.5 py-1.5 rounded-lg border ${
+            pendingReservationsCount > 0
+              ? "bg-indigo-50 hover:bg-indigo-100/90 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-2xs"
+              : "text-surface-600 dark:text-surface-300 hover:text-indigo-600 dark:hover:text-indigo-400 border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700"
+          }`}
+          title="Open Reservations & Booking Hub"
+        >
+          <Ticket className={`w-4 h-4 ${pendingReservationsCount > 0 ? "text-indigo-600 dark:text-indigo-400" : ""}`} />
+          <span className="hidden sm:inline">Reservations</span>
+          {reservationPlaces.length > 0 && (
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                pendingReservationsCount > 0
+                  ? "bg-amber-500 text-white"
+                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+              }`}
+            >
+              {pendingReservationsCount > 0 ? pendingReservationsCount : "✓"}
+            </span>
+          )}
+        </button>
+
         <button
           onClick={() => setIsResetOpen(true)}
           className="flex items-center gap-1.5 text-surface-600 dark:text-surface-300 hover:text-red-600 dark:hover:text-red-400 font-medium text-xs sm:text-sm transition-colors px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30"
@@ -741,6 +781,14 @@ export const Header: React.FC = React.memo(() => {
           <ImportModal
             isOpen={isImportOpen}
             onClose={() => setIsImportOpen(false)}
+          />
+        </React.Suspense>
+      )}
+      {isReservationsOpen && (
+        <React.Suspense fallback={null}>
+          <ReservationsModal
+            isOpen={isReservationsOpen}
+            onClose={() => setIsReservationsOpen(false)}
           />
         </React.Suspense>
       )}

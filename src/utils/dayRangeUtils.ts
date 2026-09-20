@@ -56,7 +56,7 @@ export function mergeOverlappingRanges(
  * Returns null if the place is completely unconstrained.
  *
  * UNIFIES:
- * 1. Hard single-day pinning (pinnedToDay or fixed customTime) -> [{dayIndex, dayIndex}]
+ * 1. Hard single-day pinning (pinnedToDay) -> [{dayIndex, dayIndex}]
  * 2. Range constraints (allowedDayRanges) -> [{startDay, endDay}, ...]
  * 3. Both combined (pin day takes precedence)
  */
@@ -67,7 +67,7 @@ export function getEffectiveAllowedDayRanges(
   const maxDay = totalDays !== undefined && totalDays > 0 ? totalDays - 1 : Infinity;
 
   const isPinned =
-    (place.pinnedToDay || !!place.customTime) &&
+    !!place.pinnedToDay &&
     place.dayIndex !== null &&
     place.dayIndex !== undefined;
   const pinDay = isPinned ? place.dayIndex! : null;

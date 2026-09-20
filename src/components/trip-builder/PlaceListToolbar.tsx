@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, ArrowUpDown, CalendarClock, Star, X, Layers } from "lucide-react";
+import { Search, ArrowUpDown, CalendarClock, Star, X, Layers, Ticket } from "lucide-react";
 import { PlaceCategory } from "../../types";
 import { ALL_CATEGORIES, getCategoryLabel, getCategoryEmoji } from "../../utils/categoryUtils";
 
@@ -35,6 +35,7 @@ interface PlaceListToolbarProps {
   filteredPlacesCount: number;
   duplicatesOnly: boolean;
   onResetFilters: () => void;
+  onOpenReservationsHub?: () => void;
 }
 
 export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
@@ -59,6 +60,7 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
   filteredPlacesCount,
   duplicatesOnly,
   onResetFilters,
+  onOpenReservationsHub,
 }) => {
   const dayIndices = React.useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
   const isSearching = searchQuery.trim().length > 0;
@@ -220,6 +222,20 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
               </span>
             )}
           </button>
+
+          {/* Quick Action: Open Reservations & Booking Hub */}
+          {onOpenReservationsHub && (
+            <button
+              type="button"
+              onClick={onOpenReservationsHub}
+              className="h-9 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 shadow-2xs"
+              title="Open Reservations & Booking Hub"
+            >
+              <Ticket className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span className="hidden sm:inline">Booking Hub</span>
+              <span className="sm:hidden">Hub</span>
+            </button>
+          )}
 
           {/* Quick Toggle: Mass Edit */}
           <button

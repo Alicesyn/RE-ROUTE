@@ -50,9 +50,9 @@ function clusterPlaces(
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
 ): Place[] {
-  const pinned = places.filter((p) => p.dayIndex !== null && (p.pinnedToDay || !!p.customTime));
+  const pinned = places.filter((p) => p.dayIndex !== null && p.pinnedToDay);
   const unassigned = places.filter(
-    (p) => p.dayIndex === null || (p.dayIndex !== null && !p.pinnedToDay && !p.customTime),
+    (p) => p.dayIndex === null || (p.dayIndex !== null && !p.pinnedToDay),
   );
 
   if (unassigned.length === 0) return places;
@@ -138,11 +138,14 @@ function clusterPlaces(
     });
   }
 
-  // Sort starred places first (must-visit priority), then by longest duration (greedy packing)
+  // Sort starred places first (must-visit priority), then places with locked custom arrival times, then by longest duration (greedy packing)
   toAssign.sort((a, b) => {
     const aStarred = a.isStarred ? 1 : 0;
     const bStarred = b.isStarred ? 1 : 0;
     if (aStarred !== bStarred) return bStarred - aStarred; // starred first
+    const aCustom = a.customTime ? 1 : 0;
+    const bCustom = b.customTime ? 1 : 0;
+    if (aCustom !== bCustom) return bCustom - aCustom; // locked time places next
     return (b.estimatedDuration ?? 60) - (a.estimatedDuration ?? 60);
   });
 
@@ -161,9 +164,43 @@ function clusterPlaces(
     let maxScore = -Infinity;
 
     for (let d = 0; d < days; d++) {
-      // Unified check: respects both hard-pinning (pinnedToDay / customTime) and allowedDayRange
+      // Unified check: respects both hard-pinning (pinnedToDay) and allowedDayRange
       if (!isDayAllowedForPlace(place, d, days)) {
         continue;
+      }
+
+      // 1c. If place has a locked arrival time, verify day d does not already have an overlapping locked arrival time
+      if (place.customTime) {
+        const customMin = parseTimeToMinutes(place.customTime);
+        const duration = place.estimatedDuration || 60;
+        const dayPlacesSoFar = [
+          ...pinned.filter((p) => p.dayIndex === d),
+          ...toAssign.filter((p) => p.dayIndex === d),
+        ];
+        const hasTimeConflict = dayPlacesSoFar.some((p) => {
+          if (!p.customTime) return false;
+          const pMin = parseTimeToMinutes(p.customTime);
+          const pDur = p.estimatedDuration || 60;
+          return Math.abs(customMin - pMin) < Math.min(duration, pDur);
+        });
+        if (hasTimeConflict) {
+          continue; // Skip day d, conflicting locked reservation time
+        }
+
+        // Verify operating hours overlap with the locked arrival time if avoidClosedHours
+        if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
+          const dayDate = addDays(parseISO(startDateISO), d);
+          const dayHours = getPlaceDayHours(place.openingHours, dayDate);
+          if (typeof dayHours === "object" && dayHours !== null) {
+            const intervals = dayHours.intervals || [{ open: dayHours.open, close: dayHours.close }];
+            const isOpenAtCustomTime = intervals.some(
+              (inv) => customMin >= inv.open && customMin + duration <= inv.close
+            );
+            if (!isOpenAtCustomTime) {
+              continue; // Place is closed at the requested custom locked time on day d
+            }
+          }
+        }
       }
 
       // Resolve effective category config — check custom day override first, then first/last day

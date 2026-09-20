@@ -40,6 +40,9 @@ export interface ReservationInfo {
   requirement: ReservationRequirement;
   advanceTime?: string; // e.g. "Reserve 1 month in advance", "Opens 30 days prior at midnight", "Walk-ins only, peak wait 30m"
   notes?: string;       // e.g. "Online ticket lottery", "Via TableCheck/Tabelog"
+  isBooked?: boolean;   // Whether the reservation has been confirmed/completed
+  bookingUrl?: string;  // Direct booking link (e.g. TableCheck, Klook, official ticket URL)
+  confirmationNumber?: string; // Optional booking reference / confirmation code
 }
 
 export interface Place {

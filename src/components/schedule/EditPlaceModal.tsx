@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash } from "lucide-react";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
 import { formatDayIndexLabel } from "../../utils/dayRangeUtils";
@@ -32,7 +32,11 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [reservationReq, setReservationReq] = useState<ReservationRequirement | "">("");
   const [reservationAdvance, setReservationAdvance] = useState("");
   const [reservationNotes, setReservationNotes] = useState("");
+  const [isBooked, setIsBooked] = useState(false);
+  const [bookingUrl, setBookingUrl] = useState("");
+  const [confirmationNumber, setConfirmationNumber] = useState("");
   const [customTimeVal, setCustomTimeVal] = useState("");
+  const [pinnedToDay, setPinnedToDay] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [dismissedDuplicate, setDismissedDuplicate] = useState(false);
   const [hasDayRange, setHasDayRange] = useState(false);
@@ -52,7 +56,11 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setReservationReq(place.reservation?.requirement || "");
       setReservationAdvance(place.reservation?.advanceTime || "");
       setReservationNotes(place.reservation?.notes || "");
+      setIsBooked(Boolean(place.reservation?.isBooked));
+      setBookingUrl(place.reservation?.bookingUrl || "");
+      setConfirmationNumber(place.reservation?.confirmationNumber || "");
       setCustomTimeVal(place.customTime || "");
+      setPinnedToDay(!!place.pinnedToDay);
       setIsStarred(!!place.isStarred);
       setDismissedDuplicate(!!place.dismissedDuplicate);
       if (place.allowedDayRanges && place.allowedDayRanges.length > 0) {
@@ -81,11 +89,22 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       }
       : undefined;
 
-    const finalReservation: ReservationInfo | undefined = reservationReq
+    const hasReservationContent =
+      Boolean(reservationReq) ||
+      isBooked ||
+      Boolean(bookingUrl.trim()) ||
+      Boolean(confirmationNumber.trim()) ||
+      Boolean(reservationAdvance.trim()) ||
+      Boolean(reservationNotes.trim());
+
+    const finalReservation: ReservationInfo | undefined = hasReservationContent
       ? {
-        requirement: reservationReq as ReservationRequirement,
+        requirement: (reservationReq as ReservationRequirement) || "recommended",
         advanceTime: reservationAdvance.trim() || undefined,
         notes: reservationNotes.trim() || undefined,
+        isBooked,
+        bookingUrl: bookingUrl.trim() || undefined,
+        confirmationNumber: confirmationNumber.trim() || undefined,
       }
       : undefined;
 
@@ -106,7 +125,10 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
     const shouldReoptimize =
       place.dayIndex !== null &&
       place.dayIndex !== undefined &&
-      (((trimmedCustomTime || undefined) !== place.customTime || finalDuration !== place.estimatedDuration) || isDayOutOfRange);
+      (((trimmedCustomTime || undefined) !== place.customTime ||
+        finalDuration !== place.estimatedDuration ||
+        pinnedToDay !== place.pinnedToDay) ||
+        isDayOutOfRange);
 
     updatePlace(place.id, {
       description: desc,
@@ -118,7 +140,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       priceEstimate: priceEstimate.trim() || undefined,
       reservation: finalReservation,
       customTime: trimmedCustomTime || undefined,
-      pinnedToDay: trimmedCustomTime ? true : place.pinnedToDay,
+      pinnedToDay: isDayOutOfRange ? false : pinnedToDay,
       isStarred,
       dismissedDuplicate,
       allowedDayRanges: finalAllowedDayRanges,
@@ -425,35 +447,139 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
               />
             </div>
 
-            {/* Custom Locked Reservation Time */}
-            <div className="pt-2.5 mt-2 border-t border-indigo-100 dark:border-indigo-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-                  Locked Schedule Time
-                </span>
-                <span className="text-[10px] text-indigo-700/80 dark:text-indigo-400 leading-tight">
-                  Locks this place to an exact arrival time (won't be moved by optimizer)
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
+            {/* Notes */}
+            <div>
+              <input
+                type="text"
+                value={reservationNotes}
+                onChange={(e) => setReservationNotes(e.target.value)}
+                placeholder="Reservation notes (e.g. Online lottery, TableCheck link, phone only)"
+                className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            {/* Booking URL & Confirmation Number */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <div className="relative flex items-center">
+                <Link2 className="absolute left-2.5 w-3.5 h-3.5 text-indigo-400 pointer-events-none" />
                 <input
-                  type="time"
-                  value={customTimeVal}
-                  onChange={(e) => setCustomTimeVal(e.target.value)}
-                  className="text-xs font-bold bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  title="Lock schedule arrival time"
+                  type="url"
+                  value={bookingUrl}
+                  onChange={(e) => setBookingUrl(e.target.value)}
+                  placeholder="Booking link (https://...)"
+                  className="w-full pl-8 pr-7 text-xs font-medium bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                {customTimeVal && (
-                  <button
-                    type="button"
-                    onClick={() => setCustomTimeVal("")}
-                    className="text-[10px] font-bold text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:underline"
+                {bookingUrl && (
+                  <a
+                    href={bookingUrl.startsWith("http") ? bookingUrl : `https://${bookingUrl}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute right-2 text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300"
+                    title="Open booking link in new tab"
                   >
-                    Clear
-                  </button>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                 )}
               </div>
+              <div className="relative flex items-center">
+                <Hash className="absolute left-2.5 w-3.5 h-3.5 text-indigo-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={confirmationNumber}
+                  onChange={(e) => setConfirmationNumber(e.target.value)}
+                  placeholder="Confirmation / Code #"
+                  className="w-full pl-8 text-xs font-medium bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Booking Status Toggle */}
+            <div className="flex items-center justify-between pt-1.5">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className={`w-4 h-4 ${isBooked ? "text-emerald-500 fill-emerald-100 dark:fill-emerald-950" : "text-surface-400"}`} />
+                <div>
+                  <span className="text-xs font-semibold text-surface-900 dark:text-white">
+                    Reservation Confirmed / Booked
+                  </span>
+                  <p className="text-[10px] text-surface-500 dark:text-surface-400">
+                    Mark as completed in Reservations Hub
+                  </p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-3 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={isBooked}
+                  onChange={(e) => setIsBooked(e.target.checked)}
+                  className="sr-only peer"
+                  aria-label="Reservation booked status"
+                />
+                <div className="w-8 h-4.5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all dark:bg-surface-700 peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
+
+            {/* Custom Locked Reservation Time */}
+            <div className="pt-2.5 mt-2 border-t border-indigo-100 dark:border-indigo-900/40 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                    Locked Arrival Time
+                  </span>
+                  <span className="text-[10px] text-indigo-700/80 dark:text-indigo-400 leading-tight">
+                    Fixed arrival/reservation time (e.g. 21:00 for club/dinner)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="time"
+                    value={customTimeVal}
+                    onChange={(e) => setCustomTimeVal(e.target.value)}
+                    className="text-xs font-bold bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    title="Lock schedule arrival time"
+                  />
+                  {customTimeVal && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomTimeVal("")}
+                      className="text-[10px] font-bold text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Explicit Pin to Day Toggle (when place is assigned to a day) */}
+              {place.dayIndex !== null && place.dayIndex !== undefined && (
+                <div className="pt-2 border-t border-indigo-100/60 dark:border-indigo-900/30 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Pin className={`w-3 h-3 ${pinnedToDay ? "fill-current text-indigo-600 dark:text-indigo-400" : "text-surface-400"}`} />
+                      Pin to Day {place.dayIndex + 1}
+                    </span>
+                    <span className="text-[10px] text-indigo-700/70 dark:text-indigo-400">
+                      {customTimeVal
+                        ? pinnedToDay
+                          ? `Exact reservation locked to Day ${place.dayIndex + 1} at ${customTimeVal}`
+                          : `Flexible day — optimizer can place this on the best day at ${customTimeVal}`
+                        : pinnedToDay
+                          ? `Locked to Day ${place.dayIndex + 1} (optimizer won't move to another day)`
+                          : `Flexible day — optimizer can redistribute to another day`}
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer ml-3 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={pinnedToDay}
+                      onChange={(e) => setPinnedToDay(e.target.checked)}
+                      className="sr-only peer"
+                      aria-label={`Pin place to Day ${place.dayIndex + 1}`}
+                    />
+                    <div className="w-8 h-4.5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all dark:bg-surface-700 peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+              )}
             </div>
           </div>
 

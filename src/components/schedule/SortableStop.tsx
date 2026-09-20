@@ -95,6 +95,7 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
     const [tempTime, setTempTime] = useState(
       stop.customTime || formatMinutesTo24h(stopArrivalTime)
     );
+    const [tempPinnedToDay, setTempPinnedToDay] = useState(stop.pinnedToDay ?? false);
 
     const isCustomTime = !!stop.customTime;
     const customTimeMinutes = isCustomTime ? parseTimeToMinutes(stop.customTime) : null;
@@ -212,6 +213,7 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
                     onClick={(e) => {
                       e.stopPropagation();
                       setTempTime(stop.customTime || formatMinutesTo24h(stopArrivalTime));
+                      setTempPinnedToDay(stop.pinnedToDay ?? false);
                       setIsTimeModalOpen((prev) => !prev);
                     }}
                     className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded flex items-center gap-1 transition-all border shadow-2xs ${isCustomTime
@@ -259,10 +261,10 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
                         </div>
 
                         <p className="text-[11px] text-surface-600 dark:text-surface-300 mb-3 leading-snug">
-                          Fix this place to an exact time. The optimizer will schedule other stops around it and will not move this place.
+                          Fix this place to an exact arrival time. The optimizer will schedule other stops around it.
                         </p>
 
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 mb-2.5">
                           <label className="text-xs font-bold text-surface-600 dark:text-surface-300 uppercase shrink-0">Time:</label>
                           <input
                             type="time"
@@ -271,6 +273,18 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
                             className="flex-1 bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                           />
                         </div>
+
+                        <label className="flex items-center gap-2 mb-3 cursor-pointer text-xs select-none">
+                          <input
+                            type="checkbox"
+                            checked={tempPinnedToDay}
+                            onChange={(e) => setTempPinnedToDay(e.target.checked)}
+                            className="rounded text-purple-600 focus:ring-purple-500 border-surface-300 dark:border-surface-600 dark:bg-surface-700"
+                          />
+                          <span className="font-semibold text-surface-700 dark:text-surface-200">
+                            Also pin to Day {dayIndex + 1}
+                          </span>
+                        </label>
 
                         <div className="flex items-center justify-between gap-2 pt-2 border-t border-surface-100 dark:border-surface-700">
                           {isCustomTime ? (
@@ -304,9 +318,13 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
                               type="button"
                               onClick={async () => {
                                 if (tempTime) {
-                                  updatePlace(stop.id, { customTime: tempTime, pinnedToDay: true });
+                                  updatePlace(stop.id, { customTime: tempTime, pinnedToDay: tempPinnedToDay });
                                   setIsTimeModalOpen(false);
-                                  toast.success(`Locked ${stop.name} to ${formatTimeString(tempTime)}.`);
+                                  toast.success(
+                                    tempPinnedToDay
+                                      ? `Locked ${stop.name} to Day ${dayIndex + 1} at ${formatTimeString(tempTime)}.`
+                                      : `Locked ${stop.name} arrival time to ${formatTimeString(tempTime)}.`
+                                  );
                                   try {
                                     await useRouteStore.getState().optimizeDay(dayIndex);
                                   } catch (e) {
