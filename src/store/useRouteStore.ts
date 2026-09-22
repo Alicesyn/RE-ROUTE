@@ -1398,6 +1398,7 @@ export const useRouteStore = create<RouteState>()(
             customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
+            updatedAt: Date.now(),
           };
           // Update existing trip if title matches exactly (simple heuristic), otherwise create new
           const existingIndex = state.savedTrips.findIndex(
@@ -1408,7 +1409,9 @@ export const useRouteStore = create<RouteState>()(
             newTrips[existingIndex] = {
               ...snapshot,
               id: state.savedTrips[existingIndex].id,
-            }; // keep old ID
+              savedAt: state.savedTrips[existingIndex].savedAt || snapshot.savedAt,
+              updatedAt: Date.now(),
+            }; // keep old ID, update updatedAt
             return { savedTrips: newTrips, title: tripTitle };
           }
           return { savedTrips: [...state.savedTrips, snapshot], title: tripTitle };

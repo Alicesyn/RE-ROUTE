@@ -34,6 +34,8 @@ export const SaveTripModal: React.FC<SaveTripModalProps> = ({
   const user = useRouteStore((s) => s.user);
   const saveTrip = useRouteStore((s) => s.saveTrip);
   const saveActiveTripToCloud = useRouteStore((s) => s.saveActiveTripToCloud);
+  const savedTrips = useRouteStore((s) => s.savedTrips);
+  const cloudTrips = useRouteStore((s) => s.cloudTrips);
 
   const [tripName, setTripName] = useState(title || "My Trip");
   const [saveMode, setSaveMode] = useState<"local" | "cloud">(
@@ -42,6 +44,15 @@ export const SaveTripModal: React.FC<SaveTripModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const existingTrip = React.useMemo(() => {
+    const trimmed = tripName.trim().toLowerCase();
+    if (!trimmed) return null;
+    return (
+      savedTrips.find((t) => t.title?.trim().toLowerCase() === trimmed) ||
+      cloudTrips.find((t) => t.title?.trim().toLowerCase() === trimmed)
+    );
+  }, [tripName, savedTrips, cloudTrips]);
 
   useEffect(() => {
     if (isOpen) {
@@ -94,7 +105,12 @@ export const SaveTripModal: React.FC<SaveTripModalProps> = ({
       } else {
         saveTrip(finalName);
         setIsSaved(true);
-        toast.success(`"${finalName}" saved to this device!`, "Trip Saved");
+        const timeStr = new Date().toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+        toast.success(`"${finalName}" saved at ${timeStr}!`, "Trip Saved");
         setTimeout(() => {
           onClose();
         }, 800);
@@ -176,6 +192,25 @@ export const SaveTripModal: React.FC<SaveTripModalProps> = ({
                   </button>
                 )}
               </div>
+              {existingTrip && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mt-1 font-medium">
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    Updates existing save (last saved on{" "}
+                    {new Date(existingTrip.updatedAt || existingTrip.savedAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {" • "}
+                    {new Date(existingTrip.updatedAt || existingTrip.savedAt).toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      hour12: true,
+                    })}
+                    )
+                  </span>
+                </p>
+              )}
             </div>
 
             {/* Destination / Details Pill */}

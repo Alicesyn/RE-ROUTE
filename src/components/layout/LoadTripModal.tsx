@@ -28,6 +28,25 @@ interface LoadTripModalProps {
   onClose: () => void;
 }
 
+export const formatTripTimestamp = (timestamp?: number | string): string => {
+  if (!timestamp) return "Unknown date";
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return "Unknown date";
+
+  const dateStr = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const timeStr = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return `${dateStr} • ${timeStr}`;
+};
+
 export const LoadTripModal: React.FC<LoadTripModalProps> = ({
   isOpen,
   onClose,
@@ -312,9 +331,11 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                       <span className="text-[11px] font-semibold text-surface-600 dark:text-surface-300">
                         {quickSave.quickSaveUserEmail ? `Auto-saved for ${quickSave.quickSaveUserEmail}` : "Google Auto-Save"}
                       </span>
-                      <span className="text-[10px] text-surface-400 dark:text-surface-500">
-                        • {new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{" "}
-                        ({new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleDateString()})
+                      <span
+                        className="text-[10px] text-surface-400 dark:text-surface-500"
+                        title={`Exact auto-save time: ${new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleString()}`}
+                      >
+                        • {formatTripTimestamp(quickSave.updatedAt || quickSave.savedAt)}
                       </span>
                     </div>
 
@@ -489,8 +510,12 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                             )}
                           </div>
                         </div>
-                        <span className="text-xs font-medium text-surface-400 dark:text-surface-500 bg-surface-100 dark:bg-surface-700 px-2 py-1 rounded-md shrink-0">
-                          {new Date(trip.updatedAt || trip.savedAt).toLocaleDateString()}
+                        <span
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-surface-500 dark:text-surface-400 bg-surface-100 dark:bg-surface-700/80 px-2.5 py-1 rounded-md shrink-0 border border-surface-200/60 dark:border-surface-600/50"
+                          title={`Exact save time: ${new Date(trip.updatedAt || trip.savedAt).toLocaleString()}`}
+                        >
+                          <Clock className="w-3 h-3 text-surface-400 dark:text-surface-500 shrink-0" />
+                          <span>{formatTripTimestamp(trip.updatedAt || trip.savedAt)}</span>
                         </span>
                       </div>
 

@@ -503,8 +503,11 @@ export const Header: React.FC = React.memo(() => {
                       <div className="text-[11px] font-bold text-amber-900 dark:text-amber-200 truncate">
                         Google Quick Save
                       </div>
-                      <div className="text-[10px] text-surface-500 dark:text-surface-400 truncate">
-                        {quickSave.places.length} places • {new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      <div
+                        className="text-[10px] text-surface-500 dark:text-surface-400 truncate"
+                        title={`Exact auto-save time: ${new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleString()}`}
+                      >
+                        {quickSave.places.length} places • {new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })} • {new Date(quickSave.updatedAt || quickSave.savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                       </div>
                     </div>
                   </div>
