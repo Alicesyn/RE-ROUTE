@@ -53,3 +53,4 @@ Whenever you modify routing algorithms:
    - All places disabled.
    - More places than can fit within daily budgets (verify `unassignedPlaces` handling).
    - Overnight time range (e.g., 20:00 to 02:00).
+3. Do **NOT** run in-browser testing or launch browser subagents to confirm changes unless explicitly requested by the user (conserves API quota).

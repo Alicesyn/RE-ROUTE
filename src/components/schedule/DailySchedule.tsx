@@ -506,7 +506,7 @@ export const DailySchedule: React.FC = () => {
                       customName
                         ? `${customName} (Day ${i + 1})`
                         : dateMode === "fixed"
-                          ? `${format(btnDate, "MMM d")} (Day ${i + 1})`
+                          ? `${format(btnDate, "EEE, MMM d")} (Day ${i + 1})`
                           : `Day ${i + 1}`
                     }
                     className={`px-3 py-1.5 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 font-bold text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600 transition-all whitespace-nowrap flex flex-col items-center justify-center min-w-[60px] max-w-[120px] ${dateMode === "fixed" ? "text-[10px]" : "text-xs"}`}
@@ -514,12 +514,12 @@ export const DailySchedule: React.FC = () => {
                     {customName ? (
                       <>
                         <span className="truncate w-full font-black text-primary-600 dark:text-primary-400 text-center">{customName}</span>
-                        <span className="text-[9px] opacity-60">Day {i + 1}{dateMode === "fixed" ? ` • ${format(btnDate, "MMM d")}` : ""}</span>
+                        <span className="text-[9px] opacity-60">Day {i + 1}{dateMode === "fixed" ? ` • ${format(btnDate, "EEE, MMM d")}` : ""}</span>
                       </>
                     ) : (
                       dateMode === "fixed" ? (
                         <>
-                          <span className="font-bold text-surface-900 dark:text-white">{format(btnDate, "MMM d")}</span>
+                          <span className="font-bold text-surface-900 dark:text-white">{format(btnDate, "EEE, MMM d")}</span>
                           <span className="text-[9px] opacity-60">Day {i + 1}</span>
                         </>
                       ) : (
@@ -807,8 +807,8 @@ export const DailySchedule: React.FC = () => {
                     isDayExempt
                       ? "border-amber-300/90 dark:border-amber-700/80 ring-1 ring-amber-400/20"
                       : "border-surface-100 dark:border-surface-700"
-                  } shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[600px]"
-                    }`}
+                  } shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[780px]"
+                  }`}
                 >
                   <div className="p-4 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">
                     <div className="flex items-center justify-between mb-2">
@@ -875,7 +875,7 @@ export const DailySchedule: React.FC = () => {
                                 <div className="flex items-center gap-1.5 text-[11px] font-bold text-surface-500 dark:text-surface-400 flex-wrap">
                                   {dateMode === "fixed" && startDate ? (
                                     <span className="text-primary-600 dark:text-primary-400 uppercase tracking-wider">
-                                      {format(currentDate, "MMM d")} (Day {i + 1})
+                                      {format(currentDate, "EEE, MMM d")} (Day {i + 1})
                                     </span>
                                   ) : (
                                     <span>Day {i + 1}</span>

@@ -123,7 +123,7 @@ interface RouteState extends ModeData {
     place: Omit<Place, "dayIndex" | "orderInDay" | "pinnedToDay">,
     targetDayIndex?: number,
   ) => void;
-  updatePlace: (id: string, updates: Partial<Place>) => void;
+  updatePlace: (id: string, updates: Partial<Place>) => void | Promise<void>;
   updatePlacesBulk: (
     updates: { id: string; updates: Partial<Place> }[],
   ) => void;
@@ -552,16 +552,76 @@ export const useRouteStore = create<RouteState>()(
           return { places: [...state.places, newPlace] };
         }),
 
-      updatePlace: (id, updates) =>
-        set((state) => ({
-          places: state.places.map((p) =>
-            p.id === id ? { ...p, ...updates } : p,
-          ),
-          optimizedRoutes: state.optimizedRoutes.map((r) => ({
-            ...r,
-            stops: r.stops.map((s) => (s.id === id ? { ...s, ...updates } : s)),
-          })),
-        })),
+      updatePlace: async (id, updates) => {
+        const state = get();
+        const currentPlace = state.places.find((p) => p.id === id);
+        const dayIndex = updates.dayIndex !== undefined ? updates.dayIndex : currentPlace?.dayIndex;
+        const isUnpinning = updates.pinnedToDay === false && (currentPlace?.pinnedToDay ?? false);
+
+        const newPlaces = state.places.map((p) =>
+          p.id === id ? { ...p, ...updates } : p,
+        );
+
+        let newRoutes = state.optimizedRoutes.map((r) => ({
+          ...r,
+          stops: r.stops.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+        }));
+
+        if (isUnpinning && dayIndex !== null && dayIndex !== undefined) {
+          const routeIdx = newRoutes.findIndex((r) => r.day === dayIndex);
+          if (routeIdx >= 0 && newRoutes[routeIdx]?.manualSequence) {
+            set({ isCalculating: true, calculatingText: "Updating route..." });
+            try {
+              // Unpinning removes manual placement on this day route
+              const dayPlaces = newPlaces.filter((p) => p.dayIndex === dayIndex && !p.isDisabled);
+              if (dayPlaces.length > 0) {
+                const result = await solveSingleDay(
+                  dayPlaces,
+                  state.hotels,
+                  dayIndex,
+                  state.travelMode,
+                  dayIndex === 0 && state.showFlights ? state.arrivalFlight?.location : null,
+                  dayIndex === state.days - 1 && state.showFlights ? state.departureFlight?.location : null,
+                  false, // manualOrder = false: removes manual placement
+                  undefined, // manualSequence = undefined
+                  state.startDate,
+                  state.dayStartTime,
+                  state.avoidClosedHours,
+                  dayIndex === state.days - 1,
+                  dayIndex === 0 && state.showFlights ? state.arrivalFlight : null,
+                  dayIndex === state.days - 1 && state.showFlights ? state.departureFlight : null,
+                  state.categoryConfigs,
+                  newRoutes[routeIdx]?.segments,
+                  state.customTransitTimes,
+                );
+
+                const existingTitle = state.dayTitles[dayIndex] || newRoutes[routeIdx]?.title;
+                newRoutes[routeIdx] = { ...result, manualSequence: undefined, title: existingTitle };
+
+                const updatedPlaces = newPlaces.map((p) => {
+                  if (p.dayIndex !== dayIndex) return p;
+                  const stopIdx = result.stops.findIndex((s) => String(s.id) === String(p.id));
+                  return stopIdx >= 0 ? { ...p, orderInDay: stopIdx } : p;
+                });
+
+                set({ places: updatedPlaces, optimizedRoutes: newRoutes, isCalculating: false });
+                return;
+              } else {
+                newRoutes[routeIdx] = {
+                  ...newRoutes[routeIdx],
+                  manualSequence: undefined,
+                };
+              }
+            } catch (e) {
+              console.error("Failed to re-optimize day after unpinning", e);
+            } finally {
+              set({ isCalculating: false });
+            }
+          }
+        }
+
+        set({ places: newPlaces, optimizedRoutes: newRoutes });
+      },
 
       updatePlacesBulk: (updates) =>
         set((state) => ({
@@ -1351,15 +1411,27 @@ export const useRouteStore = create<RouteState>()(
           );
 
           const existingTitle = state.dayTitles[dayIndex] || routes[routeIdx]?.title;
-          routes[routeIdx] = { ...result, title: existingTitle };
 
           const updatedPlaces = state.places.map((p) => {
             const stopIdx = result.stops.findIndex((s) => String(s.id) === String(p.id));
             if (stopIdx >= 0) {
-              return { ...p, dayIndex, orderInDay: stopIdx, pinnedToDay: true };
+              const isMovedItem = String(p.id) === String(activeId);
+              return {
+                ...p,
+                dayIndex,
+                orderInDay: stopIdx,
+                pinnedToDay: isMovedItem ? true : (p.pinnedToDay ?? false),
+              };
             }
             return p;
           });
+
+          const updatedStops = result.stops.map((s) => {
+            const matched = updatedPlaces.find((p) => String(p.id) === String(s.id));
+            return matched ? { ...s, pinnedToDay: matched.pinnedToDay } : s;
+          });
+
+          routes[routeIdx] = { ...result, stops: updatedStops, title: existingTitle };
 
           set({ optimizedRoutes: routes, places: updatedPlaces, isCalculating: false });
         } catch (e) {

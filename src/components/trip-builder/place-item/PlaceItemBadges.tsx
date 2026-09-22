@@ -26,6 +26,15 @@ export const getBadgeColor = (dayIndex: number | null) => {
   return DAY_COLORS[dayIndex % DAY_COLORS.length];
 };
 
+const formatTimeLabel = (time: string) => {
+  if (!time) return "";
+  const [h, m] = time.split(":").map(Number);
+  if (isNaN(h)) return time;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
+};
+
 export interface PlaceItemBadgesProps {
   place: Place;
   startDate: string;
@@ -298,8 +307,8 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
         </div>
       )}
 
-      {/* Row 3: Reservation badge and Date Range Restriction badge side-by-side */}
-      {(place.reservation || (place.allowedDayRanges && place.allowedDayRanges.length > 0) || !place.isDisabled) && (
+      {/* Row 3: Reservation badge, Date Range Restriction badge, and Time Window badge */}
+      {(place.reservation || (place.allowedDayRanges && place.allowedDayRanges.length > 0) || (place.allowedTimeRange && place.allowedTimeRange.startTime && place.allowedTimeRange.endTime) || !place.isDisabled) && (
         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
           {/* Reservation Requirement badge (shortened for side-by-side alignment) */}
           {place.reservation && (
@@ -332,6 +341,22 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
             >
               <CalendarDays className="w-3 h-3 text-indigo-400 shrink-0" />
               <span>+ Day Range</span>
+            </button>
+          )}
+
+          {/* Allowed Time Window Badge */}
+          {place.allowedTimeRange && place.allowedTimeRange.startTime && place.allowedTimeRange.endTime && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit?.(place.id);
+              }}
+              className="flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/80 shadow-2xs whitespace-nowrap hover:bg-teal-100 dark:hover:bg-teal-900/60 hover:border-teal-300 dark:hover:border-teal-700 transition-colors cursor-pointer"
+              title={`Allowed schedule time window: ${formatTimeLabel(place.allowedTimeRange.startTime)} – ${formatTimeLabel(place.allowedTimeRange.endTime)} (Click to edit)`}
+            >
+              <Clock className="w-3 h-3 text-teal-600 dark:text-teal-400 shrink-0" />
+              <span>{formatTimeLabel(place.allowedTimeRange.startTime)} – {formatTimeLabel(place.allowedTimeRange.endTime)}</span>
             </button>
           )}
         </div>

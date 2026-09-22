@@ -128,7 +128,7 @@
   .content-auto-day {
     content-visibility: auto;
     contain-intrinsic-width: auto 384px;
-    contain-intrinsic-height: auto 600px;
+    contain-intrinsic-height: auto 650px;
   }
 
   .smooth-scroll-container {

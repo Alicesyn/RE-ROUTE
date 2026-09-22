@@ -71,3 +71,8 @@ This skill guides creating and styling user interfaces, interactive maps, and dr
   - Export clear TypeScript prop interfaces (`interface XProps { ... }`) for each subcomponent to ensure strong type safety and maintainability.
   - For native `<select>` controls, always provide explicit cross-platform dark mode styling (`style={{ colorScheme: "dark light" }}` and dark option classes) to prevent unreadable text in dark mode on OS-native dropdowns.
 
+### 6. Testing & Verification Constraints
+
+- **No In-Browser Testing by Default**: Do **NOT** launch `browser_subagent` or perform in-browser testing to confirm UI changes unless specifically and explicitly requested by the user. Browser subagents and video recordings consume excessive token and API quota.
+- **Quota Conservation**: Validate UI and component changes via `npm run build` and type checking. Rely on visual inspection only when the user requests it.
+

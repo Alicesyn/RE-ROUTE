@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
 import { formatDayIndexLabel } from "../../utils/dayRangeUtils";
 import { ALL_CATEGORIES, getCategoryEmoji, getCategoryLabel, getDefaultDuration } from "../../utils/categoryUtils";
-import { PlaceCategory, ReservationInfo, ReservationRequirement, DayRangeConstraint } from "../../types";
+import { PlaceCategory, ReservationInfo, ReservationRequirement, DayRangeConstraint, TimeRangeConstraint } from "../../types";
 import { summarizePlace } from "../../services/aiService";
 import {
   getSpecificMockHighlight,
@@ -43,6 +43,9 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [hasDayRange, setHasDayRange] = useState(false);
   const [startDayIndex, setStartDayIndex] = useState(0);
   const [endDayIndex, setEndDayIndex] = useState(Math.max(0, days - 1));
+  const [hasTimeRange, setHasTimeRange] = useState(false);
+  const [timeRangeStart, setTimeRangeStart] = useState("09:00");
+  const [timeRangeEnd, setTimeRangeEnd] = useState("18:00");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   useEffect(() => {
@@ -72,6 +75,15 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         setHasDayRange(false);
         setStartDayIndex(0);
         setEndDayIndex(Math.max(0, days - 1));
+      }
+      if (place.allowedTimeRange && place.allowedTimeRange.startTime && place.allowedTimeRange.endTime) {
+        setHasTimeRange(true);
+        setTimeRangeStart(place.allowedTimeRange.startTime);
+        setTimeRangeEnd(place.allowedTimeRange.endTime);
+      } else {
+        setHasTimeRange(false);
+        setTimeRangeStart("09:00");
+        setTimeRangeEnd("18:00");
       }
     }
   }, [place, days]);
@@ -117,18 +129,30 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       }]
       : undefined;
 
+    const finalAllowedTimeRange: TimeRangeConstraint | undefined = (hasTimeRange && timeRangeStart && timeRangeEnd)
+      ? {
+        startTime: timeRangeStart,
+        endTime: timeRangeEnd,
+      }
+      : undefined;
+
     const isDayOutOfRange =
       place.dayIndex !== null &&
       place.dayIndex !== undefined &&
       finalAllowedDayRanges !== undefined &&
       !finalAllowedDayRanges.some((r) => place.dayIndex! >= r.startDay && place.dayIndex! <= r.endDay);
 
+    const timeRangeChanged =
+      finalAllowedTimeRange?.startTime !== place.allowedTimeRange?.startTime ||
+      finalAllowedTimeRange?.endTime !== place.allowedTimeRange?.endTime;
+
     const shouldReoptimize =
       place.dayIndex !== null &&
       place.dayIndex !== undefined &&
       (((trimmedCustomTime || undefined) !== place.customTime ||
         finalDuration !== place.estimatedDuration ||
-        pinnedToDay !== place.pinnedToDay) ||
+        pinnedToDay !== place.pinnedToDay ||
+        timeRangeChanged) ||
         isDayOutOfRange);
 
     updatePlace(place.id, {
@@ -145,6 +169,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       isStarred,
       dismissedDuplicate,
       allowedDayRanges: finalAllowedDayRanges,
+      allowedTimeRange: finalAllowedTimeRange,
       ...(isDayOutOfRange ? { dayIndex: null, orderInDay: null, pinnedToDay: false } : {}),
     });
     onClose();
@@ -761,6 +786,134 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                   ) : (
                     <span>
                       Allowed between <strong>{formatDayIndexLabel(startDayIndex, startDate, dayTitles)}</strong> and <strong>{formatDayIndexLabel(endDayIndex, startDate, dayTitles)}</strong>.
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Restricted Time Window Constraint */}
+          <div className="p-3.5 rounded-xl bg-surface-100/60 dark:bg-surface-800/40 border border-surface-200 dark:border-surface-700/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className={`p-2 rounded-lg ${hasTimeRange ? "bg-teal-100 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400" : "bg-surface-200/60 dark:bg-surface-700 text-surface-400 dark:text-surface-500"}`}>
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
+                    Restrict to Time Window
+                  </span>
+                  <p className="text-[10px] text-surface-500 dark:text-surface-400">
+                    Optimizer will only schedule this place within your specified daily time window.
+                  </p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-3 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={hasTimeRange}
+                  onChange={(e) => setHasTimeRange(e.target.checked)}
+                  className="sr-only peer"
+                  aria-label="Restrict to time window"
+                />
+                <div className="w-9 h-5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-700 peer-checked:bg-teal-600"></div>
+              </label>
+            </div>
+
+            {hasTimeRange && (
+              <div className="pt-2 border-t border-surface-200/60 dark:border-surface-700/60 space-y-2.5 animate-in fade-in duration-150">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block">
+                      Earliest Arrival
+                    </label>
+                    <input
+                      type="time"
+                      value={timeRangeStart}
+                      onChange={(e) => setTimeRangeStart(e.target.value)}
+                      className="w-full text-xs font-semibold bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                      style={{ colorScheme: "dark light" }}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block">
+                      Latest Departure
+                    </label>
+                    <input
+                      type="time"
+                      value={timeRangeEnd}
+                      onChange={(e) => setTimeRangeEnd(e.target.value)}
+                      className="w-full text-xs font-semibold bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                      style={{ colorScheme: "dark light" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  <span className="text-[10px] font-semibold text-surface-400">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRangeStart("08:00");
+                      setTimeRangeEnd("12:00");
+                    }}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
+                  >
+                    Morning (8 AM – 12 PM)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRangeStart("12:00");
+                      setTimeRangeEnd("17:00");
+                    }}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
+                  >
+                    Afternoon (12 PM – 5 PM)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRangeStart("17:00");
+                      setTimeRangeEnd("21:00");
+                    }}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
+                  >
+                    Evening (5 PM – 9 PM)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRangeStart("20:00");
+                      setTimeRangeEnd("23:59");
+                    }}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
+                  >
+                    Night (8 PM – Late)
+                  </button>
+                </div>
+
+                {/* Preview Badge */}
+                <div className="text-[10px] text-teal-700 dark:text-teal-300 bg-teal-50/80 dark:bg-teal-950/30 px-2.5 py-1.5 rounded-lg border border-teal-200/60 dark:border-teal-900/40 flex items-center justify-between">
+                  <span>
+                    Only schedule between <strong>{(() => {
+                      const [h, m] = timeRangeStart.split(":").map(Number);
+                      const ampm = (h || 0) >= 12 ? "PM" : "AM";
+                      const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
+                      return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
+                    })()}</strong> and <strong>{(() => {
+                      const [h, m] = timeRangeEnd.split(":").map(Number);
+                      const ampm = (h || 0) >= 12 ? "PM" : "AM";
+                      const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
+                      return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
+                    })()}</strong>.
+                  </span>
+                  {timeRangeStart >= timeRangeEnd && (
+                    <span className="text-amber-600 dark:text-amber-400 font-semibold ml-2">
+                      (Note: Ends next day / overnight)
                     </span>
                   )}
                 </div>

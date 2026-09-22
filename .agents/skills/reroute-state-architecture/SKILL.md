@@ -94,3 +94,5 @@ export interface Place {
    - Avoid dispatching hundreds of single-item updates in a loop; use `updatePlacesBulk` instead.
 3. **Always Run Build Validation**:
    - Run `npm run build` after store edits to guarantee zero TypeScript or interface mismatch regressions.
+4. **No In-Browser Testing**:
+   - Do **NOT** perform in-browser testing or spawn browser subagents to confirm state changes unless specifically requested by the user.
