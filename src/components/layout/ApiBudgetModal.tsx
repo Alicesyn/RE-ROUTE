@@ -106,6 +106,10 @@ export const ApiBudgetModal: React.FC<ApiBudgetModalProps> = ({
     100,
     Math.round((stats.geminiCalls / limits.dailyGeminiLimit) * 100)
   );
+  const ekispertPercent = Math.min(
+    100,
+    Math.round((stats.ekispertCalls / (limits.dailyEkispertLimit || 1000)) * 100)
+  );
 
   const totalApiInvocations =
     totalMapsCalls + stats.geminiCalls + stats.ekispertCalls;
@@ -712,6 +716,27 @@ export const ApiBudgetModal: React.FC<ApiBudgetModalProps> = ({
                         style={{ width: `${geminiPercent}%` }}
                       />
                     </div>
+                  </div>
+
+                  {/* Ekispert Progress */}
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold mb-1.5">
+                      <span className="text-surface-700 dark:text-surface-200 flex items-center gap-1.5">
+                        <span className="text-base leading-none">🚆</span> Ekispert Transit API
+                      </span>
+                      <span className="font-mono text-surface-500 dark:text-surface-400">
+                        {stats.ekispertCalls} / {limits.dailyEkispertLimit || 1000} ({ekispertPercent}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-surface-200 dark:bg-surface-700 h-2.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${getProgressColor(ekispertPercent)}`}
+                        style={{ width: `${ekispertPercent}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-surface-400 dark:text-surface-500 mt-1">
+                      Free plan domain-restricted to reroute.tools. Station & route lookups are cached for 30 days.
+                    </p>
                   </div>
                 </div>
 

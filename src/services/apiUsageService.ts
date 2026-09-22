@@ -22,8 +22,9 @@ export interface ApiUsageStats {
 }
 
 export interface ApiBudgetLimits {
-  dailyMapsLimit: number; // default ~1,000 queries/day
-  dailyGeminiLimit: number; // default ~1,500 queries/day (free tier)
+  dailyMapsLimit: number;    // default ~1,000 queries/day
+  dailyGeminiLimit: number;  // default ~1,500 queries/day (free tier)
+  dailyEkispertLimit: number; // default 1,000 queries/day (free plan)
 }
 
 const STORAGE_KEY_USAGE = "reroute_api_usage_stats_v2";
@@ -35,6 +36,7 @@ const STORAGE_KEY_CLOUD_SYNC = "reroute_cloud_sync_enabled_v1";
 const DEFAULT_LIMITS: ApiBudgetLimits = {
   dailyMapsLimit: 1000,
   dailyGeminiLimit: 1500,
+  dailyEkispertLimit: 1000,
 };
 
 export const isCloudSyncActive = (): boolean => {

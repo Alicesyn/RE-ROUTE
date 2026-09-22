@@ -280,7 +280,7 @@ export const useRouteStore = create<RouteState>()(
       places: [],
       hotels: [],
       missingPlaces: [],
-      appMode: import.meta.env?.VITE_GOOGLE_MAPS_API_KEY ? "real" : "mock",
+      appMode: (import.meta.env?.DEV && !import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) ? "mock" : "real",
       theme: "light",
       showImages: true,
       distanceUnit: "metric",

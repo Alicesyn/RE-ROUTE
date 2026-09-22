@@ -23,6 +23,8 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
     const activeMinutes = Math.round(segment.time / 60);
     const [customMinutesInput, setCustomMinutesInput] = useState<string | number>(activeMinutes);
     const popoverRef = useRef<HTMLDivElement>(null);
+    // Prevents the Ekispert auto-hydrate effect from firing more than once per segment pair
+    const hasHydrated = useRef(false);
 
     const isWalk = isWalkSegment(segment);
     const isCustom = segment.customDuration !== undefined;
@@ -31,7 +33,8 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
 
     // Auto-hydrate transit details if in Japan and missing (e.g. loaded from earlier save/state)
     useEffect(() => {
-      if (segment.travelMode !== "transit" || segment.transitDetails) return;
+      if (segment.travelMode !== "transit" || segment.transitDetails || hasHydrated.current) return;
+      hasHydrated.current = true;
 
       const state = useRouteStore.getState();
       const route = state.optimizedRoutes.find((r) => r.day === dayIndex);

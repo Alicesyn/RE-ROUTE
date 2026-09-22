@@ -33,9 +33,47 @@ export interface JapanStationTransitResult {
   transitDetails?: TransitLegBreakdown;
 }
 
-// In-memory caches to protect Ekispert Free Plan quotas
+// Persistent Ekispert caches — backed by localStorage so lookups survive page reloads
+const STATION_CACHE_KEY = "reroute_ekispert_stations_v1";
+const ROUTE_URL_CACHE_KEY = "reroute_ekispert_routes_v1";
+const EKISPERT_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+type CachedStation = { value: EkispertStation | null; savedAt: number };
+type CachedRouteUrl = { value: string | null; savedAt: number };
+
+let _stationCacheRaw: Record<string, CachedStation> = {};
+let _routeUrlCacheRaw: Record<string, CachedRouteUrl> = {};
+
+try {
+  _stationCacheRaw = JSON.parse(localStorage.getItem(STATION_CACHE_KEY) || "{}");
+} catch { _stationCacheRaw = {}; }
+try {
+  _routeUrlCacheRaw = JSON.parse(localStorage.getItem(ROUTE_URL_CACHE_KEY) || "{}");
+} catch { _routeUrlCacheRaw = {}; }
+
+// In-memory working caches (evict stale on load)
 const stationCache: Record<string, EkispertStation | null> = {};
 const routeUrlCache: Record<string, string | null> = {};
+
+const now = Date.now();
+for (const [k, v] of Object.entries(_stationCacheRaw)) {
+  if (now - v.savedAt < EKISPERT_CACHE_TTL_MS) stationCache[k] = v.value;
+}
+for (const [k, v] of Object.entries(_routeUrlCacheRaw)) {
+  if (now - v.savedAt < EKISPERT_CACHE_TTL_MS) routeUrlCache[k] = v.value;
+}
+
+const persistStationCache = (key: string, value: EkispertStation | null) => {
+  stationCache[key] = value;
+  _stationCacheRaw[key] = { value, savedAt: Date.now() };
+  try { localStorage.setItem(STATION_CACHE_KEY, JSON.stringify(_stationCacheRaw)); } catch { /* quota */ }
+};
+
+const persistRouteUrlCache = (key: string, value: string | null) => {
+  routeUrlCache[key] = value;
+  _routeUrlCacheRaw[key] = { value, savedAt: Date.now() };
+  try { localStorage.setItem(ROUTE_URL_CACHE_KEY, JSON.stringify(_routeUrlCacheRaw)); } catch { /* quota */ }
+};
 
 /**
  * Checks if geographic coordinates are within Japan's territory
@@ -109,7 +147,7 @@ export const findNearestStation = async (
     apiUsageService.recordCall("ekispert");
     const response = await fetch(url.toString());
     if (!response.ok) {
-      stationCache[cacheKey] = null;
+      persistStationCache(cacheKey, null);
       return null;
     }
 
@@ -134,11 +172,11 @@ export const findNearestStation = async (
 
     stations.sort((a, b) => a.distanceMeters - b.distanceMeters);
     const nearest = stations[0] || null;
-    stationCache[cacheKey] = nearest;
+    persistStationCache(cacheKey, nearest);
     return nearest;
   } catch (e) {
     console.warn("Ekispert geo station lookup error:", e);
-    stationCache[cacheKey] = null;
+    persistStationCache(cacheKey, null);
     return null;
   }
 };
@@ -168,17 +206,17 @@ export const getEkispertRouteUrl = async (
     apiUsageService.recordCall("ekispert");
     const response = await fetch(url.toString());
     if (!response.ok) {
-      routeUrlCache[cacheKey] = null;
+      persistRouteUrlCache(cacheKey, null);
       return null;
     }
 
     const data = await response.json();
     const resourceUri = data?.ResultSet?.ResourceURI || null;
-    routeUrlCache[cacheKey] = resourceUri;
+    persistRouteUrlCache(cacheKey, resourceUri);
     return resourceUri;
   } catch (e) {
     console.warn("Ekispert route light error:", e);
-    routeUrlCache[cacheKey] = null;
+    persistRouteUrlCache(cacheKey, null);
     return null;
   }
 };

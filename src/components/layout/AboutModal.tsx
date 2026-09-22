@@ -514,15 +514,37 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                   </div>
 
                   {/* 5. API Rate Limits & Shared Proxy Quotas */}
-                  <div className="p-4 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50/60 dark:bg-surface-800/40 space-y-1.5">
+                  <div className="p-4 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50/60 dark:bg-surface-800/40 space-y-2">
                     <h4 className="font-bold text-surface-900 dark:text-white flex items-center gap-2">
                       <Key className="w-4 h-4 text-emerald-500" />
-                      5. API Quotas &amp; Bring-Your-Own-Key (BYOK)
+                      5. API Quotas, Caching &amp; Bring-Your-Own-Key (BYOK)
                     </h4>
                     <p className="text-xs text-surface-600 dark:text-surface-400 leading-relaxed">
                       To keep RE-ROUTE 100% free and open, shared public cloud proxy tokens have daily rate limits on Google Maps and Gemini AI queries. If daily limits are reached, the app continues to operate seamlessly in Mock Mode, or you can plug in your own free personal API keys via the <strong>BYOK (Bring Your Own Key)</strong> panel in the API Budget monitor for unlimited personal usage.
                     </p>
+                    <ul className="text-xs text-surface-600 dark:text-surface-400 leading-relaxed space-y-1.5 list-none pl-0">
+                      <li className="flex items-start gap-2">
+                        <span className="mt-0.5 text-emerald-500 shrink-0">✓</span>
+                        <span><strong className="text-surface-800 dark:text-surface-200">Smart caching:</strong> Place searches, route times, and photo URLs are cached in your browser&apos;s localStorage. Route segments are cached for <strong>7 days</strong> with departure-time bucketing (AM / PM / Evening) so re-optimizations almost never re-hit the API.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="mt-0.5 text-emerald-500 shrink-0">✓</span>
+                        <span><strong className="text-surface-800 dark:text-surface-200">Lazy photo loading:</strong> Photos are only fetched when you first view a place card, and the resolved URL is cached permanently so the same photo is never re-downloaded.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="mt-0.5 text-blue-500 shrink-0">🚆</span>
+                        <span><strong className="text-surface-800 dark:text-surface-200">Ekispert Japan Transit:</strong> Station lookups and timetable route links are cached for <strong>30 days</strong> in localStorage. On subsequent visits, Japan transit segments load instantly with zero API calls.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="mt-0.5 text-amber-500 shrink-0">⚠</span>
+                        <span>Ekispert&apos;s free plan API key is <strong>domain-restricted to reroute.tools</strong> and will not function on localhost. Local builds fall back to geometric transit estimation automatically.</span>
+                      </li>
+                    </ul>
+                    <p className="text-xs text-surface-500 dark:text-surface-500 leading-relaxed">
+                      Monitor real-time quota consumption for Google Maps, Gemini AI, and Ekispert — with progress bars and daily limits — in the <strong>API Budget &amp; Usage</strong> panel (key icon in the header).
+                    </p>
                   </div>
+
 
                   {/* 6. TSP NP-Hard Optimization */}
                   <div className="p-4 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50/60 dark:bg-surface-800/40 space-y-1.5">

@@ -37,7 +37,7 @@ interface ReservationsModalProps {
   onClose: () => void;
 }
 
-type FilterTab = "all" | "pending" | "booked" | "required";
+type FilterTab = "pending" | "booked" | "required" | "recommended" | "walk_in";
 type SortOption = "urgency" | "schedule" | "name";
 
 export const ReservationsModal: React.FC<ReservationsModalProps> = ({
@@ -46,7 +46,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
 }) => {
   const { places, startDate, dayTitles, updatePlace } = useRouteStore();
 
-  const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [activeTab, setActiveTab] = useState<FilterTab>("pending");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("urgency");
   const [copiedChecklist, setCopiedChecklist] = useState(false);
@@ -63,14 +63,32 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
   // Key KPI metrics
   const totalCount = allReservationPlaces.length;
   const bookedCount = allReservationPlaces.filter((p) => p.isBooked).length;
-  const pendingCount = totalCount - bookedCount;
+  // Walk-in / no-res places: don't need to be booked
+  const walkInCount = allReservationPlaces.filter(
+    (p) => p.requirement === "walk_ins_only" || p.requirement === "not_needed"
+  ).length;
+  // Pending = unbooked AND requires actual booking action
+  const pendingCount = allReservationPlaces.filter(
+    (p) => !p.isBooked && p.requirement !== "walk_ins_only" && p.requirement !== "not_needed"
+  ).length;
   const urgentCount = allReservationPlaces.filter(
-    (p) => !p.isBooked && p.urgency === "urgent"
+    (p) => !p.isBooked && p.urgency === "urgent" && p.requirement !== "walk_ins_only" && p.requirement !== "not_needed"
   ).length;
   const requiredCount = allReservationPlaces.filter(
     (p) => p.requirement === "required"
   ).length;
-  const progressPercent = totalCount > 0 ? Math.round((bookedCount / totalCount) * 100) : 0;
+  const recommendedCount = allReservationPlaces.filter(
+    (p) => p.requirement === "recommended"
+  ).length;
+  // Trip readiness: booked out of places that require or recommend a reservation
+  const bookablePlaces = allReservationPlaces.filter(
+    (p) => p.requirement === "required" || p.requirement === "recommended"
+  );
+  const bookableBookedCount = bookablePlaces.filter((p) => p.isBooked).length;
+  const progressPercent =
+    bookablePlaces.length > 0
+      ? Math.round((bookableBookedCount / bookablePlaces.length) * 100)
+      : 0;
 
   // Filtered and sorted places
   const displayedPlaces = useMemo(() => {
@@ -78,11 +96,20 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
 
     // Tab filter
     if (activeTab === "pending") {
-      list = list.filter((p) => !p.isBooked);
+      // Only show places that aren't booked AND actually require a booking action
+      list = list.filter(
+        (p) => !p.isBooked && p.requirement !== "walk_ins_only" && p.requirement !== "not_needed"
+      );
     } else if (activeTab === "booked") {
       list = list.filter((p) => p.isBooked);
     } else if (activeTab === "required") {
       list = list.filter((p) => p.requirement === "required");
+    } else if (activeTab === "recommended") {
+      list = list.filter((p) => p.requirement === "recommended");
+    } else if (activeTab === "walk_in") {
+      list = list.filter(
+        (p) => p.requirement === "walk_ins_only" || p.requirement === "not_needed"
+      );
     }
 
     // Search filter
@@ -299,18 +326,6 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
             <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 sm:pb-0">
               <button
                 type="button"
-                onClick={() => setActiveTab("all")}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-                  activeTab === "all"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "bg-surface-100 text-surface-600 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-300 dark:hover:bg-surface-600"
-                }`}
-              >
-                All ({totalCount})
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setActiveTab("pending")}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap flex items-center gap-1.5 ${
                   activeTab === "pending"
@@ -345,7 +360,31 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
                     : "bg-surface-100 text-surface-600 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-300 dark:hover:bg-surface-600"
                 }`}
               >
-                Required Only ({requiredCount})
+                Res. Required ({requiredCount})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("recommended")}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
+                  activeTab === "recommended"
+                    ? "bg-amber-500 text-white shadow-xs"
+                    : "bg-surface-100 text-surface-600 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-300 dark:hover:bg-surface-600"
+                }`}
+              >
+                Res. Recommended ({recommendedCount})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("walk_in")}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab === "walk_in"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "bg-surface-100 text-surface-600 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-300 dark:hover:bg-surface-600"
+                }`}
+              >
+                Walk-in / No Res. ({walkInCount})
               </button>
             </div>
 
@@ -362,19 +401,19 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
                 />
               </div>
 
-              <div className="relative flex items-center">
-                <ArrowUpDown className="absolute left-2.5 w-3.5 h-3.5 text-surface-400 pointer-events-none" />
+              <label className="relative flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg text-surface-700 dark:text-surface-300 cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500 transition-colors hover:bg-surface-100 dark:hover:bg-surface-800">
+                <ArrowUpDown className="w-3.5 h-3.5 text-surface-400 shrink-0" />
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortOption)}
-                  className="pl-8 pr-6 py-1.5 text-xs font-semibold bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  className="appearance-none bg-transparent border-none outline-none text-xs font-semibold text-surface-900 dark:text-white cursor-pointer pr-1"
                   title="Sort places"
                 >
                   <option value="urgency">Urgency First</option>
                   <option value="schedule">Trip Day Order</option>
                   <option value="name">Place Name (A-Z)</option>
                 </select>
-              </div>
+              </label>
             </div>
           </div>
 

@@ -19,6 +19,8 @@ export const clearMapsCache = () => {
   searchCache = {};
   localStorage.removeItem(CACHE_KEY);
   localStorage.removeItem("reroute_search_cache");
+  photoUrlCache = {};
+  localStorage.removeItem(PHOTO_URL_CACHE_KEY);
 };
 
 const saveToCache = (query: string, results: any[]) => {
@@ -30,13 +32,67 @@ const saveToCache = (query: string, results: any[]) => {
   }
 };
 
-const ROUTES_CACHE_KEY = "reroute_routes_cache_v3";
-let routesCache: Record<string, any> = JSON.parse(
-  localStorage.getItem(ROUTES_CACHE_KEY) || "{}"
+// --- Photo URL cache (photoName -> resolved CDN URL, persisted) ---
+const PHOTO_URL_CACHE_KEY = "reroute_photo_url_cache_v1";
+let photoUrlCache: Record<string, string> = JSON.parse(
+  localStorage.getItem(PHOTO_URL_CACHE_KEY) || "{}"
 );
 
+const savePhotoUrl = (photoName: string, url: string) => {
+  photoUrlCache[photoName] = url;
+  try {
+    localStorage.setItem(PHOTO_URL_CACHE_KEY, JSON.stringify(photoUrlCache));
+  } catch (e) {
+    console.warn("Photo URL cache persistence failed:", e);
+  }
+};
+
+/**
+ * Lazily resolves a Places API photo reference to a CDN URL.
+ * Results are persisted so the same photo is never fetched twice across sessions.
+ */
+export const resolvePhotoUrl = async (photoName: string, apiKey: string): Promise<string | undefined> => {
+  if (!photoName || !apiKey) return undefined;
+  if (photoUrlCache[photoName]) return photoUrlCache[photoName];
+
+  try {
+    apiUsageService.recordCall("maps_photo");
+    const photoRes = await fetch(
+      `https://places.googleapis.com/v1/${photoName}/media?key=${apiKey}&maxHeightPx=400&skipHttpRedirect=true`
+    );
+    if (photoRes.ok) {
+      const pData = await photoRes.json();
+      const url: string | undefined = pData.photoUri;
+      if (url) savePhotoUrl(photoName, url);
+      return url;
+    }
+  } catch (e) {
+    console.warn("Failed to resolve photo URL:", e);
+  }
+  return undefined;
+};
+
+const ROUTES_CACHE_KEY = "reroute_routes_cache_v3";
+const ROUTES_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+type CachedRoute = { distanceM: number; durationS: number; savedAt?: number };
+let routesCache: Record<string, CachedRoute> = {};
+
+// Hydrate routes cache, evicting stale entries on load
+try {
+  const raw = JSON.parse(localStorage.getItem(ROUTES_CACHE_KEY) || "{}");
+  const now = Date.now();
+  for (const [k, v] of Object.entries(raw) as [string, CachedRoute][]) {
+    if (!v.savedAt || now - v.savedAt < ROUTES_CACHE_TTL_MS) {
+      routesCache[k] = v;
+    }
+  }
+} catch (e) {
+  console.warn("Routes cache load failed:", e);
+}
+
 const saveToRoutesCache = (key: string, result: { distanceM: number; durationS: number }) => {
-  routesCache[key] = result;
+  routesCache[key] = { ...result, savedAt: Date.now() };
   try {
     localStorage.setItem(ROUTES_CACHE_KEY, JSON.stringify(routesCache));
   } catch (e) {
@@ -53,6 +109,7 @@ export interface MapsPlace {
   types: string[];
   openingHours?: string[];
   editorialSummary?: string;
+  photoReference?: string; // Raw Places API photo name — resolve lazily via resolvePhotoUrl()
   photoUrl?: string;
   priceLevel?: string;
   priceEstimate?: string;
@@ -65,7 +122,7 @@ export const searchPlaces = async (
   if (!query) return [];
 
   const cacheKey = biasLocation
-    ? `${query}_${Math.round(biasLocation.lat)}_${Math.round(biasLocation.lng)}`
+    ? `${query}_${biasLocation.lat.toFixed(1)}_${biasLocation.lng.toFixed(1)}`
     : query;
 
   if (searchCache[cacheKey]) {
@@ -126,46 +183,17 @@ export const searchPlaces = async (
     const data = await response.json();
     if (!data.places) return [];
 
-    const mapped: MapsPlace[] = await Promise.all(
-      data.places.map(async (p: any) => {
-        let photoUrl: string | undefined = undefined;
-        if (p.photos && p.photos.length > 0) {
-          const photoName = p.photos[0].name;
-          try {
-            apiUsageService.recordCall("maps_photo");
-            const photoRes = await fetch(
-              `https://places.googleapis.com/v1/${photoName}/media?key=${apiKey}&maxHeightPx=400&skipHttpRedirect=true`
-            );
-            if (photoRes.ok) {
-              const pData = await photoRes.json();
-              photoUrl = pData.photoUri;
-            }
-          } catch (e) {
-            console.warn("Failed to fetch direct photo URI, falling back:", e);
-          }
-        }
-
+    const mapped: MapsPlace[] = data.places.map((p: any) => {
         let priceEstimate: string | undefined = undefined;
         if (p.priceLevel) {
           switch (p.priceLevel) {
-            case "PRICE_LEVEL_FREE":
-              priceEstimate = "Free";
-              break;
-            case "PRICE_LEVEL_INEXPENSIVE":
-              priceEstimate = "$";
-              break;
-            case "PRICE_LEVEL_MODERATE":
-              priceEstimate = "$$";
-              break;
-            case "PRICE_LEVEL_EXPENSIVE":
-              priceEstimate = "$$$";
-              break;
-            case "PRICE_LEVEL_VERY_EXPENSIVE":
-              priceEstimate = "$$$$";
-              break;
+            case "PRICE_LEVEL_FREE":        priceEstimate = "Free"; break;
+            case "PRICE_LEVEL_INEXPENSIVE": priceEstimate = "$"; break;
+            case "PRICE_LEVEL_MODERATE":    priceEstimate = "$$"; break;
+            case "PRICE_LEVEL_EXPENSIVE":   priceEstimate = "$$$"; break;
+            case "PRICE_LEVEL_VERY_EXPENSIVE": priceEstimate = "$$$$"; break;
           }
         }
-
         return {
           id: p.id,
           name: p.displayName?.text || "",
@@ -175,12 +203,13 @@ export const searchPlaces = async (
           types: p.types || [],
           openingHours: p.regularOpeningHours?.weekdayDescriptions || [],
           editorialSummary: p.editorialSummary?.text,
-          photoUrl,
+          // Store raw photo reference; caller resolves URL lazily via resolvePhotoUrl()
+          photoReference: p.photos?.[0]?.name,
+          photoUrl: undefined,
           priceLevel: p.priceLevel,
           priceEstimate,
         };
-      }),
-    );
+      });
 
     saveToCache(cacheKey, mapped);
     return mapped;
@@ -210,24 +239,25 @@ export const fetchRouteSegment = async (
   if (mode === "transit") travelMode = "TRANSIT";
   if (mode === "walking") travelMode = "WALK";
 
-  // Cache key (round to 4 decimals to avoid tiny jitter cache misses)
+  // Cache key: round coords to 4 decimals + travel mode + departure time bucket for transit
   const oLat = origin.lat.toFixed(4);
   const oLng = origin.lng.toFixed(4);
   const dLat = destination.lat.toFixed(4);
   const dLng = destination.lng.toFixed(4);
-  const cacheKey = `${oLat},${oLng}_${dLat},${dLng}_${travelMode}`;
 
-  if (routesCache[cacheKey] && mode !== "transit") {
+  // For transit, bucket by time-of-day so AM/PM/Evening get distinct cache entries
+  const timeBucket = (mode === "transit" && departureTime)
+    ? (departureTime.getHours() < 12 ? "AM" : departureTime.getHours() < 18 ? "PM" : "EVE")
+    : "ANY";
+  const cacheKey = `${oLat},${oLng}_${dLat},${dLng}_${travelMode}_${timeBucket}`;
+
+  if (routesCache[cacheKey]) {
     apiUsageService.recordCacheHit();
     return routesCache[cacheKey];
   }
 
   // Handle Japan Transit via Ekispert Station-Aware Modeling
   if (mode === "transit" && isJapanCoordinate(origin.lat, origin.lng) && isJapanCoordinate(destination.lat, destination.lng)) {
-    if (routesCache[cacheKey]?.transitDetails && !routesCache[cacheKey]?.heuristicReason?.includes("ZERO_RESULTS")) {
-      apiUsageService.recordCacheHit();
-      return routesCache[cacheKey];
-    }
     try {
       const ekispertResult = await calculateJapanStationTransit(origin, destination);
       if (ekispertResult) {
