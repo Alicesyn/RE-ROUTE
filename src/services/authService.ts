@@ -5,11 +5,24 @@ import { toast } from "./toastService";
 export const mapSupabaseUser = (sbUser: any): User | null => {
   if (!sbUser) return null;
   const meta = sbUser.user_metadata || {};
+  const identityMeta = sbUser.identities?.[0]?.identity_data || {};
+  const avatarUrl =
+    meta.avatar_url ||
+    meta.picture ||
+    identityMeta.avatar_url ||
+    identityMeta.picture ||
+    "";
   return {
     id: sbUser.id,
     email: sbUser.email || "",
-    displayName: meta.full_name || meta.name || sbUser.email?.split("@")[0] || "User",
-    avatarUrl: meta.avatar_url || meta.picture || "",
+    displayName:
+      meta.full_name ||
+      meta.name ||
+      identityMeta.full_name ||
+      identityMeta.name ||
+      sbUser.email?.split("@")[0] ||
+      "User",
+    avatarUrl,
     createdAt: sbUser.created_at,
   };
 };

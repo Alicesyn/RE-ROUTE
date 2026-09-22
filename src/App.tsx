@@ -639,15 +639,17 @@ function App() {
             {/* Map: Fixed portion of screen on desktop, hidden when window is small */}
             <div className="hidden lg:flex lg:w-[400px] xl:w-[460px] 2xl:w-[500px] shrink-0 flex-col h-[500px] lg:h-[520px] rounded-xl overflow-hidden shadow-sm border border-surface-200 dark:border-surface-700 relative">
               <div className="absolute inset-0">
-                <React.Suspense
-                  fallback={
-                    <div className="w-full h-full bg-surface-100 dark:bg-surface-800 animate-pulse flex items-center justify-center text-xs text-surface-400 font-medium">
-                      Loading Map...
-                    </div>
-                  }
-                >
-                  <MapView />
-                </React.Suspense>
+                <ErrorBoundary fallbackTitle="Interactive map failed to render">
+                  <React.Suspense
+                    fallback={
+                      <div className="w-full h-full bg-surface-100 dark:bg-surface-800 animate-pulse flex items-center justify-center text-xs text-surface-400 font-medium">
+                        Loading Map...
+                      </div>
+                    }
+                  >
+                    <MapView />
+                  </React.Suspense>
+                </ErrorBoundary>
               </div>
             </div>
           </div>
@@ -664,15 +666,17 @@ function App() {
             {showMobileMap && (
               <div className="mt-3 w-full h-[360px] rounded-xl overflow-hidden shadow-sm border border-surface-200 dark:border-surface-700 relative">
                 <div className="absolute inset-0">
-                  <React.Suspense
-                    fallback={
-                      <div className="w-full h-full bg-surface-100 dark:bg-surface-800 animate-pulse flex items-center justify-center text-xs text-surface-400 font-medium">
-                        Loading Map...
-                      </div>
-                    }
-                  >
-                    <MapView />
-                  </React.Suspense>
+                  <ErrorBoundary fallbackTitle="Interactive map failed to render">
+                    <React.Suspense
+                      fallback={
+                        <div className="w-full h-full bg-surface-100 dark:bg-surface-800 animate-pulse flex items-center justify-center text-xs text-surface-400 font-medium">
+                          Loading Map...
+                        </div>
+                      }
+                    >
+                      <MapView />
+                    </React.Suspense>
+                  </ErrorBoundary>
                 </div>
               </div>
             )}

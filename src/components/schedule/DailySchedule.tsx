@@ -23,6 +23,7 @@ import { toast } from "../../services/toastService";
 import { RouteSegment, CustomBuffer, Place } from "../../types";
 import { format, addDays, parseISO } from "date-fns";
 import { checkTimeConflict } from "../../utils/timeUtils";
+import { isWalkSegment } from "../../utils/distance";
 import {
   DndContext,
   closestCenter,
@@ -250,12 +251,13 @@ export const DailySchedule: React.FC = () => {
   }, []);
 
   const hasHeuristicTransit = optimizedRoutes.some((r) =>
-    r.segments.some((s) => s.travelMode === "transit" && s.isHeuristic !== false)
+    r.segments.some((s) => s.travelMode === "transit" && s.isHeuristic !== false && !isWalkSegment(s))
   );
   const hasEkispertTransit = optimizedRoutes.some((r) =>
     r.segments.some(
       (s) =>
         s.travelMode === "transit" &&
+        !isWalkSegment(s) &&
         (!!s.transitUrl || !!s.transitDetails || !!s.stationFrom)
     )
   );

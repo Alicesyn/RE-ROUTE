@@ -36,3 +36,35 @@ export function estimateTime(
 
   return distanceMeters / speedMps;
 }
+
+export const WALKING_THRESHOLD_METERS = 800;
+
+export function isWalkSegment(segment: {
+  travelMode?: string;
+  distance?: number;
+  customTravelMode?: boolean;
+  heuristicReason?: string;
+  transitDetails?: {
+    trainMin?: number;
+    totalMin?: number;
+    summary?: string;
+  };
+}): boolean {
+  if (segment.travelMode === "walking") return true;
+  if (segment.customTravelMode) return false;
+
+  const dist = segment.distance ?? 0;
+  if (dist >= 0 && dist <= WALKING_THRESHOLD_METERS) return true;
+
+  if (segment.travelMode === "transit") {
+    if (segment.transitDetails && (!segment.transitDetails.trainMin || segment.transitDetails.trainMin === 0)) {
+      return true;
+    }
+    const reason = segment.heuristicReason?.toLowerCase() || "";
+    if (reason.includes("direct walk") || reason.includes("walking connection")) {
+      return true;
+    }
+  }
+
+  return false;
+}

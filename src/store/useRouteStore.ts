@@ -1087,14 +1087,16 @@ export const useRouteStore = create<RouteState>()(
             if (segments[segmentIndex]) {
               const seg = { ...segments[segmentIndex] };
               seg.travelMode = mode;
+              seg.customTravelMode = true;
               const estimated = estimateTime(seg.distance, mode);
-              seg.isHeuristic = true;
+              seg.isHeuristic = mode === "transit";
               if (mode === "transit") {
                 seg.heuristicReason = "Transit time recalculated using geometric velocity heuristic.";
               } else {
                 delete seg.transitUrl;
                 delete seg.stationFrom;
                 delete seg.stationTo;
+                delete seg.heuristicReason;
               }
               if (seg.customDuration !== undefined) {
                 seg.originalTime = estimated;

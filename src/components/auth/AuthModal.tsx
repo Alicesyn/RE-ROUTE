@@ -10,14 +10,21 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isConfigured = authService.isConfigured();
 
   if (!isOpen) return null;
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
+    setErrorMessage(null);
     try {
-      await authService.signInWithGoogle();
+      const res = await authService.signInWithGoogle();
+      if (!res.success && res.error) {
+        setErrorMessage(res.error);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Failed to initiate sign in.");
     } finally {
       setIsLoading(false);
     }
@@ -110,6 +117,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 <p className="text-[10px] text-amber-700 dark:text-amber-300">
                   Enable the Google provider in Supabase Dashboard → Authentication → Providers.
                 </p>
+              </div>
+            )}
+
+            {/* Error Message Banner */}
+            {errorMessage && (
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/80 text-red-800 dark:text-red-200 text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Sign In Failed</p>
+                  <p className="text-[11px] leading-relaxed">{errorMessage}</p>
+                </div>
               </div>
             )}
 

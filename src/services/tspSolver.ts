@@ -1106,7 +1106,8 @@ function buildDayRoute(
 
     const existing = existingSegments?.find((s) => s.fromId === fromId && s.toId === toId);
 
-    let segMode = existing?.travelMode ?? travelMode;
+    const isWalkableDist = segDist <= 800;
+    let segMode = existing?.travelMode ?? (isWalkableDist ? "walking" : travelMode);
     let segTime = estimateTime(segDist, segMode);
     let customDuration: number | undefined = undefined;
     let originalTime: number | undefined = undefined;
@@ -1125,11 +1126,12 @@ function buildDayRoute(
       distance: segDist,
       time: segTime,
       travelMode: segMode,
+      customTravelMode: existing?.customTravelMode,
       customDuration,
       originalTime,
       fromId,
       toId,
-      isHeuristic: true,
+      isHeuristic: segMode === "transit",
       heuristicReason: segMode === "transit"
         ? (existing?.heuristicReason || "Transit time estimated geometrically (~18 km/h local / ~162 km/h express).")
         : undefined,
@@ -1354,15 +1356,21 @@ export async function fetchAccurateRouteTimes(
         estimatedDeparture
       );
       const accurateTime = customSec !== undefined ? customSec : result.durationS;
+      const isDirectWalk = result.transitDetails
+        ? (!result.transitDetails.trainMin || result.transitDetails.trainMin === 0)
+        : (result.heuristicReason?.toLowerCase().includes("direct walk") || result.distanceM <= 800);
+      const effectiveMode = (seg.travelMode === "transit" && isDirectWalk && !seg.customTravelMode) ? "walking" as TravelMode : seg.travelMode;
+
       return {
         ...seg,
         distance: result.distanceM,
         time: accurateTime,
+        travelMode: effectiveMode,
         customDuration: customSec,
         originalTime: result.durationS,
-        isHeuristic: result.isHeuristic ?? false,
-        heuristicReason: result.heuristicReason,
-        transitUrl: result.transitUrl ?? seg.transitUrl,
+        isHeuristic: effectiveMode === "transit" ? (result.isHeuristic ?? false) : false,
+        heuristicReason: effectiveMode === "walking" && isDirectWalk ? undefined : result.heuristicReason,
+        transitUrl: effectiveMode === "walking" ? undefined : (result.transitUrl ?? seg.transitUrl),
         stationFrom: result.stationFrom ?? seg.stationFrom,
         stationTo: result.stationTo ?? seg.stationTo,
         transitDetails: result.transitDetails ?? seg.transitDetails,

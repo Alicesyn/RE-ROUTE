@@ -116,6 +116,7 @@ export interface RouteSegment {
   distance: number;
   time: number; // in seconds (active time used in routing & schedule)
   travelMode: TravelMode;
+  customTravelMode?: boolean; // explicitly chosen by user for this segment
   isHeuristic?: boolean;
   heuristicReason?: string;
   customDuration?: number; // in seconds, set when user customizes transit time

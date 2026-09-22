@@ -4,6 +4,7 @@ import { Footprints, Train, Car, ChevronDown, Pencil, RotateCcw, X, Clock, Exter
 import { RouteSegment, TravelMode } from "../../types";
 import { toast } from "../../services/toastService";
 import { isJapanCoordinate, calculateJapanStationTransit } from "../../services/ekispertService";
+import { isWalkSegment } from "../../utils/distance";
 
 export interface SegmentPillProps {
   segment: RouteSegment;
@@ -23,9 +24,10 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
     const [customMinutesInput, setCustomMinutesInput] = useState<string | number>(activeMinutes);
     const popoverRef = useRef<HTMLDivElement>(null);
 
+    const isWalk = isWalkSegment(segment);
     const isCustom = segment.customDuration !== undefined;
     const estimatedMinutes = Math.round((segment.originalTime ?? segment.time) / 60);
-    const isHeuristicTransit = segment.travelMode === "transit" && segment.isHeuristic !== false;
+    const isHeuristicTransit = !isWalk && segment.travelMode === "transit" && segment.isHeuristic !== false;
 
     // Auto-hydrate transit details if in Japan and missing (e.g. loaded from earlier save/state)
     useEffect(() => {
@@ -75,6 +77,8 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
       if (origin && destination && isJapanCoordinate(origin.lat, origin.lng) && isJapanCoordinate(destination.lat, destination.lng)) {
         calculateJapanStationTransit(origin, destination).then((result) => {
           if (result && result.transitDetails) {
+            const details = result.transitDetails;
+            const isDirectWalk = !details.trainMin || details.trainMin === 0;
             useRouteStore.setState((prev) => {
               const newRoutes = [...prev.optimizedRoutes];
               const rIdx = newRoutes.findIndex((r) => r.day === dayIndex);
@@ -83,10 +87,11 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                 const finalTime = targetSeg.customDuration !== undefined ? targetSeg.customDuration : result.durationS;
                 const updatedSeg = {
                   ...targetSeg,
+                  travelMode: (targetSeg.travelMode === "transit" && isDirectWalk && !targetSeg.customTravelMode) ? "walking" as TravelMode : targetSeg.travelMode,
                   time: finalTime,
                   originalTime: result.durationS,
                   distance: result.distanceM,
-                  transitDetails: result.transitDetails,
+                  transitDetails: details,
                   stationFrom: result.stationFrom,
                   stationTo: result.stationTo,
                   transitUrl: result.transitUrl,
@@ -147,17 +152,20 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
       const num = Number(customMinutesInput);
       const validMin = Math.max(1, Math.min(480, Number.isFinite(num) && num > 0 ? Math.round(num) : activeMinutes));
       updateSegmentTransitTime(dayIndex, segmentIndex, validMin);
-      toast.success(`Transit time set to ${validMin} min.`);
+      toast.success(`${isWalk ? "Walk" : "Transit"} time set to ${validMin} min.`);
       setIsPopoverOpen(false);
     };
 
     const handleResetToEstimate = () => {
       updateSegmentTransitTime(dayIndex, segmentIndex, null);
-      toast.success(`Transit time reset to estimated ${estimatedMinutes} min.`);
+      toast.success(`${isWalk ? "Walk" : "Transit"} time reset to estimated ${estimatedMinutes} min.`);
       setIsPopoverOpen(false);
     };
 
     const getModeIcon = () => {
+      if (isWalk) {
+        return <Footprints className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
+      }
       switch (segment.travelMode) {
         case "walking":
           return <Footprints className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
@@ -200,7 +208,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
           onMouseLeave={() => setIsHovered(false)}
         >
           {/* Hover Tooltip: Total Time & Step Breakdown */}
-          {!isPopoverOpen && segment.travelMode === "transit" && (
+          {!isPopoverOpen && (segment.travelMode === "transit" || isWalk) && (
             <div
               role="tooltip"
               className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-40 pointer-events-none whitespace-nowrap transition-all duration-150 ${
@@ -211,18 +219,31 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
             >
               <div className="bg-surface-900/95 dark:bg-surface-800 text-white dark:text-surface-100 text-[11px] rounded-xl px-3.5 py-2.5 shadow-2xl border border-surface-700/60 dark:border-surface-600/60 backdrop-blur-md flex flex-col gap-1.5 min-w-[200px]">
                 <div className="flex items-center justify-between gap-3 border-b border-surface-700/60 pb-1">
-                  <div className="flex items-center gap-1.5 font-bold text-amber-300 dark:text-amber-400">
-                    <Train className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Total Transit: {activeMinutes} min</span>
+                  <div className={`flex items-center gap-1.5 font-bold ${isWalk ? "text-emerald-300 dark:text-emerald-400" : "text-amber-300 dark:text-amber-400"}`}>
+                    {isWalk ? (
+                      <Footprints className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <Train className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    )}
+                    <span>{isWalk ? `Walk: ${activeMinutes} min` : `Total Transit: ${activeMinutes} min`}</span>
                   </div>
-                  {segment.stationFrom && segment.stationTo && (
+                  {segment.stationFrom && segment.stationTo && !isWalk && (
                     <span className="text-[10px] text-surface-400 font-medium">
                       {segment.stationFrom} ➔ {segment.stationTo}
                     </span>
                   )}
                 </div>
 
-                {segment.transitDetails ? (
+                {isWalk ? (
+                  <div className="flex flex-col gap-1 text-[11px] text-surface-200 dark:text-surface-300 pl-1 pt-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <Footprints className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>
+                        <strong>{activeMinutes} min</strong> walk to next place ({formattedDistance})
+                      </span>
+                    </div>
+                  </div>
+                ) : segment.transitDetails ? (
                   <div className="flex flex-col gap-1 text-[11px] text-surface-200 dark:text-surface-300 pl-1 pt-0.5">
                     {segment.transitDetails.walkToStationMin === undefined && segment.transitDetails.trainMin === undefined ? (
                       <div className="flex items-center gap-1.5">
@@ -281,18 +302,20 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                 ? "bg-indigo-50/95 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-600/80 text-indigo-900 dark:text-indigo-200"
                 : isHeuristicTransit
                 ? "bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-600/70 text-amber-900 dark:text-amber-200"
+                : isWalk
+                ? "bg-emerald-50/90 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-700/70 text-emerald-900 dark:text-emerald-200"
                 : "bg-surface-50 dark:bg-surface-700/90 border border-surface-200 dark:border-surface-600 text-surface-700 dark:text-surface-100"
             }`}
           >
             {/* Travel Mode Dropdown */}
             <div
               className="relative flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
-              title="Change travel mode (Driving, Transit, Walking)"
+              title={isWalk ? "Walking to next place (Click to change mode)" : "Change travel mode (Driving, Transit, Walking)"}
             >
               {getModeIcon()}
               <ChevronDown className="w-3 h-3 text-surface-400 dark:text-surface-400" />
               <select
-                value={segment.travelMode || "driving"}
+                value={isWalk ? "walking" : (segment.travelMode || "driving")}
                 onChange={handleModeChange}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer bg-white dark:bg-surface-800 text-surface-900 dark:text-white"
                 title="Change travel mode"
@@ -323,8 +346,8 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
               }`}
               title={
                 isCustom
-                  ? `Custom transit time: ${activeMinutes} min (Estimated: ${estimatedMinutes} min) • Click to edit or reset`
-                  : `Estimated transit time: ${activeMinutes} min • Click to customize`
+                  ? `Custom ${isWalk ? "walk" : "transit"} time: ${activeMinutes} min (Estimated: ${estimatedMinutes} min) • Click to edit or reset`
+                  : `Estimated ${isWalk ? "walk" : "transit"} time: ${activeMinutes} min • Click to customize`
               }
             >
               <span>{activeMinutes} min</span>
@@ -344,7 +367,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
             </span>
 
             {/* Ekispert Live Timetable Link */}
-            {segment.transitUrl && (
+            {segment.transitUrl && !isWalk && (
               <>
                 <span className="text-surface-300 dark:text-surface-500">•</span>
                 <a
@@ -377,7 +400,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                   <span className="text-xs font-bold text-surface-900 dark:text-white">
-                    Customize Transit Time
+                    {isWalk ? "Customize Walk Time" : "Customize Transit Time"}
                   </span>
                 </div>
                 <button
@@ -391,7 +414,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
               </div>
 
               {/* Ekispert Station Route & Timetable Link */}
-              {segment.transitUrl && (
+              {segment.transitUrl && !isWalk && (
                 <div className="mb-3 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1.5 text-rose-900 dark:text-rose-200 font-medium text-[11px] truncate mr-2">
                     <Train className="w-3.5 h-3.5 text-rose-500 shrink-0" />
@@ -415,7 +438,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
               {/* Leg Details Note */}
               <div className="text-[11px] text-surface-500 dark:text-surface-400 mb-2 flex items-center justify-between">
                 <span>
-                  {segment.travelMode === "transit" ? "🚆 Transit" : segment.travelMode === "walking" ? "🚶 Walking" : "🚗 Driving"} • {formattedDistance}
+                  {isWalk ? "🚶 Walking" : segment.travelMode === "transit" ? "🚆 Transit" : "🚗 Driving"} • {formattedDistance}
                 </span>
                 <span className="text-surface-400">
                   Est: <strong className="text-surface-700 dark:text-surface-300">{estimatedMinutes}m</strong>
@@ -434,7 +457,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
               {/* Duration Stepper Input */}
               <div className="space-y-2 mb-3">
                 <label className="text-[10px] font-bold text-surface-500 uppercase tracking-wider block">
-                  Transit Duration:
+                  {isWalk ? "Walk Duration:" : "Transit Duration:"}
                 </label>
                 <div className="flex items-center border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden bg-surface-50 dark:bg-surface-900 shadow-2xs">
                   <button

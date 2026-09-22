@@ -44,9 +44,7 @@ const AboutModal = React.lazy(() =>
 const ResetTripModal = React.lazy(() =>
   import("./ResetTripModal").then((m) => ({ default: m.ResetTripModal }))
 );
-const AuthModal = React.lazy(() =>
-  import("../auth/AuthModal").then((m) => ({ default: m.AuthModal }))
-);
+import { AuthModal } from "../auth/AuthModal";
 const SaveTripModal = React.lazy(() =>
   import("./SaveTripModal").then((m) => ({ default: m.SaveTripModal }))
 );
@@ -55,6 +53,37 @@ import { analyticsService } from "../../services/analyticsService";
 import { toast } from "../../services/toastService";
 import { apiUsageService, ApiUsageStats, ApiBudgetLimits } from "../../services/apiUsageService";
 import { authService } from "../../services/authService";
+
+const UserAvatar: React.FC<{
+  user: { avatarUrl?: string; displayName?: string; email?: string };
+  size?: "sm" | "md";
+}> = ({ user, size = "sm" }) => {
+  const [imgFailed, setImgFailed] = useState(false);
+  const sizeClass = size === "sm" ? "w-5 h-5 sm:w-6 sm:h-6" : "w-10 h-10";
+  const textClass = size === "sm" ? "text-[10px] sm:text-[11px]" : "text-sm";
+
+  if (user.avatarUrl && !imgFailed) {
+    return (
+      <img
+        src={user.avatarUrl}
+        alt={user.displayName || "User avatar"}
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
+        onError={() => setImgFailed(true)}
+        className={`${sizeClass} rounded-full object-cover border border-surface-200 dark:border-surface-600 shrink-0`}
+      />
+    );
+  }
+
+  const initial = (user.displayName || user.email || "U")[0].toUpperCase();
+  return (
+    <div
+      className={`${sizeClass} rounded-full bg-primary-600 text-white flex items-center justify-center font-bold ${textClass} shrink-0`}
+    >
+      {initial}
+    </div>
+  );
+};
 
 export const Header: React.FC = React.memo(() => {
   const appMode = useRouteStore((s) => s.appMode);
@@ -355,17 +384,7 @@ export const Header: React.FC = React.memo(() => {
               className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 sm:py-1.5 rounded-full text-xs font-semibold border outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-700 transition-all shadow-2xs cursor-pointer"
               title="Manage Account & Multi-Device Cloud Sync"
             >
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt={user.displayName || "User"}
-                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-surface-200 dark:border-surface-600"
-                />
-              ) : (
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary-600 text-white flex items-center justify-center text-[10px] sm:text-[11px] font-bold">
-                  {(user.displayName || user.email || "U")[0].toUpperCase()}
-                </div>
-              )}
+              <UserAvatar user={user} size="sm" />
               <span className="hidden sm:inline max-w-[90px] truncate text-xs font-bold text-surface-800 dark:text-surface-100">
                 {user.displayName?.split(" ")[0] || "Account"}
               </span>
@@ -398,17 +417,7 @@ export const Header: React.FC = React.memo(() => {
             <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-surface-800 rounded-2xl shadow-xl border border-surface-200 dark:border-surface-700 py-3 z-50 animate-in fade-in zoom-in-95 duration-100">
               {/* Profile Header */}
               <div className="px-4 pb-3 border-b border-surface-100 dark:border-surface-700/80 flex items-center gap-3">
-                {user.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.displayName}
-                    className="w-10 h-10 rounded-full object-cover border border-surface-200 dark:border-surface-700 shrink-0"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold shrink-0">
-                    {(user.displayName || user.email)[0].toUpperCase()}
-                  </div>
-                )}
+                <UserAvatar user={user} size="md" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-bold text-surface-900 dark:text-white truncate">
                     {user.displayName}
@@ -809,12 +818,10 @@ export const Header: React.FC = React.memo(() => {
         </React.Suspense>
       )}
       {isAuthOpen && (
-        <React.Suspense fallback={null}>
-          <AuthModal
-            isOpen={isAuthOpen}
-            onClose={() => setIsAuthOpen(false)}
-          />
-        </React.Suspense>
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+        />
       )}
       {isSaveModalOpen && (
         <React.Suspense fallback={null}>

@@ -40,42 +40,64 @@ const getStopIcon = (color: string, number: number): L.DivIcon => {
   return iconCache.get(key)!;
 };
 
+const isValidCoord = (val: any): val is number => {
+  return typeof val === "number" && !isNaN(val) && isFinite(val);
+};
+
 // A component to auto-fit map bounds only when coordinates actually change
 const MapBounds: React.FC<{ places: any[]; hotels: any[] }> = React.memo(
   ({ places, hotels }) => {
     const map = useMap();
     const prevPointsSignatureRef = useRef<string>("");
 
+    const validPlaces = useMemo(
+      () => (places || []).filter((p) => p && isValidCoord(p.lat) && isValidCoord(p.lng)),
+      [places]
+    );
+    const validHotels = useMemo(
+      () => (hotels || []).filter((h) => h && isValidCoord(h.lat) && isValidCoord(h.lng)),
+      [hotels]
+    );
+
     const pointsSignature = useMemo(() => {
-      const pStr = places
-        .map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`)
+      const pStr = validPlaces
+        .map((p) => `${Number(p.lat).toFixed(4)},${Number(p.lng).toFixed(4)}`)
         .join(";");
-      const hStr = hotels
-        .map((h) => `${h.lat.toFixed(4)},${h.lng.toFixed(4)}`)
+      const hStr = validHotels
+        .map((h) => `${Number(h.lat).toFixed(4)},${Number(h.lng).toFixed(4)}`)
         .join(";");
       return `${pStr}|${hStr}`;
-    }, [places, hotels]);
+    }, [validPlaces, validHotels]);
 
     useEffect(() => {
       if (prevPointsSignatureRef.current === pointsSignature) return;
       prevPointsSignatureRef.current = pointsSignature;
 
       const points: [number, number][] = [
-        ...places.map((p) => [p.lat, p.lng] as [number, number]),
-        ...hotels.map((h) => [h.lat, h.lng] as [number, number]),
+        ...validPlaces.map((p) => [p.lat, p.lng] as [number, number]),
+        ...validHotels.map((h) => [h.lat, h.lng] as [number, number]),
       ];
 
       if (points.length > 0) {
-        const bounds = L.latLngBounds(points);
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        try {
+          const bounds = L.latLngBounds(points);
+          if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+          }
+        } catch (err) {
+          console.warn("Failed to fit map bounds:", err);
+        }
       }
-    }, [pointsSignature, places, hotels, map]);
+    }, [pointsSignature, validPlaces, validHotels, map]);
 
     useEffect(() => {
-      const resizeTimer = setTimeout(() => {
-        map.invalidateSize();
-      }, 200);
-      return () => clearTimeout(resizeTimer);
+      map.invalidateSize();
+      const t1 = setTimeout(() => map.invalidateSize(), 150);
+      const t2 = setTimeout(() => map.invalidateSize(), 500);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }, [map]);
 
     return null;
@@ -90,14 +112,21 @@ export const MapView: React.FC = React.memo(() => {
   const hotels = useRouteStore((s) => s.hotels);
   const optimizedRoutes = useRouteStore((s) => s.optimizedRoutes);
 
-  const activePlaces = useMemo(() => places.filter((p) => !p.isDisabled), [places]);
+  const activePlaces = useMemo(
+    () => (places || []).filter((p) => p && !p.isDisabled && isValidCoord(p.lat) && isValidCoord(p.lng)),
+    [places]
+  );
 
   // If no places, show NYC by default
   const defaultCenter: [number, number] = useMemo(() => {
-    const targetPlaces = activePlaces.length > 0 ? activePlaces : places;
-    return targetPlaces.length > 0
-      ? [targetPlaces[0].lat, targetPlaces[0].lng]
-      : [40.758, -73.9855];
+    if (activePlaces.length > 0) {
+      return [activePlaces[0].lat, activePlaces[0].lng];
+    }
+    const anyValid = (places || []).filter((p) => p && isValidCoord(p.lat) && isValidCoord(p.lng));
+    if (anyValid.length > 0) {
+      return [anyValid[0].lat, anyValid[0].lng];
+    }
+    return [35.6762, 139.6503]; // Default Tokyo coordinates
   }, [places, activePlaces]);
 
   return (
@@ -155,21 +184,27 @@ export const MapView: React.FC = React.memo(() => {
           const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
           const positions: [number, number][] = [];
 
-          if (route.startHotel)
+          if (route.startHotel && isValidCoord(route.startHotel.lat) && isValidCoord(route.startHotel.lng))
             positions.push([route.startHotel.lat, route.startHotel.lng]);
-          route.stops.forEach((s) => positions.push([s.lat, s.lng]));
-          if (route.endHotel)
+          route.stops.forEach((s) => {
+            if (s && isValidCoord(s.lat) && isValidCoord(s.lng)) {
+              positions.push([s.lat, s.lng]);
+            }
+          });
+          if (route.endHotel && isValidCoord(route.endHotel.lat) && isValidCoord(route.endHotel.lng))
             positions.push([route.endHotel.lat, route.endHotel.lng]);
 
           return (
             <React.Fragment key={i}>
-              <Polyline
-                positions={positions}
-                pathOptions={{ color, weight: 4, opacity: 0.8 }}
-              />
+              {positions.length > 1 && (
+                <Polyline
+                  positions={positions}
+                  pathOptions={{ color, weight: 4, opacity: 0.8 }}
+                />
+              )}
 
               {/* Start Hotel Marker */}
-              {route.startHotel && (
+              {route.startHotel && isValidCoord(route.startHotel.lat) && isValidCoord(route.startHotel.lng) && (
                 <Marker
                   key={`start-hotel-${i}`}
                   position={[route.startHotel.lat, route.startHotel.lng]}
@@ -183,7 +218,7 @@ export const MapView: React.FC = React.memo(() => {
               )}
 
               {/* End Hotel Marker (if different) */}
-              {route.endHotel &&
+              {route.endHotel && isValidCoord(route.endHotel.lat) && isValidCoord(route.endHotel.lng) &&
                 (!route.startHotel ||
                   route.startHotel.name !== route.endHotel.name) && (
                   <Marker
@@ -199,7 +234,9 @@ export const MapView: React.FC = React.memo(() => {
                 )}
 
               {/* Stop Markers */}
-              {route.stops.map((stop, stopIdx) => {
+              {route.stops
+                .filter((stop) => stop && isValidCoord(stop.lat) && isValidCoord(stop.lng))
+                .map((stop, stopIdx) => {
                 const icon = getStopIcon(color, stopIdx + 1);
 
                 return (

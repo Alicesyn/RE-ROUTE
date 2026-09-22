@@ -8,6 +8,7 @@ import {
 } from "../types";
 import { CATEGORY_DEFAULTS } from "../utils/categoryConstants";
 import { checkTimeConflict } from "../utils/timeUtils";
+import { isWalkSegment } from "../utils/distance";
 
 const getCategoryEmoji = (cat: PlaceCategory): string =>
   CATEGORY_DEFAULTS[cat]?.emoji || "📍";
@@ -392,7 +393,7 @@ function computeDaySchedule(
         simSegIdx++;
         const segTimeMin = Math.round(seg.time / 60);
         createdItem.transitToNext = {
-          mode: seg.travelMode,
+          mode: isWalkSegment(seg) ? "walking" : seg.travelMode,
           time: seg.time,
           distance: seg.distance,
           isCustom: seg.customDuration !== undefined,
