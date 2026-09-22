@@ -26,6 +26,7 @@ import { cloudTripService } from "../../services/cloudTripService";
 interface LoadTripModalProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultTab?: "all" | "cloud" | "local";
 }
 
 export const formatTripTimestamp = (timestamp?: number | string): string => {
@@ -50,6 +51,7 @@ export const formatTripTimestamp = (timestamp?: number | string): string => {
 export const LoadTripModal: React.FC<LoadTripModalProps> = ({
   isOpen,
   onClose,
+  defaultTab = "all",
 }) => {
   const {
     savedTrips,
@@ -70,7 +72,13 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
     renameCloudTrip,
   } = useRouteStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState<"all" | "cloud" | "local">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "cloud" | "local">(defaultTab);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setActiveTab(defaultTab);
+    }
+  }, [isOpen, defaultTab]);
   const [isImporting, setIsImporting] = useState(false);
   const [exportingTripId, setExportingTripId] = useState<string | null>(null);
   const [exportingExcelTripId, setExportingExcelTripId] = useState<string | null>(null);
@@ -196,30 +204,34 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
   if (!isOpen) return null;
 
   // Build unified trip list (excluding quickSave to keep it completely separate)
-  const cloudIds = new Set(cloudTrips.map((ct) => ct.id));
-  const allTripsMap = new Map<string, ItinerarySnapshot & { isCloud?: boolean }>();
+  // 1. Local trips: all non-quick-save trips in savedTrips
+  const localTripsList: (ItinerarySnapshot & { isCloud: boolean })[] = savedTrips
+    .filter((t) => !t.isQuickSave && !t.id.startsWith("quicksave_"))
+    .map((t) => ({
+      ...t,
+      isCloud: false,
+    }));
 
-  savedTrips.forEach((t) => {
-    if (!t.isQuickSave && !t.id.startsWith("quicksave_")) {
-      allTripsMap.set(t.id, { ...t, isCloud: cloudIds.has(t.id) || !!t.cloudId });
-    }
-  });
+  // 2. Cloud trips: all non-quick-save trips in cloudTrips
+  const cloudTripsList: (ItinerarySnapshot & { isCloud: boolean })[] = cloudTrips
+    .filter((t) => !t.isQuickSave && !t.id.startsWith("quicksave_"))
+    .map((t) => ({
+      ...t,
+      isCloud: true,
+    }));
 
-  cloudTrips.forEach((t) => {
-    if (!t.isQuickSave && !t.id.startsWith("quicksave_")) {
-      allTripsMap.set(t.id, { ...t, isCloud: true });
-    }
-  });
-
-  const mergedTrips = Array.from(allTripsMap.values()).sort(
+  // Combined list for "All Trips" tab
+  // If a trip exists in both local and cloud, both are preserved distinctly with unique keys and badges
+  const allTripsList = [...localTripsList, ...cloudTripsList].sort(
     (a, b) => (b.updatedAt || b.savedAt || 0) - (a.updatedAt || a.savedAt || 0)
   );
 
-  const displayTrips = mergedTrips.filter((t) => {
-    if (activeTab === "cloud") return t.isCloud;
-    if (activeTab === "local") return !t.isCloud;
-    return true;
-  });
+  const displayTrips =
+    activeTab === "cloud"
+      ? [...cloudTripsList].sort((a, b) => (b.updatedAt || b.savedAt || 0) - (a.updatedAt || a.savedAt || 0))
+      : activeTab === "local"
+      ? [...localTripsList].sort((a, b) => (b.updatedAt || b.savedAt || 0) - (a.updatedAt || a.savedAt || 0))
+      : allTripsList;
 
   return (
     <AnimatePresence>
@@ -259,7 +271,7 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                     : "border-transparent text-surface-500 hover:text-surface-800 dark:hover:text-surface-200"
                 }`}
               >
-                All Trips ({mergedTrips.length})
+                All Trips ({allTripsList.length})
               </button>
               <button
                 onClick={() => setActiveTab("cloud")}
@@ -270,7 +282,7 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                 }`}
               >
                 <Cloud className="w-3.5 h-3.5 text-emerald-500" />
-                Cloud Synced ({cloudTrips.length})
+                Cloud Synced ({cloudTripsList.length})
               </button>
               <button
                 onClick={() => setActiveTab("local")}
@@ -281,7 +293,7 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                 }`}
               >
                 <HardDrive className="w-3.5 h-3.5 text-surface-400" />
-                This Device Only ({mergedTrips.filter((t) => !t.isCloud).length})
+                This Device Only ({localTripsList.length})
               </button>
             </div>
           )}
@@ -404,12 +416,14 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                 <p className="text-surface-500 dark:text-surface-400 font-medium">
                   {activeTab === "cloud"
                     ? "No cloud-synced trips found."
+                    : activeTab === "local"
+                    ? "No local trips saved on this device."
                     : "You haven't saved any trips yet."}
                 </p>
                 <p className="text-sm text-surface-400 dark:text-surface-500 mt-1">
                   {activeTab === "cloud"
                     ? "Click 'Save to Cloud' in the header to sync trips across devices."
-                    : "Click 'Save' in the header to save your current itinerary, or import a .json file."}
+                    : "Click 'Save' in the header to save your current itinerary locally, or import a .json file."}
                 </p>
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -432,7 +446,7 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
             ) : (
               <div className="space-y-3">
                 {displayTrips.map((trip) => (
-                  <div key={trip.id} className="relative group">
+                  <div key={trip.isCloud ? `cloud_${trip.id}` : `local_${trip.id}`} className="relative group">
                     <button
                       onClick={async () => {
                         if (trip.isCloud) {
@@ -594,9 +608,10 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                           e.stopPropagation();
                           if (trip.isCloud) {
                             await deleteCloudTrip(trip.id);
+                          } else {
+                            deleteTrip(trip.id);
+                            toast.info(`Deleted "${trip.title}".`, "Trip Deleted");
                           }
-                          deleteTrip(trip.id);
-                          toast.info(`Deleted "${trip.title}".`, "Trip Deleted");
                         }}
                         className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors cursor-pointer"
                         title="Delete trip"

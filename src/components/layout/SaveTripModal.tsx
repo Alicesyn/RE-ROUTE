@@ -48,11 +48,11 @@ export const SaveTripModal: React.FC<SaveTripModalProps> = ({
   const existingTrip = React.useMemo(() => {
     const trimmed = tripName.trim().toLowerCase();
     if (!trimmed) return null;
-    return (
-      savedTrips.find((t) => t.title?.trim().toLowerCase() === trimmed) ||
-      cloudTrips.find((t) => t.title?.trim().toLowerCase() === trimmed)
-    );
-  }, [tripName, savedTrips, cloudTrips]);
+    if (saveMode === "cloud") {
+      return cloudTrips.find((t) => t.title?.trim().toLowerCase() === trimmed);
+    }
+    return savedTrips.find((t) => t.title?.trim().toLowerCase() === trimmed);
+  }, [tripName, saveMode, savedTrips, cloudTrips]);
 
   useEffect(() => {
     if (isOpen) {

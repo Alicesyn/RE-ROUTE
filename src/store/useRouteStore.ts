@@ -175,7 +175,7 @@ interface RouteState extends ModeData {
   renameSavedTrip: (id: string, newTitle: string) => void;
   loadTrip: (id: string) => void;
   deleteTrip: (id: string) => void;
-  applyTripSnapshot: (snapshot: ItinerarySnapshot) => void;
+  applyTripSnapshot: (snapshot: ItinerarySnapshot, saveToLocal?: boolean) => void;
   exportTripAsJson: (tripId?: string) => void;
   exportTripAsExcel: (tripId?: string) => Promise<void>;
   importTripFromJson: (jsonString: string) => { success: boolean; error?: string; tripTitle?: string };
@@ -1472,21 +1472,26 @@ export const useRouteStore = create<RouteState>()(
             savedAt: Date.now(),
             updatedAt: Date.now(),
           };
-          // Update existing trip if title matches exactly (simple heuristic), otherwise create new
+          // Update existing local trip if title matches case-insensitively, otherwise create new
           const existingIndex = state.savedTrips.findIndex(
-            (t) => t.title === tripTitle,
+            (t) => t.title?.trim().toLowerCase() === tripTitle.trim().toLowerCase(),
           );
           if (existingIndex >= 0) {
+            const existing = state.savedTrips[existingIndex];
+            // If the existing entry had a cloud ID or cloudId, give it a fresh local ID so it doesn't collide
+            const isCloudId = state.cloudTrips.some((ct) => ct.id === existing.id) || !!existing.cloudId;
             const newTrips = [...state.savedTrips];
             newTrips[existingIndex] = {
               ...snapshot,
-              id: state.savedTrips[existingIndex].id,
-              savedAt: state.savedTrips[existingIndex].savedAt || snapshot.savedAt,
+              id: isCloudId ? `trip_${Date.now()}` : existing.id,
+              savedAt: existing.savedAt || snapshot.savedAt,
               updatedAt: Date.now(),
-            }; // keep old ID, update updatedAt
-            return { savedTrips: newTrips, title: tripTitle };
+              cloudId: undefined,
+              isCloudSynced: false,
+            };
+            return { savedTrips: newTrips, title: tripTitle, activeCloudTripId: null, syncStatus: "idle" };
           }
-          return { savedTrips: [...state.savedTrips, snapshot], title: tripTitle };
+          return { savedTrips: [...state.savedTrips, snapshot], title: tripTitle, activeCloudTripId: null, syncStatus: "idle" };
         }),
 
       renameSavedTrip: (id: string, newTitle: string) =>
@@ -1505,6 +1510,8 @@ export const useRouteStore = create<RouteState>()(
           if (!trip) return state;
           return {
             title: trip.title || state.title,
+            activeCloudTripId: null,
+            syncStatus: "idle",
             days: trip.days ?? state.days,
             startDate: trip.startDate || state.startDate,
             endDate: trip.endDate || state.endDate,
@@ -1541,21 +1548,24 @@ export const useRouteStore = create<RouteState>()(
           };
         }),
 
-      applyTripSnapshot: (trip) =>
+      applyTripSnapshot: (trip, saveToLocal = false) =>
         set((state) => {
-          const existingIndex = state.savedTrips.findIndex(
-            (t) => t.id === trip.id || t.title === trip.title,
-          );
-          const snapshotWithId: ItinerarySnapshot = {
-            ...trip,
-            id: trip.id || `trip_${Date.now()}`,
-            savedAt: trip.savedAt || Date.now(),
-          };
-          const newSavedTrips = [...state.savedTrips];
-          if (existingIndex >= 0) {
-            newSavedTrips[existingIndex] = snapshotWithId;
-          } else {
-            newSavedTrips.push(snapshotWithId);
+          let newSavedTrips = state.savedTrips;
+          if (saveToLocal) {
+            const existingIndex = state.savedTrips.findIndex(
+              (t) => t.id === trip.id || t.title?.trim().toLowerCase() === trip.title?.trim().toLowerCase(),
+            );
+            const snapshotWithId: ItinerarySnapshot = {
+              ...trip,
+              id: trip.id || `trip_${Date.now()}`,
+              savedAt: trip.savedAt || Date.now(),
+            };
+            newSavedTrips = [...state.savedTrips];
+            if (existingIndex >= 0) {
+              newSavedTrips[existingIndex] = snapshotWithId;
+            } else {
+              newSavedTrips.push(snapshotWithId);
+            }
           }
 
           return {
@@ -1601,7 +1611,7 @@ export const useRouteStore = create<RouteState>()(
         const state = get();
         let tripToExport: ItinerarySnapshot;
         if (tripId) {
-          const found = state.savedTrips.find((t) => t.id === tripId);
+          const found = state.savedTrips.find((t) => t.id === tripId) || state.cloudTrips.find((t) => t.id === tripId);
           if (!found) return;
           tripToExport = found;
         } else {
@@ -1660,7 +1670,7 @@ export const useRouteStore = create<RouteState>()(
         const state = get();
         let tripToExport: ItinerarySnapshot;
         if (tripId) {
-          const found = state.savedTrips.find((t) => t.id === tripId);
+          const found = state.savedTrips.find((t) => t.id === tripId) || state.cloudTrips.find((t) => t.id === tripId);
           if (!found) return;
           tripToExport = found;
         } else {
@@ -1771,7 +1781,7 @@ export const useRouteStore = create<RouteState>()(
             savedAt: trip.savedAt || Date.now(),
           };
 
-          get().applyTripSnapshot(snapshot);
+          get().applyTripSnapshot(snapshot, true);
           return { success: true, tripTitle: snapshot.title };
         } catch (err: any) {
           console.error("Failed to parse trip JSON:", err);
@@ -2044,7 +2054,7 @@ export const useRouteStore = create<RouteState>()(
           return false;
         }
 
-        get().applyTripSnapshot(trip);
+        get().applyTripSnapshot(trip, false);
         set({
           activeCloudTripId: trip.id,
           syncStatus: "synced",

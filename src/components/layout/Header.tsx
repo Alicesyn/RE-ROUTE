@@ -110,6 +110,7 @@ export const Header: React.FC = React.memo(() => {
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isLoadOpen, setIsLoadOpen] = useState(false);
+  const [loadModalTab, setLoadModalTab] = useState<"all" | "cloud" | "local">("all");
   const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false);
   const [isApiBudgetOpen, setIsApiBudgetOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -529,6 +530,7 @@ export const Header: React.FC = React.memo(() => {
                 <button
                   onClick={() => {
                     setIsAccountMenuOpen(false);
+                    setLoadModalTab("cloud");
                     setIsLoadOpen(true);
                   }}
                   className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center justify-between transition-colors cursor-pointer"
@@ -589,7 +591,10 @@ export const Header: React.FC = React.memo(() => {
         </button>
 
         <button
-          onClick={() => setIsLoadOpen(true)}
+          onClick={() => {
+            setLoadModalTab("all");
+            setIsLoadOpen(true);
+          }}
           className="flex items-center gap-1.5 text-surface-600 dark:text-surface-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium text-xs sm:text-sm transition-colors px-2 py-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700"
           title="Load saved trips"
         >
@@ -785,6 +790,7 @@ export const Header: React.FC = React.memo(() => {
           <LoadTripModal
             isOpen={isLoadOpen}
             onClose={() => setIsLoadOpen(false)}
+            defaultTab={loadModalTab}
           />
         </React.Suspense>
       )}
