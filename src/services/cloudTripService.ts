@@ -106,4 +106,46 @@ export const cloudTripService = {
       return { success: false, error: err.message || "Failed to delete cloud trip." };
     }
   },
+
+  renameTripInCloud: async (tripId: string, newTitle: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: "Supabase is not configured." };
+    }
+
+    try {
+      const { data: currentData, error: fetchErr } = await supabase
+        .from("trips")
+        .select("data")
+        .eq("id", tripId)
+        .single();
+
+      if (fetchErr) {
+        return { success: false, error: fetchErr.message };
+      }
+
+      const updatedData = {
+        ...(currentData?.data || {}),
+        title: newTitle,
+        updatedAt: Date.now(),
+      };
+
+      const { error: updateErr } = await supabase
+        .from("trips")
+        .update({
+          title: newTitle,
+          data: updatedData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", tripId);
+
+      if (updateErr) {
+        return { success: false, error: updateErr.message };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Unexpected error renaming cloud trip:", err);
+      return { success: false, error: err.message || "Failed to rename cloud trip." };
+    }
+  },
 };

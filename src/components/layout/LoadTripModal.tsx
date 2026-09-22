@@ -15,6 +15,8 @@ import {
   HardDrive,
   CloudUpload,
   Zap,
+  Edit2,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "../../services/toastService";
@@ -45,6 +47,8 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
     quickSave,
     loadQuickSave,
     deleteQuickSave,
+    renameSavedTrip,
+    renameCloudTrip,
   } = useRouteStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<"all" | "cloud" | "local">("all");
@@ -52,6 +56,37 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
   const [exportingTripId, setExportingTripId] = useState<string | null>(null);
   const [exportingExcelTripId, setExportingExcelTripId] = useState<string | null>(null);
   const [uploadingTripId, setUploadingTripId] = useState<string | null>(null);
+  const [editingTripId, setEditingTripId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
+
+  const handleStartRename = (e: React.MouseEvent, trip: any) => {
+    e.stopPropagation();
+    setEditingTripId(trip.id);
+    setEditingTitle(trip.title);
+  };
+
+  const handleSaveRename = async (e: React.MouseEvent | React.FormEvent, trip: any) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const trimmed = editingTitle.trim();
+    if (!trimmed || trimmed === trip.title) {
+      setEditingTripId(null);
+      return;
+    }
+    setIsRenaming(true);
+    try {
+      if (trip.isCloud) {
+        await renameCloudTrip(trip.id, trimmed);
+      } else {
+        renameSavedTrip(trip.id, trimmed);
+        toast.success(`Renamed trip to "${trimmed}".`, "Trip Renamed");
+      }
+      setEditingTripId(null);
+    } finally {
+      setIsRenaming(false);
+    }
+  };
 
   React.useEffect(() => {
     if (isOpen && user) {
@@ -391,9 +426,55 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
                     >
                       <div className="flex justify-between items-start gap-2">
                         <div className="space-y-1">
-                          <h3 className="font-bold text-surface-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors text-base sm:text-lg">
-                            {trip.title}
-                          </h3>
+                          {editingTripId === trip.id ? (
+                            <form
+                              onSubmit={(e) => handleSaveRename(e, trip)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-1.5 min-w-[220px]"
+                            >
+                              <input
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                autoFocus
+                                maxLength={80}
+                                className="px-2 py-1 text-sm font-bold border border-primary-400 dark:border-primary-500 rounded-lg bg-white dark:bg-surface-800 text-surface-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                              <button
+                                type="submit"
+                                disabled={isRenaming}
+                                className="p-1 rounded-md bg-primary-600 hover:bg-primary-700 text-white cursor-pointer"
+                                title="Save Name"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTripId(null);
+                                }}
+                                className="p-1 rounded-md bg-surface-200 hover:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-600 dark:text-surface-300 cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center gap-1.5 group/title">
+                              <h3 className="font-bold text-surface-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors text-base sm:text-lg">
+                                {trip.title}
+                              </h3>
+                              <button
+                                type="button"
+                                onClick={(e) => handleStartRename(e, trip)}
+                                className="p-1 text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-md transition-colors opacity-0 group-hover/title:opacity-100 cursor-pointer"
+                                title="Rename trip"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                           <div className="flex items-center gap-2 flex-wrap">
                             {trip.isCloud ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
@@ -433,6 +514,16 @@ export const LoadTripModal: React.FC<LoadTripModalProps> = ({
 
                     {/* Action buttons on card */}
                     <div className="absolute right-3 bottom-3 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                      {/* Rename button */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartRename(e, trip)}
+                        className="p-1.5 text-surface-500 hover:text-primary-600 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors cursor-pointer"
+                        title="Rename trip"
+                      >
+                        <Edit2 className="w-4 h-4 text-surface-500 dark:text-surface-400" />
+                      </button>
+
                       {/* Upload to cloud button for local-only trips */}
                       {!trip.isCloud && user && (
                         <button

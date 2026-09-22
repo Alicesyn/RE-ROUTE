@@ -541,11 +541,15 @@ function evaluateRouteCost(
       const place = to as Place;
       const duration = place.estimatedDuration || 60;
 
-      if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
-        const conflict = checkTimeConflict(currentTime, duration, place.openingHours, currentDate);
+      if (avoidClosedHours && ((place.openingHours && place.openingHours.length > 0) || place.allowedTimeRange)) {
+        const conflict = checkTimeConflict(currentTime, duration, place.openingHours, currentDate, place.allowedTimeRange);
         if (conflict.hasConflict) {
           conflicts++;
           penaltyMinutes += 60;
+        }
+        if (conflict.effectiveStartTime && conflict.effectiveStartTime > currentTime) {
+          penaltyMinutes += (conflict.effectiveStartTime - currentTime);
+          currentTime = conflict.effectiveStartTime;
         } else if (conflict.waitMinutes && conflict.waitMinutes > 0) {
           currentTime += conflict.waitMinutes;
           penaltyMinutes += conflict.waitMinutes;
@@ -587,10 +591,26 @@ function optimize2OptSub(
 ): Place[] {
   if (places.length <= 1) return places;
 
+  const getOpenMin = (p: Place) => {
+    let openMin = 540;
+    const hours = getPlaceDayHours(p.openingHours, currentDate);
+    if (hours === "24hours") openMin = 0;
+    else if (hours === "closed") openMin = 9999;
+    else if (typeof hours === "object" && hours) openMin = hours.open;
+
+    if (p.allowedTimeRange?.startTime) {
+      const allowedOpen = parseTimeToMinutes(p.allowedTimeRange.startTime);
+      openMin = Math.max(openMin, allowedOpen);
+    }
+    return openMin;
+  };
+
   // For small N (<= 6 stops), exact permutation search guarantees zero conflicts, proper meal spacing, and optimal distance
   if (places.length <= 6) {
     let bestPoints: (Hotel | Place)[] = [];
     let bestCost = Infinity;
+
+    const sortedInput = avoidClosedHours ? [...places].sort((a, b) => getOpenMin(a) - getOpenMin(b)) : places;
 
     const permute = (arr: Place[], current: Place[] = []) => {
       if (arr.length === 0) {
@@ -622,7 +642,7 @@ function optimize2OptSub(
       }
     };
 
-    permute(places);
+    permute(sortedInput);
 
     const placeStart = startAnchor ? 1 : 0;
     const placeEnd = endAnchor ? bestPoints.length - 1 : bestPoints.length;
@@ -633,13 +653,7 @@ function optimize2OptSub(
   // 1. Initial smart sort: sort places by opening time so early-opening places come first
   let sortedPlaces = [...places];
   if (avoidClosedHours) {
-    sortedPlaces.sort((a, b) => {
-      const aHours = getPlaceDayHours(a.openingHours, currentDate);
-      const bHours = getPlaceDayHours(b.openingHours, currentDate);
-      const aOpen = typeof aHours === "object" && aHours ? aHours.open : 720;
-      const bOpen = typeof bHours === "object" && bHours ? bHours.open : 720;
-      return aOpen - bOpen;
-    });
+    sortedPlaces.sort((a, b) => getOpenMin(a) - getOpenMin(b));
   }
 
   // Interleave categories with minSpacing (e.g. restaurant) so the initial order doesn't start with back-to-back meals
@@ -865,9 +879,32 @@ function optimizeDayRoute(
       // Penalize assigning to a window where the place is closed
       if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
         const hours = getPlaceDayHours(place.openingHours, currentDate);
-        if (typeof hours === "object" && hours) {
+        if (hours === "closed") {
+          score += 50000000;
+        } else if (typeof hours === "object" && hours) {
           if (windowEndTimes[w] <= hours.open || windowStartTimes[w] >= hours.close) {
-            score += 1000000;
+            score += 50000000;
+          } else {
+            const overlapStart = Math.max(windowStartTimes[w], hours.open);
+            const overlapEnd = Math.min(windowEndTimes[w], hours.close);
+            if (overlapEnd - overlapStart < duration) {
+              score += 25000000;
+            }
+          }
+        }
+      }
+
+      // Penalize assigning to a window outside user-defined allowedTimeRange
+      if (place.allowedTimeRange?.startTime && place.allowedTimeRange?.endTime) {
+        const rangeStart = parseTimeToMinutes(place.allowedTimeRange.startTime);
+        const rangeEnd = parseTimeToMinutes(place.allowedTimeRange.endTime);
+        if (windowEndTimes[w] <= rangeStart || windowStartTimes[w] >= rangeEnd) {
+          score += 50000000;
+        } else {
+          const overlapStart = Math.max(windowStartTimes[w], rangeStart);
+          const overlapEnd = Math.min(windowEndTimes[w], rangeEnd);
+          if (overlapEnd - overlapStart < duration) {
+            score += 25000000;
           }
         }
       }
@@ -1094,8 +1131,12 @@ function buildDayRoute(
       toId,
       isHeuristic: true,
       heuristicReason: segMode === "transit"
-        ? "Transit time estimated geometrically (~18 km/h local / ~162 km/h express)."
+        ? (existing?.heuristicReason || "Transit time estimated geometrically (~18 km/h local / ~162 km/h express).")
         : undefined,
+      transitUrl: existing?.transitUrl,
+      stationFrom: existing?.stationFrom,
+      stationTo: existing?.stationTo,
+      transitDetails: existing?.transitDetails,
     });
   }
 
@@ -1187,6 +1228,7 @@ function evictClosedHourConflicts(
         stop.estimatedDuration || 60,
         stop.openingHours,
         currentDate,
+        stop.allowedTimeRange,
       );
 
       if (!isPinnedOrCustom && conflict.hasConflict) {
@@ -1275,24 +1317,24 @@ export async function fetchAccurateRouteTimes(
   baseDate = setMinutes(setHours(baseDate, startH), startM);
 
   const segmentPromises = newSegments.map(async (seg, i) => {
-    if (!points[i] || !points[i + 1]) return seg;
+    const findPoint = (id?: string) => {
+      if (!id) return null;
+      if (id === "start-hotel" && route.startHotel) return route.startHotel;
+      if (id === "end-hotel" && route.endHotel) return route.endHotel;
+      const stop = route.stops.find((s) => String(s.id) === String(id));
+      if (stop) return stop;
+      return null;
+    };
+
+    const origin = findPoint(seg.fromId) || points[i];
+    const destination = findPoint(seg.toId) || points[i + 1];
+
+    if (!origin || !destination) return seg;
 
     const customSec = seg.customDuration ?? getCustomTransitDuration(seg.fromId, seg.toId, customTransitTimes);
-    if (customSec !== undefined) {
-      return {
-        ...seg,
-        time: customSec,
-        customDuration: customSec,
-        originalTime: seg.originalTime ?? seg.time,
-      };
-    }
 
     try {
       // Calculate departure time for this segment
-      // (baseDate + accumulated time so far + visit time of stops)
-      // Since we fetch in parallel, we don't know exact departure time easily unless we do it sequentially.
-      // But transit is the only one that needs it. Let's just pass baseDate for now to avoid sequential blocking,
-      // or we can calculate estimated departure time based on previous estimates.
       let estimatedDeparture = new Date(baseDate);
       
       // Add previous segments time and visit times
@@ -1306,28 +1348,34 @@ export async function fetchAccurateRouteTimes(
       estimatedDeparture = new Date(estimatedDeparture.getTime() + accumulatedSeconds * 1000);
 
       const result = await fetchRouteSegment(
-        points[i],
-        points[i + 1],
+        origin,
+        destination,
         seg.travelMode,
         estimatedDeparture
       );
-      const accurateTime = seg.customDuration !== undefined ? seg.customDuration : result.durationS;
+      const accurateTime = customSec !== undefined ? customSec : result.durationS;
       return {
         ...seg,
         distance: result.distanceM,
         time: accurateTime,
+        customDuration: customSec,
         originalTime: result.durationS,
         isHeuristic: result.isHeuristic ?? false,
         heuristicReason: result.heuristicReason,
+        transitUrl: result.transitUrl ?? seg.transitUrl,
+        stationFrom: result.stationFrom ?? seg.stationFrom,
+        stationTo: result.stationTo ?? seg.stationTo,
+        transitDetails: result.transitDetails ?? seg.transitDetails,
       };
     } catch (e) {
       console.warn("Failed to fetch accurate segment, using estimate", e);
       return {
         ...seg,
-        time: seg.customDuration !== undefined ? seg.customDuration : seg.time,
+        time: customSec !== undefined ? customSec : seg.time,
+        customDuration: customSec,
         isHeuristic: true,
         heuristicReason: seg.travelMode === "transit"
-          ? "Live route unavailable; estimated geometrically."
+          ? (seg.heuristicReason || "Transit time estimated geometrically.")
           : undefined,
       };
     }

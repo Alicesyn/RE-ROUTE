@@ -171,7 +171,8 @@ interface RouteState extends ModeData {
   setExemptDays: (days: number[]) => void;
 
   // Trips & Export/Import
-  saveTrip: () => void;
+  saveTrip: (customTitle?: string) => void;
+  renameSavedTrip: (id: string, newTitle: string) => void;
   loadTrip: (id: string) => void;
   deleteTrip: (id: string) => void;
   applyTripSnapshot: (snapshot: ItinerarySnapshot) => void;
@@ -185,7 +186,8 @@ interface RouteState extends ModeData {
   setAutoSyncEnabled: (enabled: boolean) => void;
   setSyncStatus: (status: SyncStatus) => void;
   fetchCloudTrips: () => Promise<void>;
-  saveActiveTripToCloud: (silent?: boolean) => Promise<boolean>;
+  saveActiveTripToCloud: (silent?: boolean, customTitle?: string) => Promise<boolean>;
+  renameCloudTrip: (tripId: string, newTitle: string) => Promise<boolean>;
   loadTripFromCloud: (tripId: string) => Promise<boolean>;
   deleteCloudTrip: (tripId: string) => Promise<boolean>;
   createQuickSave: (silent?: boolean) => Promise<boolean>;
@@ -545,6 +547,7 @@ export const useRouteStore = create<RouteState>()(
                   .length
                 : null,
             pinnedToDay: targetDayIndex !== undefined,
+            addedAt: place.addedAt || Date.now(),
           };
           return { places: [...state.places, newPlace] };
         }),
@@ -1088,6 +1091,10 @@ export const useRouteStore = create<RouteState>()(
               seg.isHeuristic = true;
               if (mode === "transit") {
                 seg.heuristicReason = "Transit time recalculated using geometric velocity heuristic.";
+              } else {
+                delete seg.transitUrl;
+                delete seg.stationFrom;
+                delete seg.stationTo;
               }
               if (seg.customDuration !== undefined) {
                 seg.originalTime = estimated;
@@ -1359,11 +1366,12 @@ export const useRouteStore = create<RouteState>()(
         }
       },
 
-      saveTrip: () =>
+      saveTrip: (customTitle?: string) =>
         set((state) => {
+          const tripTitle = (customTitle && customTitle.trim()) ? customTitle.trim() : state.title;
           const snapshot: ItinerarySnapshot = {
             id: `trip_${Date.now()}`,
-            title: state.title,
+            title: tripTitle,
             days: state.days,
             startDate: state.startDate,
             endDate: state.endDate,
@@ -1391,7 +1399,7 @@ export const useRouteStore = create<RouteState>()(
           };
           // Update existing trip if title matches exactly (simple heuristic), otherwise create new
           const existingIndex = state.savedTrips.findIndex(
-            (t) => t.title === state.title,
+            (t) => t.title === tripTitle,
           );
           if (existingIndex >= 0) {
             const newTrips = [...state.savedTrips];
@@ -1399,9 +1407,19 @@ export const useRouteStore = create<RouteState>()(
               ...snapshot,
               id: state.savedTrips[existingIndex].id,
             }; // keep old ID
-            return { savedTrips: newTrips };
+            return { savedTrips: newTrips, title: tripTitle };
           }
-          return { savedTrips: [...state.savedTrips, snapshot] };
+          return { savedTrips: [...state.savedTrips, snapshot], title: tripTitle };
+        }),
+
+      renameSavedTrip: (id: string, newTitle: string) =>
+        set((state) => {
+          const trimmed = newTitle.trim();
+          if (!trimmed) return state;
+          const newSavedTrips = state.savedTrips.map((t) =>
+            t.id === id ? { ...t, title: trimmed, updatedAt: Date.now() } : t
+          );
+          return { savedTrips: newSavedTrips };
         }),
 
       loadTrip: (id) =>
@@ -1423,7 +1441,7 @@ export const useRouteStore = create<RouteState>()(
             dailyBudget: trip.dailyBudget ?? state.dailyBudget,
             strictBudget: trip.strictBudget ?? state.strictBudget,
             avoidClosedHours: trip.avoidClosedHours ?? state.avoidClosedHours,
-            places: trip.places || [],
+            places: (trip.places || []).map((p, idx) => ({ ...p, addedAt: p.addedAt || (trip.savedAt ? trip.savedAt + idx : Date.now() + idx) })),
             hotels: trip.hotels || [],
             missingPlaces: trip.missingPlaces || [],
             categoryDurations: trip.categoryDurations || state.categoryDurations,
@@ -1478,7 +1496,7 @@ export const useRouteStore = create<RouteState>()(
             dailyBudget: trip.dailyBudget ?? state.dailyBudget,
             strictBudget: trip.strictBudget ?? state.strictBudget,
             avoidClosedHours: trip.avoidClosedHours ?? state.avoidClosedHours,
-            places: trip.places || [],
+            places: (trip.places || []).map((p, idx) => ({ ...p, addedAt: p.addedAt || (trip.savedAt ? trip.savedAt + idx : Date.now() + idx) })),
             hotels: trip.hotels || [],
             missingPlaces: trip.missingPlaces || [],
             categoryDurations: trip.categoryDurations || state.categoryDurations,
@@ -1852,19 +1870,21 @@ export const useRouteStore = create<RouteState>()(
         toast.info("Quick save removed.", "Quick Save");
       },
 
-      saveActiveTripToCloud: async (silent = false): Promise<boolean> => {
+      saveActiveTripToCloud: async (silent = false, customTitle?: string) => {
         const state = get();
         if (!state.user) {
-          if (!silent) toast.error("Please sign in with Google to save to cloud.", "Sign In Required");
+          if (!silent) toast.error("Please sign in to save your trip to the cloud.", "Sign In Required");
           return false;
         }
 
         set({ syncStatus: "syncing" });
 
+        const tripTitle = (customTitle && customTitle.trim()) ? customTitle.trim() : state.title;
+
         const activeTripSnapshot: ItinerarySnapshot = {
           id: state.activeCloudTripId || `trip_${Date.now()}`,
           cloudId: state.activeCloudTripId || undefined,
-          title: state.title,
+          title: tripTitle,
           days: state.days,
           startDate: state.startDate,
           endDate: state.endDate,
@@ -1896,6 +1916,7 @@ export const useRouteStore = create<RouteState>()(
         if (res.success && res.trip) {
           const updatedSnapshot = res.trip;
           set((s) => ({
+            title: tripTitle,
             activeCloudTripId: updatedSnapshot.id,
             syncStatus: "synced",
             lastSyncedAt: Date.now(),
@@ -1905,7 +1926,7 @@ export const useRouteStore = create<RouteState>()(
             ],
           }));
           if (!silent) {
-            toast.success(`"${state.title || "Trip"}" saved to your cloud account!`, "Cloud Synced");
+            toast.success(`"${tripTitle || "Trip"}" saved to your cloud account!`, "Cloud Synced");
           }
           return true;
         } else {
@@ -1913,6 +1934,27 @@ export const useRouteStore = create<RouteState>()(
           if (!silent) {
             toast.error(res.error || "Failed to save trip to cloud.", "Sync Error");
           }
+          return false;
+        }
+      },
+
+      renameCloudTrip: async (tripId: string, newTitle: string) => {
+        const trimmed = newTitle.trim();
+        if (!trimmed) return false;
+        const res = await cloudTripService.renameTripInCloud(tripId, trimmed);
+        if (res.success) {
+          set((s) => ({
+            cloudTrips: s.cloudTrips.map((t) =>
+              t.id === tripId || t.cloudId === tripId
+                ? { ...t, title: trimmed, updatedAt: Date.now() }
+                : t
+            ),
+            title: s.activeCloudTripId === tripId ? trimmed : s.title,
+          }));
+          toast.success(`Renamed cloud trip to "${trimmed}".`, "Trip Renamed");
+          return true;
+        } else {
+          toast.error(res.error || "Failed to rename cloud trip.", "Rename Failed");
           return false;
         }
       },

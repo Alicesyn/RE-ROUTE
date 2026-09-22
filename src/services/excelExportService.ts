@@ -301,12 +301,13 @@ function computeDaySchedule(
           preWaitType = "reservation";
           simTime = customMin;
         }
-      } else if (trip.dateMode === "fixed" && currentDate && stop.openingHours) {
+      } else if (currentDate && (stop.openingHours || stop.allowedTimeRange)) {
         const tc = checkTimeConflict(
           simTime,
           stop.estimatedDuration || 60,
           stop.openingHours,
-          currentDate
+          currentDate,
+          stop.allowedTimeRange
         );
         if (tc.waitMinutes && tc.waitMinutes > 0) {
           preWaitMin = tc.waitMinutes;

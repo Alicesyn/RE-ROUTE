@@ -6,7 +6,6 @@ import {
   Save,
   Upload,
   FolderOpen,
-  Check,
   FileText,
   List,
   Settings,
@@ -48,6 +47,9 @@ const ResetTripModal = React.lazy(() =>
 const AuthModal = React.lazy(() =>
   import("../auth/AuthModal").then((m) => ({ default: m.AuthModal }))
 );
+const SaveTripModal = React.lazy(() =>
+  import("./SaveTripModal").then((m) => ({ default: m.SaveTripModal }))
+);
 import { isReservationRelevant } from "../../utils/reservationUtils";
 import { analyticsService } from "../../services/analyticsService";
 import { toast } from "../../services/toastService";
@@ -59,7 +61,6 @@ export const Header: React.FC = React.memo(() => {
   const setAppMode = useRouteStore((s) => s.setAppMode);
   const title = useRouteStore((s) => s.title);
   const setTitle = useRouteStore((s) => s.setTitle);
-  const saveTrip = useRouteStore((s) => s.saveTrip);
   const exportTripAsJson = useRouteStore((s) => s.exportTripAsJson);
   const exportTripAsExcel = useRouteStore((s) => s.exportTripAsExcel);
 
@@ -68,7 +69,6 @@ export const Header: React.FC = React.memo(() => {
   const syncStatus = useRouteStore((s) => s.syncStatus);
   const isAutoSyncEnabled = useRouteStore((s) => s.isAutoSyncEnabled);
   const setAutoSyncEnabled = useRouteStore((s) => s.setAutoSyncEnabled);
-  const saveActiveTripToCloud = useRouteStore((s) => s.saveActiveTripToCloud);
   const cloudTrips = useRouteStore((s) => s.cloudTrips);
   const quickSave = useRouteStore((s) => s.quickSave);
   const loadQuickSave = useRouteStore((s) => s.loadQuickSave);
@@ -86,9 +86,14 @@ export const Header: React.FC = React.memo(() => {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [saveModalMode, setSaveModalMode] = useState<"local" | "cloud">("local");
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
+
+  const handleOpenSaveModal = (mode: "local" | "cloud" = "local") => {
+    setSaveModalMode(mode);
+    setIsSaveModalOpen(true);
+  };
 
   const reservationPlaces = React.useMemo(() => {
     return places.filter((p) => !p.isDisabled && isReservationRelevant(p));
@@ -162,23 +167,6 @@ export const Header: React.FC = React.memo(() => {
   const geminiPercent = Math.min(100, Math.round((apiStats.geminiCalls / apiLimits.dailyGeminiLimit) * 100));
   const maxPercent = Math.max(mapsPercent, geminiPercent);
   const hasCustomKey = apiUsageService.isUsingCustomMapsKey() || apiUsageService.isUsingCustomGeminiKey();
-
-
-  const handleSave = async () => {
-    if (isSaving) return;
-    setIsSaving(true);
-    try {
-      await new Promise((r) => setTimeout(r, 200));
-      saveTrip();
-      setIsSaving(false);
-      setIsSaved(true);
-      toast.success(`"${title || "Trip"}" saved to your trips!`, "Trip Saved");
-      setTimeout(() => setIsSaved(false), 2500);
-    } catch (err: any) {
-      setIsSaving(false);
-      toast.error(err?.message || "Failed to save trip", "Save Error");
-    }
-  };
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportingType, setExportingType] = useState<"json" | "excel" | "txt" | "names" | null>(null);
@@ -450,8 +438,9 @@ export const Header: React.FC = React.memo(() => {
                 </div>
 
                 <button
-                  onClick={async () => {
-                    await saveActiveTripToCloud(false);
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    handleOpenSaveModal("cloud");
                   }}
                   disabled={syncStatus === "syncing"}
                   className="w-full py-2 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
@@ -579,25 +568,12 @@ export const Header: React.FC = React.memo(() => {
         </button>
 
         <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className={`flex items-center gap-1.5 font-medium text-xs sm:text-sm transition-all px-2 py-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700 ${
-            isSaved
-              ? "text-emerald-600 dark:text-emerald-400 font-bold"
-              : isSaving
-                ? "text-primary-600 dark:text-primary-400 opacity-80 cursor-wait"
-                : "text-surface-600 dark:text-surface-300 hover:text-primary-600 dark:hover:text-primary-400"
-          }`}
-          title="Save trip to device storage"
+          onClick={() => handleOpenSaveModal("local")}
+          className="flex items-center gap-1.5 font-medium text-xs sm:text-sm transition-all px-2 py-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 hover:text-primary-600 dark:hover:text-primary-400 cursor-pointer"
+          title="Save trip to device or cloud"
         >
-          {isSaving ? (
-            <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
-          ) : isSaved ? (
-            <Check className="w-4 h-4 text-emerald-500" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          <span className="hidden sm:inline">{isSaving ? "Saving..." : isSaved ? "Saved!" : "Save"}</span>
+          <Save className="w-4 h-4" />
+          <span className="hidden sm:inline">Save</span>
         </button>
 
         <button
@@ -837,6 +813,16 @@ export const Header: React.FC = React.memo(() => {
           <AuthModal
             isOpen={isAuthOpen}
             onClose={() => setIsAuthOpen(false)}
+          />
+        </React.Suspense>
+      )}
+      {isSaveModalOpen && (
+        <React.Suspense fallback={null}>
+          <SaveTripModal
+            isOpen={isSaveModalOpen}
+            onClose={() => setIsSaveModalOpen(false)}
+            defaultMode={saveModalMode}
+            onOpenAuth={() => setIsAuthOpen(true)}
           />
         </React.Suspense>
       )}

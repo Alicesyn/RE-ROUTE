@@ -7,6 +7,8 @@ import { format, addDays, parseISO } from "date-fns";
 
 export type SortOption =
   | "default"
+  | "date-newest"
+  | "date-oldest"
   | "starred"
   | "reservation-rec"
   | "reservation-none"
@@ -70,6 +72,10 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
 
   const getSortLabel = (sort: SortOption) => {
     switch (sort) {
+      case "date-newest":
+        return "Recently Added (Newest First)";
+      case "date-oldest":
+        return "First Added (Oldest First)";
       case "starred":
         return "Starred (Must-Visit First)";
       case "reservation-rec":
@@ -174,6 +180,8 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
               title="Sort Places to Visit"
             >
               <option value="default">Sort: Default Order</option>
+              <option value="date-newest">Sort: Recently Added (Newest first)</option>
+              <option value="date-oldest">Sort: First Added (Oldest first)</option>
               <option value="starred">Sort: Starred (Must-Visit first)</option>
               <option value="reservation-rec">Sort: Reservation Rec (Yes first)</option>
               <option value="reservation-none">Sort: Reservation Rec (No first)</option>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Timer, Clock, Coins, CalendarDays, ExternalLink, Pin, ChevronDown } from "lucide-react";
+import { Timer, Clock, Coins, CalendarDays, ExternalLink, Pin, ChevronDown, Calendar } from "lucide-react";
 import { Place, PlaceCategory } from "../../../types";
 import {
   ALL_CATEGORIES,
@@ -282,6 +282,17 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
             >
               <Clock className="w-3 h-3" />
               Hours
+            </div>
+          )}
+
+          {/* Added Timestamp Badge */}
+          {place.addedAt && (
+            <div
+              className="flex items-center gap-1 text-[11px] font-medium text-surface-400 dark:text-surface-500 bg-surface-50/80 dark:bg-surface-800/80 border border-surface-200/70 dark:border-surface-700/70 rounded-md px-1.5 py-0.5 cursor-help whitespace-nowrap"
+              title={`Added to trip: ${format(new Date(place.addedAt), "PPpp")}`}
+            >
+              <Calendar className="w-3 h-3 text-surface-400 dark:text-surface-500" />
+              <span>{format(new Date(place.addedAt), "MMM d, h:mm a")}</span>
             </div>
           )}
         </div>

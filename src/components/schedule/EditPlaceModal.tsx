@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar } from "lucide-react";
+import { format } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
 import { formatDayIndexLabel } from "../../utils/dayRangeUtils";
@@ -769,7 +770,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         </div>
 
         <div className="p-4 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + " " + place.address)}`}
               target="_blank"
@@ -780,6 +781,13 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
               <ExternalLink className="w-3.5 h-3.5" />
               View on Google
             </a>
+
+            {place.addedAt && (
+              <span className="text-[11px] font-medium text-surface-400 dark:text-surface-500 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-surface-400" />
+                Added {format(new Date(place.addedAt), "MMM d, yyyy 'at' h:mm a")}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button

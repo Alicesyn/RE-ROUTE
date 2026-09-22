@@ -71,16 +71,19 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
     unassignPlace,
     updatePlace,
     dayIndex,
-    dateMode,
+    dateMode: _dateMode,
     currentDate,
     onEdit,
     mealGapAlert,
   }) => {
     const startDate = useRouteStore((s) => s.startDate);
-    const timeConflict =
-      dateMode === "fixed"
-        ? checkTimeConflict(stopArrivalTime, stop.estimatedDuration || 60, stop.openingHours, currentDate)
-        : { hasConflict: false };
+    const timeConflict = checkTimeConflict(
+      stopArrivalTime,
+      stop.estimatedDuration || 60,
+      stop.openingHours,
+      currentDate,
+      stop.allowedTimeRange
+    );
 
     const {
       attributes,

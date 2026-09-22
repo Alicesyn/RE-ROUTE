@@ -1,6 +1,11 @@
 import { emitApiError } from "./apiErrorBus";
 import { apiUsageService } from "./apiUsageService";
 import { getDistance, estimateTime } from "../utils/distance";
+import {
+  isJapanCoordinate,
+  calculateJapanStationTransit,
+} from "./ekispertService";
+import { TransitLegBreakdown } from "../types";
 
 const getApiKey = () => apiUsageService.getActiveMapsKey();
 
@@ -25,8 +30,8 @@ const saveToCache = (query: string, results: any[]) => {
   }
 };
 
-const ROUTES_CACHE_KEY = "reroute_routes_cache";
-let routesCache: Record<string, { distanceM: number; durationS: number }> = JSON.parse(
+const ROUTES_CACHE_KEY = "reroute_routes_cache_v3";
+let routesCache: Record<string, any> = JSON.parse(
   localStorage.getItem(ROUTES_CACHE_KEY) || "{}"
 );
 
@@ -190,21 +195,16 @@ export const fetchRouteSegment = async (
   destination: { lat: number; lng: number },
   mode: "driving" | "transit" | "walking",
   departureTime?: Date
-): Promise<{ distanceM: number; durationS: number; isHeuristic?: boolean; heuristicReason?: string }> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    const dist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
-    const durationS = Math.round(estimateTime(dist, mode));
-    return {
-      distanceM: Math.round(dist),
-      durationS,
-      isHeuristic: true,
-      heuristicReason: mode === "transit"
-        ? "No Google Maps API key; transit calculated using geometric velocity heuristic."
-        : "Estimated geometrically without live API.",
-    };
-  }
-
+): Promise<{
+  distanceM: number;
+  durationS: number;
+  isHeuristic?: boolean;
+  heuristicReason?: string;
+  stationFrom?: string;
+  stationTo?: string;
+  transitUrl?: string;
+  transitDetails?: TransitLegBreakdown;
+}> => {
   // Format mode for API
   let travelMode = "DRIVE";
   if (mode === "transit") travelMode = "TRANSIT";
@@ -220,6 +220,37 @@ export const fetchRouteSegment = async (
   if (routesCache[cacheKey] && mode !== "transit") {
     apiUsageService.recordCacheHit();
     return routesCache[cacheKey];
+  }
+
+  // Handle Japan Transit via Ekispert Station-Aware Modeling
+  if (mode === "transit" && isJapanCoordinate(origin.lat, origin.lng) && isJapanCoordinate(destination.lat, destination.lng)) {
+    if (routesCache[cacheKey]?.transitDetails && !routesCache[cacheKey]?.heuristicReason?.includes("ZERO_RESULTS")) {
+      apiUsageService.recordCacheHit();
+      return routesCache[cacheKey];
+    }
+    try {
+      const ekispertResult = await calculateJapanStationTransit(origin, destination);
+      if (ekispertResult) {
+        saveToRoutesCache(cacheKey, ekispertResult);
+        return ekispertResult;
+      }
+    } catch (err) {
+      console.warn("Station transit calculation error, falling back to geometric estimate:", err);
+    }
+  }
+
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    const dist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
+    const durationS = Math.round(estimateTime(dist, mode));
+    return {
+      distanceM: Math.round(dist),
+      durationS,
+      isHeuristic: true,
+      heuristicReason: mode === "transit"
+        ? "No Google Maps API key; transit calculated using geometric velocity heuristic."
+        : "Estimated geometrically without live API.",
+    };
   }
 
   try {
@@ -267,7 +298,7 @@ export const fetchRouteSegment = async (
           distanceM: Math.round(dist),
           durationS,
           isHeuristic: true,
-          heuristicReason: "Google Routes API returned ZERO_RESULTS (Japan transit developer blackout or regional gap); calculated using geometric velocity heuristic."
+          heuristicReason: "Live transit routing unavailable; estimated using regional transit velocity."
         };
         saveToRoutesCache(cacheKey, fallbackResult);
         return fallbackResult;
@@ -290,7 +321,7 @@ export const fetchRouteSegment = async (
         distanceM: Math.round(dist),
         durationS,
         isHeuristic: true,
-        heuristicReason: "Live transit routing unavailable; estimated using geometric velocity heuristic."
+        heuristicReason: "Live transit routing unavailable; estimated using regional transit velocity."
       };
     }
     throw error;

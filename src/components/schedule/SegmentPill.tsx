@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouteStore } from "../../store/useRouteStore";
-import { Footprints, Train, Car, ChevronDown, Pencil, RotateCcw, X, Clock } from "lucide-react";
+import { Footprints, Train, Car, ChevronDown, Pencil, RotateCcw, X, Clock, ExternalLink } from "lucide-react";
 import { RouteSegment, TravelMode } from "../../types";
 import { toast } from "../../services/toastService";
+import { isJapanCoordinate, calculateJapanStationTransit } from "../../services/ekispertService";
 
 export interface SegmentPillProps {
   segment: RouteSegment;
@@ -17,6 +18,7 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
     const distanceUnit = useRouteStore((s) => s.distanceUnit);
 
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
     const activeMinutes = Math.round(segment.time / 60);
     const [customMinutesInput, setCustomMinutesInput] = useState<string | number>(activeMinutes);
     const popoverRef = useRef<HTMLDivElement>(null);
@@ -24,6 +26,88 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
     const isCustom = segment.customDuration !== undefined;
     const estimatedMinutes = Math.round((segment.originalTime ?? segment.time) / 60);
     const isHeuristicTransit = segment.travelMode === "transit" && segment.isHeuristic !== false;
+
+    // Auto-hydrate transit details if in Japan and missing (e.g. loaded from earlier save/state)
+    useEffect(() => {
+      if (segment.travelMode !== "transit" || segment.transitDetails) return;
+
+      const state = useRouteStore.getState();
+      const route = state.optimizedRoutes.find((r) => r.day === dayIndex);
+      if (!route) return;
+
+      const findCoord = (id?: string) => {
+        if (!id) return null;
+        if (id === "arrival" && state.arrivalFlight?.location) {
+          return { lat: state.arrivalFlight.location.lat, lng: state.arrivalFlight.location.lng };
+        }
+        if (id === "departure" && state.departureFlight?.location) {
+          return { lat: state.departureFlight.location.lat, lng: state.departureFlight.location.lng };
+        }
+        if (id === "start-hotel" && route.startHotel) return { lat: route.startHotel.lat, lng: route.startHotel.lng };
+        if (id === "end-hotel" && route.endHotel) return { lat: route.endHotel.lat, lng: route.endHotel.lng };
+        const p = route.stops.find((s) => s.id === id) || state.places.find((s) => s.id === id);
+        if (p?.lat && p?.lng) return { lat: p.lat, lng: p.lng };
+        return null;
+      };
+
+      let origin = findCoord(segment.fromId);
+      let destination = findCoord(segment.toId);
+
+      // If IDs were not explicitly on segment, infer by physical order in day
+      if (!origin || !destination) {
+        const physicalPoints: { id: string; lat: number; lng: number }[] = [];
+        if (state.showFlights && dayIndex === 0 && state.arrivalFlight?.location) {
+          physicalPoints.push({ id: "arrival", lat: state.arrivalFlight.location.lat, lng: state.arrivalFlight.location.lng });
+        }
+        if (route.startHotel) physicalPoints.push({ id: "start-hotel", lat: route.startHotel.lat, lng: route.startHotel.lng });
+        route.stops.forEach((s) => physicalPoints.push({ id: s.id, lat: s.lat, lng: s.lng }));
+        if (route.endHotel && route.day < state.days - 1) physicalPoints.push({ id: "end-hotel", lat: route.endHotel.lat, lng: route.endHotel.lng });
+        if (state.showFlights && route.day === state.days - 1 && state.departureFlight?.location) {
+          physicalPoints.push({ id: "departure", lat: state.departureFlight.location.lat, lng: state.departureFlight.location.lng });
+        }
+
+        if (physicalPoints[segmentIndex] && physicalPoints[segmentIndex + 1]) {
+          origin = { lat: physicalPoints[segmentIndex].lat, lng: physicalPoints[segmentIndex].lng };
+          destination = { lat: physicalPoints[segmentIndex + 1].lat, lng: physicalPoints[segmentIndex + 1].lng };
+        }
+      }
+
+      if (origin && destination && isJapanCoordinate(origin.lat, origin.lng) && isJapanCoordinate(destination.lat, destination.lng)) {
+        calculateJapanStationTransit(origin, destination).then((result) => {
+          if (result && result.transitDetails) {
+            useRouteStore.setState((prev) => {
+              const newRoutes = [...prev.optimizedRoutes];
+              const rIdx = newRoutes.findIndex((r) => r.day === dayIndex);
+              if (rIdx >= 0 && newRoutes[rIdx].segments[segmentIndex]) {
+                const targetSeg = newRoutes[rIdx].segments[segmentIndex];
+                const finalTime = targetSeg.customDuration !== undefined ? targetSeg.customDuration : result.durationS;
+                const updatedSeg = {
+                  ...targetSeg,
+                  time: finalTime,
+                  originalTime: result.durationS,
+                  distance: result.distanceM,
+                  transitDetails: result.transitDetails,
+                  stationFrom: result.stationFrom,
+                  stationTo: result.stationTo,
+                  transitUrl: result.transitUrl,
+                  heuristicReason: result.heuristicReason,
+                };
+                const updatedSegs = [...newRoutes[rIdx].segments];
+                updatedSegs[segmentIndex] = updatedSeg;
+                newRoutes[rIdx] = {
+                  ...newRoutes[rIdx],
+                  segments: updatedSegs,
+                  totalTime: updatedSegs.reduce((sum, s) => sum + s.time, 0),
+                  totalDistance: updatedSegs.reduce((sum, s) => sum + s.distance, 0),
+                };
+                return { optimizedRoutes: newRoutes };
+              }
+              return prev;
+            });
+          }
+        }).catch(console.warn);
+      }
+    }, [segment.travelMode, segment.transitDetails, segment.fromId, segment.toId, dayIndex, segmentIndex]);
 
     // Synchronize local input state whenever popover opens or segment changes
     useEffect(() => {
@@ -110,7 +194,86 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
         {/* Line connector segment - vertical timeline path */}
         <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-surface-200 dark:bg-surface-700/50" />
 
-        <div className="relative inline-block">
+        <div
+          className="relative inline-block group/pill"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {/* Hover Tooltip: Total Time & Step Breakdown */}
+          {!isPopoverOpen && segment.travelMode === "transit" && (
+            <div
+              role="tooltip"
+              className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-40 pointer-events-none whitespace-nowrap transition-all duration-150 ${
+                isHovered
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-1 group-hover/pill:opacity-100 group-hover/pill:translate-y-0"
+              }`}
+            >
+              <div className="bg-surface-900/95 dark:bg-surface-800 text-white dark:text-surface-100 text-[11px] rounded-xl px-3.5 py-2.5 shadow-2xl border border-surface-700/60 dark:border-surface-600/60 backdrop-blur-md flex flex-col gap-1.5 min-w-[200px]">
+                <div className="flex items-center justify-between gap-3 border-b border-surface-700/60 pb-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300 dark:text-amber-400">
+                    <Train className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Total Transit: {activeMinutes} min</span>
+                  </div>
+                  {segment.stationFrom && segment.stationTo && (
+                    <span className="text-[10px] text-surface-400 font-medium">
+                      {segment.stationFrom} ➔ {segment.stationTo}
+                    </span>
+                  )}
+                </div>
+
+                {segment.transitDetails ? (
+                  <div className="flex flex-col gap-1 text-[11px] text-surface-200 dark:text-surface-300 pl-1 pt-0.5">
+                    {segment.transitDetails.walkToStationMin === undefined && segment.transitDetails.trainMin === undefined ? (
+                      <div className="flex items-center gap-1.5">
+                        <Footprints className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>
+                          <strong>{segment.transitDetails.totalMin} min</strong> direct walking access (&lt;800m)
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        {segment.transitDetails.walkToStationMin !== undefined && segment.transitDetails.walkToStationMin > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <Footprints className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span>
+                              <strong>{segment.transitDetails.walkToStationMin} min</strong> walking to {segment.stationFrom || "Station A"}
+                            </span>
+                          </div>
+                        )}
+                        {segment.transitDetails.trainMin !== undefined && (
+                          <div className="flex items-center gap-1.5">
+                            <Train className="w-3 h-3 text-rose-400 shrink-0" />
+                            <span>
+                              <strong>{segment.transitDetails.trainMin} min</strong> train ride
+                            </span>
+                          </div>
+                        )}
+                        {segment.transitDetails.walkFromStationMin !== undefined && segment.transitDetails.walkFromStationMin > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <Footprints className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span>
+                              <strong>{segment.transitDetails.walkFromStationMin} min</strong> walking to destination
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-surface-300 max-w-xs whitespace-normal leading-relaxed">
+                    {segment.heuristicReason?.includes("ZERO_RESULTS") || segment.heuristicReason?.includes("geometric")
+                      ? `Calculating station-aware transit via Ekispert...`
+                      : segment.heuristicReason || `Calculated transit time: ${activeMinutes} min`}
+                  </div>
+                )}
+
+                {/* Arrow */}
+                <div className="w-2 h-2 bg-surface-900/95 dark:bg-surface-800 border-r border-b border-surface-700/60 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+              </div>
+            </div>
+          )}
+
           {/* Main Segment Pill */}
           <div
             className={`travel-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all shadow-2xs ${
@@ -179,6 +342,28 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
             <span className="text-surface-600 dark:text-surface-300">
               {formattedDistance}
             </span>
+
+            {/* Ekispert Live Timetable Link */}
+            {segment.transitUrl && (
+              <>
+                <span className="text-surface-300 dark:text-surface-500">•</span>
+                <a
+                  href={segment.transitUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:underline transition-colors"
+                  title={
+                    segment.stationFrom && segment.stationTo
+                      ? `View live Ekispert timetable for ${segment.stationFrom} ➔ ${segment.stationTo}`
+                      : "View live transit timetable on Ekispert"
+                  }
+                >
+                  <span>Timetable</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </>
+            )}
           </div>
 
           {/* Customize Transit Time Popover */}
@@ -205,8 +390,30 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                 </button>
               </div>
 
+              {/* Ekispert Station Route & Timetable Link */}
+              {segment.transitUrl && (
+                <div className="mb-3 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 text-rose-900 dark:text-rose-200 font-medium text-[11px] truncate mr-2">
+                    <Train className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span className="truncate">
+                      {segment.stationFrom && segment.stationTo
+                        ? `${segment.stationFrom} ➔ ${segment.stationTo}`
+                        : "Ekispert Route"}
+                    </span>
+                  </div>
+                  <a
+                    href={segment.transitUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline shrink-0"
+                  >
+                    Timetable <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
+              )}
+
               {/* Leg Details Note */}
-              <div className="text-[11px] text-surface-500 dark:text-surface-400 mb-3 flex items-center justify-between">
+              <div className="text-[11px] text-surface-500 dark:text-surface-400 mb-2 flex items-center justify-between">
                 <span>
                   {segment.travelMode === "transit" ? "🚆 Transit" : segment.travelMode === "walking" ? "🚶 Walking" : "🚗 Driving"} • {formattedDistance}
                 </span>
@@ -214,6 +421,15 @@ export const SegmentPill: React.FC<SegmentPillProps> = React.memo(
                   Est: <strong className="text-surface-700 dark:text-surface-300">{estimatedMinutes}m</strong>
                 </span>
               </div>
+
+              {/* Detailed Heuristic Breakdown */}
+              {segment.heuristicReason && (
+                <p className="text-[10px] text-surface-600 dark:text-surface-400 mb-3 leading-relaxed bg-surface-50 dark:bg-surface-900/60 p-2 rounded-lg border border-surface-200 dark:border-surface-700/60">
+                  {segment.heuristicReason.includes("ZERO_RESULTS") || segment.heuristicReason.includes("geometric")
+                    ? `Transit modeled via station-aware heuristic (~${estimatedMinutes}m).`
+                    : segment.heuristicReason}
+                </p>
+              )}
 
               {/* Duration Stepper Input */}
               <div className="space-y-2 mb-3">

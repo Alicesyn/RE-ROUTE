@@ -6,12 +6,12 @@
 
 export const isLocalDev = (): boolean => {
   // Allow explicit override (e.g., if using `vercel dev` locally to test serverless functions)
-  if (import.meta.env.VITE_FORCE_VERCEL_API === "true") {
+  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_FORCE_VERCEL_API === "true") {
     return false;
   }
 
   // Vite development mode flag (true when running `npm run dev` / `vite`)
-  if (import.meta.env.DEV) {
+  if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
     return true;
   }
 

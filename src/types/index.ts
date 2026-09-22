@@ -74,6 +74,7 @@ export interface Place {
   dismissedDuplicate?: boolean; // If true, user manually removed/dismissed the duplicate flag for this place
   allowedDayRanges?: DayRangeConstraint[]; // Multiple disjoint day range constraints (e.g., Oct 3–6 AND Oct 9–12)
   allowedTimeRange?: TimeRangeConstraint; // User-defined scheduling time window (e.g., only visit between 7 AM – 5 PM)
+  addedAt?: number; // Unix timestamp (ms) when place was added/saved
 }
 
 export interface TimeRangeConstraint {
@@ -103,6 +104,14 @@ export interface CustomBuffer {
   label?: string;
 }
 
+export interface TransitLegBreakdown {
+  walkToStationMin?: number;
+  trainMin?: number;
+  walkFromStationMin?: number;
+  totalMin?: number;
+  summary?: string;
+}
+
 export interface RouteSegment {
   distance: number;
   time: number; // in seconds (active time used in routing & schedule)
@@ -113,6 +122,10 @@ export interface RouteSegment {
   originalTime?: number; // in seconds, original calculated/estimated duration
   fromId?: string; // ID of the origin place/hotel/flight
   toId?: string; // ID of the destination place/hotel/flight
+  transitUrl?: string; // Link to official timetable (e.g., Ekispert roote.ekispert.net)
+  stationFrom?: string; // Origin nearest transit station name
+  stationTo?: string; // Destination nearest transit station name
+  transitDetails?: TransitLegBreakdown;
 }
 
 export interface DayRoute {

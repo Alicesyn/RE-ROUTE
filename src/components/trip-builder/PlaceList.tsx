@@ -292,7 +292,17 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           if (tierA !== tierB) return tierA - tierB;
         }
 
-        if (sortBy === "starred") {
+        if (sortBy === "date-newest") {
+          const aTime = a.addedAt ?? 0;
+          const bTime = b.addedAt ?? 0;
+          if (aTime !== bTime) return bTime - aTime;
+          return places.indexOf(b) - places.indexOf(a);
+        } else if (sortBy === "date-oldest") {
+          const aTime = a.addedAt ?? 0;
+          const bTime = b.addedAt ?? 0;
+          if (aTime !== bTime) return aTime - bTime;
+          return places.indexOf(a) - places.indexOf(b);
+        } else if (sortBy === "starred") {
           const diff = (b.isStarred ? 1 : 0) - (a.isStarred ? 1 : 0);
           if (diff !== 0) return diff;
           return places.indexOf(a) - places.indexOf(b);

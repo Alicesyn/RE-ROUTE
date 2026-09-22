@@ -80,7 +80,6 @@ export const DailySchedule: React.FC = () => {
   const setArrivalFlight = useRouteStore((s) => s.setArrivalFlight);
   const departureFlight = useRouteStore((s) => s.departureFlight);
   const setDepartureFlight = useRouteStore((s) => s.setDepartureFlight);
-  const distanceUnit = useRouteStore((s) => s.distanceUnit);
   const categoryConfigs = useRouteStore((s) => s.categoryConfigs);
   const dayTitles = useRouteStore((s) => s.dayTitles);
   const setDayTitle = useRouteStore((s) => s.setDayTitle);
@@ -252,6 +251,13 @@ export const DailySchedule: React.FC = () => {
 
   const hasHeuristicTransit = optimizedRoutes.some((r) =>
     r.segments.some((s) => s.travelMode === "transit" && s.isHeuristic !== false)
+  );
+  const hasEkispertTransit = optimizedRoutes.some((r) =>
+    r.segments.some(
+      (s) =>
+        s.travelMode === "transit" &&
+        (!!s.transitUrl || !!s.transitDetails || !!s.stationFrom)
+    )
   );
 
   const handleOptimizeSingleDay = async (dayIndex: number) => {
@@ -551,7 +557,9 @@ export const DailySchedule: React.FC = () => {
                   <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <p className="text-xs sm:text-sm font-semibold text-amber-950 dark:text-amber-100">
-                  ⚠ Transit times are estimated — actual durations may differ significantly.
+                  {hasEkispertTransit
+                    ? "🚆 Japan transit modeled via Ekispert station-aware heuristic with live timetable links."
+                    : "⚠ Transit times are estimated — actual durations may differ significantly."}
                 </p>
               </div>
               <button
@@ -565,10 +573,18 @@ export const DailySchedule: React.FC = () => {
             </div>
             <details className="mt-2">
               <summary className="text-[11px] sm:text-xs font-bold text-amber-800 dark:text-amber-300 cursor-pointer hover:text-amber-950 dark:hover:text-amber-100 transition-colors select-none">
-                Why this happens
+                {hasEkispertTransit ? "How station-aware transit works" : "Why transit is estimated"}
               </summary>
               <p className="mt-1.5 text-[11px] sm:text-xs text-amber-900/80 dark:text-amber-300/80 leading-relaxed pl-1">
-                Google Maps developer APIs return <code className="font-mono text-[10px] bg-amber-200/70 dark:bg-amber-900/70 px-1 py-0.5 rounded font-bold">ZERO_RESULTS</code> for Japan transit due to commercial licensing. Times are approximated geometrically (~{distanceUnit === "imperial" ? "11 mph local / ~101 mph express" : "18 km/h local / ~162 km/h express"}) without real timetables, departure intervals, or megastation transfer walks. Cross-check with local transit apps (NAVITIME, Jorudan) on your travel day.{" "}
+                {hasEkispertTransit ? (
+                  <>
+                    Because Google Maps developer APIs cannot distribute Japanese transit data due to regional licensing, RE-ROUTE uses the <strong>Ekispert Web Service</strong> to identify nearest train stations, calculate walking access, platform wait buffers, rail speeds, and megastation transfers. Hover over any transit pill to view the walking and train ride breakdown, or click <strong>Timetable ↗</strong> to inspect live departures.{" "}
+                  </>
+                ) : (
+                  <>
+                    Google Maps developer APIs do not provide public transit routes in Japan due to domestic licensing restrictions. RE-ROUTE automatically estimates realistic station-to-station transit with walking access buffers. Hover over any transit pill to inspect the breakdown.{" "}
+                  </>
+                )}
                 <button
                   onClick={() => { window.location.hash = "#about-limitations"; }}
                   className="inline font-bold text-amber-950 dark:text-amber-100 underline underline-offset-2 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
@@ -704,12 +720,13 @@ export const DailySchedule: React.FC = () => {
                       preWaitType = "reservation";
                       simTime = customMin;
                     }
-                  } else if (dateMode === "fixed") {
+                  } else {
                     const tc = checkTimeConflict(
                       simTime,
                       stop.estimatedDuration || 60,
                       stop.openingHours,
-                      currentDate
+                      currentDate,
+                      stop.allowedTimeRange
                     );
                     if (tc.waitMinutes && tc.waitMinutes > 0) {
                       preWaitMin = tc.waitMinutes;
