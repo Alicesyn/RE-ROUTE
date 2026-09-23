@@ -117,8 +117,12 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
           reservation: mockReservation,
         };
       }
+      const finalDesc =
+        place.areaNote && !aiData.description.includes(place.areaNote)
+          ? `${aiData.description}\n\n${place.areaNote}`
+          : aiData.description;
       updatePlace(place.id, {
-        description: aiData.description,
+        description: finalDesc,
         category: aiData.category,
         estimatedDuration: aiData.estimatedDuration,
         descriptionSource: "ai",
@@ -127,7 +131,7 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
         ...(aiData.priceEstimate ? { priceEstimate: aiData.priceEstimate } : {}),
         ...(aiData.reservation ? { reservation: aiData.reservation } : {}),
       });
-      setDesc(aiData.description);
+      setDesc(finalDesc);
     } catch (err) {
       console.error(err);
       if (place.editorialSummary) {
@@ -325,6 +329,14 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
               </div>
             )}
           </div>
+
+          {/* Area Opening Hours Note (for neighborhood/district places) */}
+          {place.areaNote && (
+            <div className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 px-2.5 py-1.5">
+              <span className="text-amber-500 dark:text-amber-400 text-xs mt-0.5 shrink-0">🕐</span>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">{place.areaNote}</p>
+            </div>
+          )}
 
           {/* Contextual Highlight (Must-Try, Photo Spot, etc.) */}
           <PlaceHighlightEditor

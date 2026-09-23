@@ -60,6 +60,9 @@ export interface Place {
   pinnedToDay: boolean; // true if user manually assigned to a day; optimizer won't move pinned places
   notes?: string;
   openingHours?: string[]; // e.g. ["Monday: 9:00 AM – 5:00 PM", ...]
+  areaNote?: string;       // For neighborhood/district places: summary of nearby shops and their hours
+  isArea?: boolean;        // True if place is a neighborhood, district, or street area
+  types?: string[];        // Google Maps types (e.g. ["neighborhood", "sublocality"])
   unfeasibleReason?: string;
   editorialSummary?: string; // Fallback description from Google Maps
   photoUrl?: string;

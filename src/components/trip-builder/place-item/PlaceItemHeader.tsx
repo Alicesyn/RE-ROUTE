@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { Place } from "../../../types";
+import { isAreaPlace } from "../../../utils/areaOpeningHoursUtils";
 
 export interface PlaceItemHeaderProps {
   place: Place;
@@ -56,6 +57,14 @@ export const PlaceItemHeader: React.FC<PlaceItemHeaderProps> = ({
             {place.isDisabled && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-300/80 dark:border-amber-800/80 ml-1.5 align-middle shrink-0">
                 <EyeOff className="w-2.5 h-2.5" /> Excluded
+              </span>
+            )}
+            {isAreaPlace(place) && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 ml-1.5 align-middle shrink-0"
+                title="Area / District location (shopping street or neighborhood)"
+              >
+                Area
               </span>
             )}
             {isDuplicate && (

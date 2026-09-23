@@ -510,7 +510,10 @@ function App() {
             updates.push({
               id: p.id,
               updates: {
-                description: aiData.description,
+                description:
+                  p.areaNote && !aiData.description.includes(p.areaNote)
+                    ? `${aiData.description}\n\n${p.areaNote}`
+                    : aiData.description,
                 category: aiData.category,
                 estimatedDuration: aiData.estimatedDuration,
                 descriptionSource: "ai",

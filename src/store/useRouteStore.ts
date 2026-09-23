@@ -178,6 +178,7 @@ interface RouteState extends ModeData {
   applyTripSnapshot: (snapshot: ItinerarySnapshot, saveToLocal?: boolean) => void;
   exportTripAsJson: (tripId?: string) => void;
   exportTripAsExcel: (tripId?: string) => Promise<void>;
+  exportReservationsAsExcel: (tripId?: string) => Promise<number>;
   importTripFromJson: (jsonString: string) => { success: boolean; error?: string; tripTitle?: string };
   resetTrip: () => void;
 
@@ -1706,6 +1707,53 @@ export const useRouteStore = create<RouteState>()(
 
         const { exportTripToExcel } = await import("../services/excelExportService");
         await exportTripToExcel(tripToExport, {
+          distanceUnit: state.distanceUnit,
+          timeFormat: state.timeFormat,
+        });
+      },
+
+      exportReservationsAsExcel: async (tripId?: string) => {
+        const state = get();
+        let tripToExport: ItinerarySnapshot;
+        if (tripId) {
+          const found =
+            state.savedTrips.find((t) => t.id === tripId) ||
+            state.cloudTrips.find((t) => t.id === tripId);
+          if (!found) return 0;
+          tripToExport = found;
+        } else {
+          tripToExport = {
+            id: `trip_${Date.now()}`,
+            title: state.title,
+            days: state.days,
+            startDate: state.startDate,
+            endDate: state.endDate,
+            dateMode: state.dateMode,
+            dayStartTime: state.dayStartTime,
+            dayEndTime: state.dayEndTime,
+            showFlights: state.showFlights,
+            arrivalFlight: state.arrivalFlight,
+            departureFlight: state.departureFlight,
+            travelMode: state.travelMode,
+            dailyBudget: state.dailyBudget,
+            strictBudget: state.strictBudget,
+            avoidClosedHours: state.avoidClosedHours,
+            places: state.places,
+            hotels: state.hotels,
+            missingPlaces: state.missingPlaces,
+            categoryDurations: state.categoryDurations,
+            categoryConfigs: state.categoryConfigs,
+            customBuffers: state.customBuffers,
+            dayTitles: state.dayTitles,
+            exemptDays: state.exemptDays,
+            customTransitTimes: state.customTransitTimes,
+            optimizedRoutes: state.optimizedRoutes,
+            savedAt: Date.now(),
+          };
+        }
+
+        const { exportReservationsChecklistToExcel } = await import("../services/excelExportService");
+        return await exportReservationsChecklistToExcel(tripToExport, {
           distanceUnit: state.distanceUnit,
           timeFormat: state.timeFormat,
         });

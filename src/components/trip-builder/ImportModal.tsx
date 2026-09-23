@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { autoCategorize, getDefaultDuration } from "../../utils/categoryUtils";
 import { ItinerarySnapshot } from "../../types";
 import { isDuplicatePlace } from "../../utils/duplicateUtils";
+import { isAreaPlace, deriveAreaOpeningHours } from "../../utils/areaOpeningHoursUtils";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -384,15 +385,47 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         const bestMatch = res.match!;
         const category = autoCategorize(bestMatch.name, "", bestMatch.types);
         const estimatedDuration = getDefaultDuration(category);
+        const isArea = isAreaPlace({
+          category,
+          openingHours: bestMatch.openingHours,
+          types: bestMatch.types || [],
+        });
+        const newId = `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        addPlace({
+        const newPlace = {
           ...bestMatch,
-          id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: newId,
           category,
           estimatedDuration,
           description: "",
-          descriptionSource: appMode === "real" ? "ai" : "mock",
-        });
+          descriptionSource: (appMode === "real" ? "ai" : "mock") as "ai" | "mock",
+          types: bestMatch.types || [],
+          isArea: isArea || undefined,
+        };
+
+        addPlace(newPlace);
+
+        if (isArea) {
+          deriveAreaOpeningHours(newPlace, appMode)
+            .then((result) => {
+              if (result) {
+                const current = useRouteStore.getState().places.find((p) => p.id === newId);
+                const currentDesc = current?.description || "";
+                const hasDesc = currentDesc.trim().length > 0;
+                const updatedDesc = hasDesc
+                  ? (currentDesc.includes(result.areaNote) ? currentDesc : `${currentDesc}\n\n${result.areaNote}`)
+                  : result.areaNote;
+
+                useRouteStore.getState().updatePlace(newId, {
+                  openingHours: result.hours,
+                  areaNote: result.areaNote,
+                  isArea: true,
+                  description: updatedDesc,
+                });
+              }
+            })
+            .catch(() => {});
+        }
       });
 
       setModalState("success");

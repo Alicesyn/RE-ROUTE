@@ -20,6 +20,7 @@ import {
   getDefaultDuration,
 } from "../../utils/categoryUtils";
 import { toast } from "../../services/toastService";
+import { deriveAreaOpeningHours, isAreaPlace } from "../../utils/areaOpeningHoursUtils";
 const ImportModal = React.lazy(() =>
   import("./ImportModal").then((m) => ({ default: m.ImportModal }))
 );
@@ -34,7 +35,7 @@ export const PlaceSearch: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay] = useState<number | null>(null);
-  const { addPlace, appMode, places, hotels } = useRouteStore();
+  const { addPlace, updatePlace, appMode, places, hotels } = useRouteStore();
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -134,20 +135,53 @@ export const PlaceSearch: React.FC = () => {
     const estimatedDuration =
       place.estimatedDuration || getDefaultDuration(category);
 
-    addPlace(
-      {
-        ...place,
-        id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        googlePlaceId: place.id,
-        category,
-        estimatedDuration,
-        description: place.description || "",
-        descriptionSource: (place.description && place.description.trim()) ? "user" : (appMode === "real" ? "ai" : "mock"),
-        openingHours: place.openingHours || [],
-        priceEstimate: place.priceEstimate || undefined,
-      },
-      selectedDay !== null ? selectedDay : undefined,
-    );
+    const isArea = isAreaPlace({
+      category,
+      openingHours: place.openingHours,
+      types: place.types || [],
+    });
+
+    const newId = `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newPlace = {
+      ...place,
+      id: newId,
+      googlePlaceId: place.id,
+      category,
+      estimatedDuration,
+      description: place.description || "",
+      descriptionSource: (place.description && place.description.trim()) ? "user" : (appMode === "real" ? "ai" : "mock"),
+      openingHours: place.openingHours || [],
+      priceEstimate: place.priceEstimate || undefined,
+      types: place.types || [],
+      isArea: isArea || undefined,
+    };
+    addPlace(newPlace, selectedDay !== null ? selectedDay : undefined);
+
+    // RC3: Background area opening hours enrichment
+    // If this is a shopping/restaurant neighborhood/district with no openingHours
+    // (e.g. Shimokitazawa, Shinjuku Vintage area), derive hours from nearby shops.
+    if (isArea) {
+      deriveAreaOpeningHours({ ...newPlace, types: place.types || [] }, appMode)
+        .then((result) => {
+          if (result) {
+            const current = useRouteStore.getState().places.find((p) => p.id === newId);
+            const currentDesc = current?.description || newPlace.description || "";
+            const hasDesc = currentDesc.trim().length > 0;
+            const updatedDesc = hasDesc
+              ? (currentDesc.includes(result.areaNote) ? currentDesc : `${currentDesc}\n\n${result.areaNote}`)
+              : result.areaNote;
+
+            updatePlace(newId, {
+              openingHours: result.hours,
+              areaNote: result.areaNote,
+              isArea: true,
+              description: updatedDesc,
+            });
+          }
+        })
+        .catch(() => { /* Silently ignore — area lookup is best-effort */ });
+    }
+
     setQuery("");
     setIsOpen(false);
   };

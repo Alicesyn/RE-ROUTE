@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, ArrowUpDown, CalendarClock, Star, X, Layers, Ticket } from "lucide-react";
+import { Search, CalendarClock, Star, X, Layers, Ticket } from "lucide-react";
 import { PlaceCategory } from "../../types";
 import { ALL_CATEGORIES, getCategoryLabel, getCategoryEmoji } from "../../utils/categoryUtils";
 import { useRouteStore } from "../../store/useRouteStore";
@@ -15,7 +15,8 @@ export type SortOption =
   | "name-asc"
   | "name-desc"
   | "duration-desc"
-  | "duration-asc";
+  | "duration-asc"
+  | "area-places";
 
 interface PlaceListToolbarProps {
   searchQuery: string;
@@ -68,7 +69,6 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
 }) => {
   const startDate = useRouteStore((s) => s.startDate);
   const dayIndices = React.useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
-  const isSearching = searchQuery.trim().length > 0;
 
   const getSortLabel = (sort: SortOption) => {
     switch (sort) {
@@ -90,6 +90,8 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
         return "Duration (High to Low)";
       case "duration-asc":
         return "Duration (Low to High)";
+      case "area-places":
+        return "Area Places (Districts/Streets First)";
       default:
         return "Default Order";
     }
@@ -172,7 +174,6 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
 
           {/* Sort By Dropdown */}
           <div className="relative shrink-0 flex items-center">
-            <ArrowUpDown className="w-3.5 h-3.5 text-surface-400 dark:text-surface-500 absolute left-2.5 pointer-events-none z-10" />
             <select
               value={sortBy}
               onChange={(e) => onSortChange(e.target.value as SortOption)}
@@ -188,6 +189,7 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
               <option value="name-asc">Sort: Name (A-Z)</option>
               <option value="duration-desc">Sort: Duration (High to Low)</option>
               <option value="duration-asc">Sort: Duration (Low to High)</option>
+              <option value="area-places">Sort: Area Places First</option>
             </select>
           </div>
 
@@ -257,7 +259,7 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
             type="button"
             onClick={onToggleMassEdit}
             className={`h-9 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer ${
-              isMassEditOpen || (isSearching && filteredPlacesCount > 0)
+              isMassEditOpen
                 ? "bg-primary-100 dark:bg-primary-900/50 text-primary-900 dark:text-primary-200 border-primary-300 dark:border-primary-700 shadow-2xs"
                 : "bg-surface-50 dark:bg-surface-800 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700"
             }`}
@@ -269,7 +271,7 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
             {filteredPlacesCount > 0 && (
               <span
                 className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                  isMassEditOpen || (isSearching && filteredPlacesCount > 0)
+                  isMassEditOpen
                     ? "bg-primary-200/90 dark:bg-primary-800/90 text-primary-900 dark:text-primary-100"
                     : "bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300"
                 }`}

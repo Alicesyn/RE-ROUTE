@@ -169,14 +169,19 @@ export interface TimeConflictResult {
 /**
  * Checks if a given arrival time and duration fit within the opening hours and/or allowedTimeRange.
  * If arriving up to 30 minutes before opening, treats it as an acceptable arrival wait.
- * If arriving more than 30 minutes before opening, flags it as a conflict (Closed).
+ * If arriving more than 30 minutes before opening (minus any intentional queue buffer for walk-in places),
+ * flags it as a conflict (Closed).
+ *
+ * @param earlyArrivalMinutes - Queue buffer for walk-in places (from parseEarlyArrivalMinutes).
+ *   Extends the grace window so "line forms 20 min before opening" is treated as acceptable.
  */
 export const checkTimeConflict = (
   arrivalTimeMinutes: number,
   durationMinutes: number,
   openingHours: string[] | undefined,
   date: Date,
-  allowedTimeRange?: TimeRangeConstraint
+  allowedTimeRange?: TimeRangeConstraint,
+  earlyArrivalMinutes: number = 0,
 ): TimeConflictResult => {
   let hasConflict = false;
   let reason: string | undefined;
@@ -234,7 +239,8 @@ export const checkTimeConflict = (
             const wait = candidateInterval.open - arrivalTimeMinutes;
             waitMinutes = Math.max(waitMinutes, wait);
             effectiveStartTime = Math.max(effectiveStartTime, candidateInterval.open);
-            if (wait > 30) {
+            // Grace window: 30 min hardcoded + walk-in queue buffer from AI's advanceTime
+            if (wait > 30 + earlyArrivalMinutes) {
               hasConflict = true;
               const openTimeFormatted = formatMinutesTo12h(candidateInterval.open);
               reason = `Closed (opens at ${openTimeFormatted})`;

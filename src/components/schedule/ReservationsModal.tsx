@@ -14,8 +14,8 @@ import {
   CalendarDays,
   Sparkles,
   Hash,
-  ArrowUpDown,
   Info,
+  FileSpreadsheet,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouteStore } from "../../store/useRouteStore";
@@ -52,6 +52,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
   const [copiedChecklist, setCopiedChecklist] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Filter all relevant places & enrich them with booking math
   const allReservationPlaces: EnrichedReservationPlace[] = useMemo(() => {
@@ -203,6 +204,70 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
     }
   };
 
+  const handleExportExcel = async () => {
+    try {
+      setIsExporting(true);
+      const { exportReservationsChecklistToExcel } = await import(
+        "../../services/excelExportService"
+      );
+      const state = useRouteStore.getState();
+      const snapshot = {
+        id: `trip_${Date.now()}`,
+        title: state.title,
+        days: state.days,
+        startDate: state.startDate,
+        endDate: state.endDate,
+        dateMode: state.dateMode,
+        dayStartTime: state.dayStartTime,
+        dayEndTime: state.dayEndTime,
+        showFlights: state.showFlights,
+        arrivalFlight: state.arrivalFlight,
+        departureFlight: state.departureFlight,
+        travelMode: state.travelMode,
+        dailyBudget: state.dailyBudget,
+        strictBudget: state.strictBudget,
+        avoidClosedHours: state.avoidClosedHours,
+        places: state.places,
+        hotels: state.hotels,
+        missingPlaces: state.missingPlaces,
+        categoryDurations: state.categoryDurations,
+        categoryConfigs: state.categoryConfigs,
+        customBuffers: state.customBuffers,
+        dayTitles: state.dayTitles,
+        exemptDays: state.exemptDays,
+        customTransitTimes: state.customTransitTimes,
+        optimizedRoutes: state.optimizedRoutes,
+        savedAt: Date.now(),
+      };
+
+      const count = await exportReservationsChecklistToExcel(snapshot, {
+        enrichedPlaces: allReservationPlaces,
+        distanceUnit: state.distanceUnit,
+        timeFormat: state.timeFormat,
+      });
+
+      if (count === 0) {
+        toast.info(
+          "No places requiring or recommending reservations were found.",
+          "Checklist Empty"
+        );
+      } else {
+        toast.success(
+          `Exported ${count} reservation items to Excel!`,
+          "Checklist Exported"
+        );
+      }
+    } catch (err) {
+      console.error("Export reservations error:", err);
+      toast.error(
+        "Failed to export reservations checklist to Excel.",
+        "Export Failed"
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -240,6 +305,27 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-xs disabled:opacity-50"
+                title="Export required & recommended reservations to an Excel spreadsheet (.xlsx)"
+              >
+                {isExporting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span className="hidden xs:inline">Export Reservations</span>
+                    <span className="xs:hidden">Excel</span>
+                  </>
+                )}
+              </button>
+
               <button
                 type="button"
                 onClick={handleCopyChecklist}
@@ -402,7 +488,6 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
               </div>
 
               <label className="relative flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg text-surface-700 dark:text-surface-300 cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500 transition-colors hover:bg-surface-100 dark:hover:bg-surface-800">
-                <ArrowUpDown className="w-3.5 h-3.5 text-surface-400 shrink-0" />
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortOption)}

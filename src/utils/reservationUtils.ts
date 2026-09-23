@@ -305,3 +305,33 @@ export function generateBookingChecklist(
 
   return lines.join("\n");
 }
+
+/**
+ * Parses early-arrival queue recommendations from advanceTime strings.
+ * Used by the optimizer to extend the early-arrival grace window for walk-in
+ * places that have known queue times.
+ *
+ * Examples:
+ * - "Walk-ins only; arrive 15–20 min before opening to queue" → 20
+ * - "Walk-ins only; line forms 15m before opening"           → 15
+ * - "Arrive 30 minutes early"                                → 30
+ * - "Reserve 2 weeks in advance"                             → 0 (not a queue)
+ */
+export function parseEarlyArrivalMinutes(advanceTime?: string): number {
+  if (!advanceTime || typeof advanceTime !== "string") return 0;
+  const text = advanceTime.toLowerCase();
+
+  // Match patterns like "15–20 min", "15-20 min", "30 min", "15m"
+  // Prefer the higher end of a range (e.g. "15–20" → 20)
+  const rangeMatch = text.match(
+    /(\d+)\s*[-–]\s*(\d+)\s*(?:min(?:utes?)?|m)\s*(?:before|early|ahead|prior|to queue|queue)/i
+  );
+  if (rangeMatch) return parseInt(rangeMatch[2], 10);
+
+  const singleMatch = text.match(
+    /(\d+)\s*(?:min(?:utes?)?|m)\s*(?:before|early|ahead|prior|to queue|queue)/i
+  );
+  if (singleMatch) return parseInt(singleMatch[1], 10);
+
+  return 0;
+}

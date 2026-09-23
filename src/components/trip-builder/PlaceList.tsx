@@ -27,6 +27,7 @@ import { Place, PlaceCategory, DayRangeConstraint, TimeRangeConstraint } from ".
 import { findDuplicatePlaceIds, getDuplicatePlaceIdsToRemove } from "../../utils/duplicateUtils";
 import { formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
+import { isAreaPlace } from "../../utils/areaOpeningHoursUtils";
 
 const EditPlaceModal = React.lazy(() =>
   import("../schedule/EditPlaceModal").then((m) => ({ default: m.EditPlaceModal }))
@@ -322,6 +323,12 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           return (b.estimatedDuration ?? 60) - (a.estimatedDuration ?? 60);
         } else if (sortBy === "duration-asc") {
           return (a.estimatedDuration ?? 60) - (b.estimatedDuration ?? 60);
+        } else if (sortBy === "area-places") {
+          const isAreaA = isAreaPlace(a) ? 1 : 0;
+          const isAreaB = isAreaPlace(b) ? 1 : 0;
+          const diff = isAreaB - isAreaA;
+          if (diff !== 0) return diff;
+          return places.indexOf(a) - places.indexOf(b);
         }
         return 0;
       });
@@ -488,8 +495,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       }
     };
 
-    const isSearching = searchQuery.trim().length > 0;
-    const showMassEditBar = (isSearching || isMassEditOpen) && filteredPlaces.length > 0;
+    const showMassEditBar = isMassEditOpen && filteredPlaces.length > 0;
 
     if (places.length === 0) {
       return (

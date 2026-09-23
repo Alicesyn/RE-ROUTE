@@ -170,7 +170,7 @@ export const summarizePlace = async (
     Determine if reservations or advance tickets are needed/recommended, and provide actionable booking window guidance:
     - "reservation": {
         "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
-        "advanceTime": <string with concrete timing, e.g. "Reserve 1 month in advance", "Book 2-4 weeks ahead via official website", "Opens 30 days prior at midnight", "Walk-ins only; line forms 15m before opening", "No reservation needed">,
+        "advanceTime": <string with concrete timing. For walk_ins_only ALWAYS include queue timing if applicable, e.g. "Walk-ins only; arrive 15–20 min before opening to queue", "Walk-ins only; no queue needed, opens 10:00 AM daily". For reservations: "Reserve 1 month in advance", "Book 2-4 weeks ahead via official website", "Opens 30 days prior at midnight". For no reservation: "No reservation needed">,
         "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
       }
 
@@ -270,7 +270,7 @@ export const summarizePlacesBatch = async (
     Determine if reservations or advance tickets are needed/recommended, and provide actionable booking window guidance:
     - "reservation": {
         "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
-        "advanceTime": <string with concrete timing, e.g. "Reserve 1 month in advance", "Book 2-4 weeks ahead via official website", "Opens 30 days prior at midnight", "Walk-ins only; line forms 15m before opening", "No reservation needed">,
+        "advanceTime": <string with concrete timing. For walk_ins_only ALWAYS include queue timing if applicable, e.g. "Walk-ins only; arrive 15–20 min before opening to queue", "Walk-ins only; no queue needed, opens 10:00 AM daily", "Walk-ins only; peak wait 30–45 min at lunch". For reservations: "Reserve 1 month in advance", "Book 2-4 weeks ahead via official website". For no reservation: "No reservation needed">,
         "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
       }
 
@@ -476,7 +476,7 @@ export const suggestSights = async (
     - RESERVATION GUIDELINES in "reservation":
       {
         "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
-        "advanceTime": <string with concrete timing, e.g. "Reserve 1 month in advance", "Opens 30 days prior at midnight", "Walk-ins only; line forms 15m before opening", "No reservation needed">,
+        "advanceTime": <string with concrete timing. For walk_ins_only ALWAYS include queue timing if applicable, e.g. "Walk-ins only; arrive 15–20 min before opening to queue", "Walk-ins only; no queue needed", "Walk-ins only; peak wait 30 min at dinner hour". For reservations: "Reserve 1 month in advance", "Opens 30 days prior at midnight". For no reservation: "No reservation needed">,
         "notes": <string or null>
       }
 
