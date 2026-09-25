@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
-import { formatDayIndexLabel } from "../../utils/dayRangeUtils";
+import { formatDayIndexLabel, mergeOverlappingRanges, MAX_DAY_RANGES, formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { ALL_CATEGORIES, getCategoryEmoji, getCategoryLabel, getDefaultDuration } from "../../utils/categoryUtils";
-import { PlaceCategory, ReservationInfo, ReservationRequirement, DayRangeConstraint, TimeRangeConstraint } from "../../types";
-import { summarizePlace } from "../../services/aiService";
+import { PlaceCategory, ReservationInfo, ReservationRequirement, DayRangeConstraint, TimeRangeConstraint, TabelogInfo } from "../../types";
+import { summarizePlace, fetchTabelogInfo } from "../../services/aiService";
+import {
+  isJapanRestaurant,
+  getTabelogSearchUrl,
+  formatDescriptionWithTabelog,
+  stripTabelogPrefix,
+} from "../../utils/tabelogUtils";
 import {
   getSpecificMockHighlight,
   getSpecificMockPrice,
@@ -41,11 +47,17 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [isStarred, setIsStarred] = useState(false);
   const [dismissedDuplicate, setDismissedDuplicate] = useState(false);
   const [hasDayRange, setHasDayRange] = useState(false);
-  const [startDayIndex, setStartDayIndex] = useState(0);
-  const [endDayIndex, setEndDayIndex] = useState(Math.max(0, days - 1));
+  const [dayRangeRows, setDayRangeRows] = useState<DayRangeConstraint[]>([
+    { startDay: 0, endDay: Math.max(0, days - 1) },
+  ]);
   const [hasTimeRange, setHasTimeRange] = useState(false);
   const [timeRangeStart, setTimeRangeStart] = useState("09:00");
   const [timeRangeEnd, setTimeRangeEnd] = useState("18:00");
+  const [tabelogRating, setTabelogRating] = useState("");
+  const [tabelogUrl, setTabelogUrl] = useState("");
+  const [tabelogAward, setTabelogAward] = useState("");
+  const [prependTabelogToDesc, setPrependTabelogToDesc] = useState(true);
+  const [isFetchingTabelog, setIsFetchingTabelog] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   useEffect(() => {
@@ -69,12 +81,15 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setDismissedDuplicate(!!place.dismissedDuplicate);
       if (place.allowedDayRanges && place.allowedDayRanges.length > 0) {
         setHasDayRange(true);
-        setStartDayIndex(Math.max(0, Math.min(days - 1, place.allowedDayRanges[0].startDay)));
-        setEndDayIndex(Math.max(0, Math.min(days - 1, place.allowedDayRanges[0].endDay)));
+        setDayRangeRows(
+          place.allowedDayRanges.map((r) => ({
+            startDay: Math.max(0, Math.min(days - 1, r.startDay)),
+            endDay: Math.max(0, Math.min(days - 1, r.endDay)),
+          }))
+        );
       } else {
         setHasDayRange(false);
-        setStartDayIndex(0);
-        setEndDayIndex(Math.max(0, days - 1));
+        setDayRangeRows([{ startDay: 0, endDay: Math.max(0, days - 1) }]);
       }
       if (place.allowedTimeRange && place.allowedTimeRange.startTime && place.allowedTimeRange.endTime) {
         setHasTimeRange(true);
@@ -85,6 +100,10 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         setTimeRangeStart("09:00");
         setTimeRangeEnd("18:00");
       }
+      setTabelogRating(place.tabelog?.rating !== undefined && place.tabelog?.rating !== null ? place.tabelog.rating.toString() : "");
+      setTabelogUrl(place.tabelog?.url || "");
+      setTabelogAward(place.tabelog?.award || "");
+      setPrependTabelogToDesc(true);
     }
   }, [place, days]);
 
@@ -118,15 +137,18 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         isBooked,
         bookingUrl: bookingUrl.trim() || undefined,
         confirmationNumber: confirmationNumber.trim() || undefined,
+        whosInterested: place.reservation?.whosInterested,
       }
       : undefined;
 
     const trimmedCustomTime = customTimeVal.trim();
-    const finalAllowedDayRanges: DayRangeConstraint[] | undefined = hasDayRange
-      ? [{
-        startDay: Math.min(startDayIndex, endDayIndex),
-        endDay: Math.max(startDayIndex, endDayIndex),
-      }]
+    const finalAllowedDayRanges: DayRangeConstraint[] | undefined = (hasDayRange && dayRangeRows.length > 0)
+      ? mergeOverlappingRanges(
+        dayRangeRows.map((r) => ({
+          startDay: Math.min(r.startDay, r.endDay),
+          endDay: Math.max(r.startDay, r.endDay),
+        }))
+      )
       : undefined;
 
     const finalAllowedTimeRange: TimeRangeConstraint | undefined = (hasTimeRange && timeRangeStart && timeRangeEnd)
@@ -155,15 +177,38 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         timeRangeChanged) ||
         isDayOutOfRange);
 
+    const parsedRating = parseFloat(tabelogRating);
+    const hasTabelog =
+      (!isNaN(parsedRating) && parsedRating > 0) ||
+      Boolean(tabelogUrl.trim()) ||
+      Boolean(tabelogAward.trim());
+
+    const finalTabelog: TabelogInfo | undefined = hasTabelog
+      ? {
+          rating: !isNaN(parsedRating) && parsedRating > 0 ? parsedRating : undefined,
+          url: tabelogUrl.trim() || undefined,
+          award: tabelogAward.trim() || undefined,
+          savedAt: Date.now(),
+        }
+      : undefined;
+
+    let finalDesc = desc.trim();
+    if (finalTabelog?.rating && prependTabelogToDesc) {
+      finalDesc = formatDescriptionWithTabelog(finalDesc, finalTabelog.rating, finalTabelog.award);
+    } else if (!prependTabelogToDesc) {
+      finalDesc = stripTabelogPrefix(finalDesc);
+    }
+
     updatePlace(place.id, {
-      description: desc,
-      descriptionSource: desc !== place.description ? "user" : place.descriptionSource,
+      description: finalDesc,
+      descriptionSource: finalDesc !== place.description ? "user" : place.descriptionSource,
       estimatedDuration: finalDuration,
       category,
       romanizedName: romanizedName.trim() || undefined,
       highlight: finalHighlight,
       priceEstimate: priceEstimate.trim() || undefined,
       reservation: finalReservation,
+      tabelog: finalTabelog,
       customTime: trimmedCustomTime || undefined,
       pinnedToDay: isDayOutOfRange ? false : pinnedToDay,
       isStarred,
@@ -189,6 +234,67 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
     const newCat = e.target.value as PlaceCategory;
     setCategory(newCat);
     setDurationVal(getDefaultDuration(newCat).toString());
+  };
+
+  const handleFetchTabelog = async () => {
+    if (!place) return;
+    setIsFetchingTabelog(true);
+    try {
+      const res = await fetchTabelogInfo(
+        place.name,
+        place.address,
+        romanizedName || place.romanizedName
+      );
+      if (res) {
+        if (res.rating) {
+          setTabelogRating(res.rating.toString());
+          if (prependTabelogToDesc) {
+            setDesc((prev) => formatDescriptionWithTabelog(prev, res.rating, res.award));
+          }
+        }
+        if (res.url) setTabelogUrl(res.url);
+        if (res.award) setTabelogAward(res.award);
+        toast.success(`Found Tabelog listing (${res.rating ? `★ ${res.rating}` : "link found"})!`, "Tabelog Found");
+      } else {
+        toast.info("No direct Tabelog score found via AI. You can use 'Search Tabelog' to look up manually.", "Tabelog Lookup");
+      }
+    } catch {
+      toast.error("Failed to query Tabelog via AI.", "Lookup Error");
+    } finally {
+      setIsFetchingTabelog(false);
+    }
+  };
+
+  const handleUpdateDayRange = (index: number, field: "startDay" | "endDay", value: number) => {
+    setDayRangeRows((prev) =>
+      prev.map((r, i) => {
+        if (i !== index) return r;
+        if (field === "startDay") {
+          return {
+            startDay: value,
+            endDay: Math.max(value, r.endDay),
+          };
+        } else {
+          return {
+            startDay: Math.min(r.startDay, value),
+            endDay: value,
+          };
+        }
+      })
+    );
+  };
+
+  const handleAddDayRange = () => {
+    if (dayRangeRows.length >= MAX_DAY_RANGES) return;
+    const lastEnd = dayRangeRows[dayRangeRows.length - 1]?.endDay ?? 0;
+    const nextStart = Math.min(days - 1, lastEnd + 1);
+    const nextEnd = Math.min(days - 1, nextStart + 1);
+    setDayRangeRows((prev) => [...prev, { startDay: nextStart, endDay: nextEnd }]);
+  };
+
+  const handleRemoveDayRange = (index: number) => {
+    if (dayRangeRows.length <= 1) return;
+    setDayRangeRows((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleGenerate = async () => {
@@ -232,6 +338,11 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         setReservationReq(aiData.reservation.requirement);
         setReservationAdvance(aiData.reservation.advanceTime || "");
         setReservationNotes(aiData.reservation.notes || "");
+      }
+      if (aiData.tabelog) {
+        if (aiData.tabelog.rating) setTabelogRating(aiData.tabelog.rating.toString());
+        if (aiData.tabelog.url) setTabelogUrl(aiData.tabelog.url);
+        if (aiData.tabelog.award) setTabelogAward(aiData.tabelog.award);
       }
     } catch (err) {
       console.error(err);
@@ -609,6 +720,111 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
             </div>
           </div>
 
+          {/* Tabelog (食べログ) Section for Restaurants in Japan */}
+          {(category === "restaurant" || isJapanRestaurant(place)) && (
+            <div className="bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 dark:border-amber-500/30 rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-amber-500 text-sm">🍜</span>
+                  <span className="text-xs font-bold text-amber-950 dark:text-amber-200">
+                    Tabelog (食べログ) Review & Links
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={getTabelogSearchUrl({ name: place.name, romanizedName, address: place.address })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 flex items-center gap-0.5 hover:underline"
+                  >
+                    Search Tabelog <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleFetchTabelog}
+                    disabled={isFetchingTabelog}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                    title="AI search for Tabelog rating and official link"
+                  >
+                    {isFetchingTabelog ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    {isFetchingTabelog ? "Finding..." : "AI Fetch"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                    <Star className="w-3 h-3 text-amber-500 fill-amber-500" /> Star Rating
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1.00"
+                    max="5.00"
+                    value={tabelogRating}
+                    onChange={(e) => setTabelogRating(e.target.value)}
+                    placeholder="e.g. 3.74 (>=3.5 is top 3%)"
+                    className="w-full text-xs font-semibold bg-white dark:bg-surface-900 border border-amber-200 dark:border-amber-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider">
+                    Award / Honor (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={tabelogAward}
+                    onChange={(e) => setTabelogAward(e.target.value)}
+                    placeholder="e.g. Hyakumeiten 2024, Bronze"
+                    className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-amber-200 dark:border-amber-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                    <Link2 className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Direct Tabelog URL
+                  </label>
+                  {tabelogUrl && (
+                    <a
+                      href={tabelogUrl.startsWith("http") ? tabelogUrl : `https://${tabelogUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-semibold text-amber-700 hover:text-amber-900 dark:text-amber-400 flex items-center gap-0.5 hover:underline"
+                    >
+                      Open listing <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  value={tabelogUrl}
+                  onChange={(e) => setTabelogUrl(e.target.value)}
+                  placeholder="https://tabelog.com/tokyo/A1301/..."
+                  className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-amber-200 dark:border-amber-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Prepend to Description checkbox */}
+              <div className="flex items-center justify-between pt-1 border-t border-amber-200/50 dark:border-amber-800/40">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={prependTabelogToDesc}
+                    onChange={(e) => setPrependTabelogToDesc(e.target.checked)}
+                    className="w-3.5 h-3.5 text-amber-600 rounded focus:ring-amber-500 border-amber-300"
+                  />
+                  <span className="text-[11px] text-surface-700 dark:text-surface-300">
+                    Prepend rating to description on save <span className="text-amber-600 dark:text-amber-400 font-medium">(e.g. &quot;★ 3.74 Tabelog • ...&quot;)</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* Starred / Must-Visit Priority Toggle */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40">
             <div className="flex items-center gap-2.5">
@@ -693,49 +909,86 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
 
             {hasDayRange && (
               <div className="pt-2 border-t border-surface-200/60 dark:border-surface-700/60 space-y-2.5 animate-in fade-in duration-150">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider">
-                      From (Start Day)
-                    </label>
-                    <select
-                      value={startDayIndex}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        setStartDayIndex(val);
-                        if (val > endDayIndex) setEndDayIndex(val);
-                      }}
-                      className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                {/* Range Rows */}
+                <div className="space-y-2">
+                  {dayRangeRows.map((row, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-end gap-2 p-2 rounded-lg bg-surface-50/80 dark:bg-surface-800/60 border border-surface-200/80 dark:border-surface-700/60"
                     >
-                      {Array.from({ length: days }, (_, i) => (
-                        <option key={i} value={i}>
-                          {formatDayIndexLabel(i, startDate, dayTitles)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 shrink-0 self-center">
+                        <span className="w-5 h-5 rounded bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-black text-[10px]">
+                          {idx + 1}
+                        </span>
+                      </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider">
-                      To (End Day)
-                    </label>
-                    <select
-                      value={endDayIndex}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        setEndDayIndex(val);
-                        if (val < startDayIndex) setStartDayIndex(val);
-                      }}
-                      className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    >
-                      {Array.from({ length: days }, (_, i) => (
-                        <option key={i} value={i}>
-                          {formatDayIndexLabel(i, startDate, dayTitles)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="flex-1 min-w-0">
+                        <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
+                          From (Start Day)
+                        </label>
+                        <select
+                          value={row.startDay}
+                          onChange={(e) =>
+                            handleUpdateDayRange(idx, "startDay", parseInt(e.target.value, 10))
+                          }
+                          className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          {Array.from({ length: days }, (_, i) => (
+                            <option key={i} value={i}>
+                              {formatDayIndexLabel(i, startDate, dayTitles)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <span className="text-surface-400 dark:text-surface-500 text-xs font-bold self-center pb-1">
+                        →
+                      </span>
+
+                      <div className="flex-1 min-w-0">
+                        <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
+                          To (End Day)
+                        </label>
+                        <select
+                          value={row.endDay}
+                          onChange={(e) =>
+                            handleUpdateDayRange(idx, "endDay", parseInt(e.target.value, 10))
+                          }
+                          className="w-full text-xs font-medium bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          {Array.from({ length: days }, (_, i) => (
+                            <option key={i} value={i}>
+                              {formatDayIndexLabel(i, startDate, dayTitles)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {dayRangeRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDayRange(idx)}
+                          className="p-1 text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer self-center"
+                          title="Remove this range"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
+
+                {/* Add Another Range */}
+                {dayRangeRows.length < MAX_DAY_RANGES && (
+                  <button
+                    type="button"
+                    onClick={handleAddDayRange}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2.5 py-1.5 rounded-lg border border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add another date range ({dayRangeRows.length}/{MAX_DAY_RANGES})</span>
+                  </button>
+                )}
 
                 {/* Quick Presets */}
                 <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
@@ -743,8 +996,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      setStartDayIndex(0);
-                      setEndDayIndex(days - 1);
+                      setDayRangeRows([{ startDay: 0, endDay: days - 1 }]);
                     }}
                     className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
                   >
@@ -756,8 +1008,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                         type="button"
                         onClick={() => {
                           const mid = Math.ceil(days / 2);
-                          setStartDayIndex(0);
-                          setEndDayIndex(mid - 1);
+                          setDayRangeRows([{ startDay: 0, endDay: mid - 1 }]);
                         }}
                         className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
                       >
@@ -767,8 +1018,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                         type="button"
                         onClick={() => {
                           const mid = Math.ceil(days / 2);
-                          setStartDayIndex(mid);
-                          setEndDayIndex(days - 1);
+                          setDayRangeRows([{ startDay: mid, endDay: days - 1 }]);
                         }}
                         className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
                       >
@@ -778,14 +1028,17 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                   )}
                 </div>
 
-                <div className="text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/30 px-2.5 py-1.5 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40">
-                  {startDayIndex === endDayIndex ? (
-                    <span>
-                      Locked to only schedule on <strong>{formatDayIndexLabel(startDayIndex, startDate, dayTitles)}</strong>.
-                    </span>
-                  ) : (
-                    <span>
-                      Allowed between <strong>{formatDayIndexLabel(startDayIndex, startDate, dayTitles)}</strong> and <strong>{formatDayIndexLabel(endDayIndex, startDate, dayTitles)}</strong>.
+                {/* Summary badge / text */}
+                <div className="text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/30 px-2.5 py-1.5 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40 flex items-center justify-between flex-wrap gap-1">
+                  <span>
+                    Allowed schedule:{" "}
+                    <strong>
+                      {formatMultiRangeBadge(dayRangeRows, startDate, dayTitles).fullLabel}
+                    </strong>
+                  </span>
+                  {dayRangeRows.length > 1 && (
+                    <span className="text-[9px] text-indigo-500/80 dark:text-indigo-400/70">
+                      (Overlapping ranges auto-merge on save)
                     </span>
                   )}
                 </div>

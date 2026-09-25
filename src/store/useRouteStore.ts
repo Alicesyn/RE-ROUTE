@@ -71,6 +71,12 @@ interface RouteState extends ModeData {
   isCalculating: boolean;
   calculatingText: string;
 
+  // Active Filter state (in-memory, reported by PlaceList)
+  filteredPlaceIds: string[] | null;
+  hasActiveFilter: boolean;
+  activeFilterCategory: PlaceCategory | "all";
+  activeFilterDescription: string | null;
+
   // Cloud Sync & Auth & Quick Save
   user: User | null;
   isAutoSyncEnabled: boolean;
@@ -135,6 +141,12 @@ interface RouteState extends ModeData {
   clearAll: () => void;
   unassignAll: () => void;
   clearOptimizedSchedule: () => void;
+  setFilteredPlacesState: (state: {
+    ids: string[] | null;
+    hasActiveFilter?: boolean;
+    category?: PlaceCategory | "all";
+    filterDescription?: string | null;
+  }) => void;
 
   // Missing Places
   addMissingPlace: (name: string) => void;
@@ -260,6 +272,43 @@ const idbStorage: StateStorage = {
   },
 };
 
+function mergePlaceUpdates(existingPlace: Place, updates: Partial<Place>): Place {
+  let mergedReservation = updates.reservation;
+  if (updates.reservation !== undefined && existingPlace.reservation) {
+    if (updates.reservation === null || updates.reservation === undefined) {
+      mergedReservation = updates.reservation;
+    } else {
+      mergedReservation = {
+        ...existingPlace.reservation,
+        ...updates.reservation,
+        // Preserve user reservation state if the update did not explicitly specify it
+        isBooked:
+          updates.reservation.isBooked !== undefined
+            ? updates.reservation.isBooked
+            : existingPlace.reservation.isBooked,
+        bookingUrl:
+          updates.reservation.bookingUrl !== undefined
+            ? updates.reservation.bookingUrl
+            : existingPlace.reservation.bookingUrl,
+        confirmationNumber:
+          updates.reservation.confirmationNumber !== undefined
+            ? updates.reservation.confirmationNumber
+            : existingPlace.reservation.confirmationNumber,
+        whosInterested:
+          updates.reservation.whosInterested !== undefined
+            ? updates.reservation.whosInterested
+            : existingPlace.reservation.whosInterested,
+      };
+    }
+  }
+
+  return {
+    ...existingPlace,
+    ...updates,
+    ...(updates.reservation !== undefined ? { reservation: mergedReservation } : {}),
+  };
+}
+
 export const useRouteStore = create<RouteState>()(
   persist(
     (set, get) => ({
@@ -308,6 +357,12 @@ export const useRouteStore = create<RouteState>()(
       savedTrips: [],
       isCalculating: false,
       calculatingText: "",
+
+      // Active Filter state (in-memory, reported by PlaceList)
+      filteredPlaceIds: null,
+      hasActiveFilter: false,
+      activeFilterCategory: "all",
+      activeFilterDescription: null,
 
       // Cloud Sync & Auth & Quick Save
       user: null,
@@ -560,12 +615,12 @@ export const useRouteStore = create<RouteState>()(
         const isUnpinning = updates.pinnedToDay === false && (currentPlace?.pinnedToDay ?? false);
 
         const newPlaces = state.places.map((p) =>
-          p.id === id ? { ...p, ...updates } : p,
+          p.id === id ? mergePlaceUpdates(p, updates) : p,
         );
 
         let newRoutes = state.optimizedRoutes.map((r) => ({
           ...r,
-          stops: r.stops.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+          stops: r.stops.map((s) => (s.id === id ? mergePlaceUpdates(s, updates) : s)),
         }));
 
         if (isUnpinning && dayIndex !== null && dayIndex !== undefined) {
@@ -628,13 +683,13 @@ export const useRouteStore = create<RouteState>()(
         set((state) => ({
           places: state.places.map((p) => {
             const update = updates.find((u) => u.id === p.id);
-            return update ? { ...p, ...update.updates } : p;
+            return update ? mergePlaceUpdates(p, update.updates) : p;
           }),
           optimizedRoutes: state.optimizedRoutes.map((r) => ({
             ...r,
             stops: r.stops.map((s) => {
               const update = updates.find((u) => u.id === s.id);
-              return update ? { ...s, ...update.updates } : s;
+              return update ? mergePlaceUpdates(s, update.updates) : s;
             }),
           })),
         })),
@@ -798,8 +853,32 @@ export const useRouteStore = create<RouteState>()(
 
       clearAll: () => {
         console.log("Zustand clearAll executed");
-        set({ places: [], hotels: [], missingPlaces: [], optimizedRoutes: [], customBuffers: [], dayTitles: {} });
+        set({
+          places: [],
+          hotels: [],
+          missingPlaces: [],
+          optimizedRoutes: [],
+          customBuffers: [],
+          dayTitles: {},
+          filteredPlaceIds: null,
+          hasActiveFilter: false,
+          activeFilterCategory: "all",
+          activeFilterDescription: null,
+        });
       },
+
+      setFilteredPlacesState: ({
+        ids,
+        hasActiveFilter = false,
+        category = "all",
+        filterDescription = null,
+      }) =>
+        set({
+          filteredPlaceIds: ids,
+          hasActiveFilter,
+          activeFilterCategory: category,
+          activeFilterDescription: filterDescription,
+        }),
 
       resetTrip: () => {
         const today = new Date();

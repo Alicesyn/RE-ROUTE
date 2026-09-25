@@ -76,7 +76,7 @@ const ROUTES_CACHE_KEY = "reroute_routes_cache_v3";
 const ROUTES_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type CachedRoute = { distanceM: number; durationS: number; savedAt?: number };
-let routesCache: Record<string, CachedRoute> = {};
+const routesCache: Record<string, CachedRoute> = {};
 
 // Hydrate routes cache, evicting stale entries on load
 try {
@@ -364,15 +364,32 @@ export const fetchFreshPhoto = async (place: {
   address?: string;
   lat?: number;
   lng?: number;
+  googlePlaceId?: string;
+  photoReference?: string;
 }): Promise<string | undefined> => {
   const apiKey = getApiKey();
   if (!apiKey || apiKey === "undefined") return undefined;
 
+  // 1. Direct photoReference resolution if already available (saves an extra Place Details API call)
+  if (place.photoReference) {
+    try {
+      const directUrl = await resolvePhotoUrl(place.photoReference, apiKey);
+      if (directUrl) return directUrl;
+    } catch (e) {
+      console.warn("Direct photoReference resolution failed:", e);
+    }
+  }
+
+  // 2. Lookup photo reference via Google Place Details
+  const rawGoogleId = place.googlePlaceId || place.id;
+  const googleId = rawGoogleId && !rawGoogleId.startsWith("p_") ? rawGoogleId : undefined;
+
   let photoName: string | undefined = undefined;
-  if (place.id && place.id.startsWith("ChIJ")) {
+  if (googleId) {
     try {
       apiUsageService.recordCall("maps_photo");
-      const r = await fetch(`https://places.googleapis.com/v1/places/${place.id}`, {
+      const cleanGoogleId = googleId.replace(/^places\//, "");
+      const r = await fetch(`https://places.googleapis.com/v1/places/${cleanGoogleId}`, {
         headers: {
           "X-Goog-Api-Key": apiKey,
           "X-Goog-FieldMask": "id,photos",
@@ -388,20 +405,11 @@ export const fetchFreshPhoto = async (place: {
   }
 
   if (photoName) {
-    try {
-      apiUsageService.recordCall("maps_photo");
-      const photoRes = await fetch(
-        `https://places.googleapis.com/v1/${photoName}/media?key=${apiKey}&maxHeightPx=400&skipHttpRedirect=true`
-      );
-      if (photoRes.ok) {
-        const pData = await photoRes.json();
-        return pData.photoUri;
-      }
-    } catch (e) {
-      console.warn("Photo media redirect lookup failed:", e);
-    }
+    const directUrl = await resolvePhotoUrl(photoName, apiKey);
+    if (directUrl) return directUrl;
   }
 
+  // 3. Fallback: Search Places by name & location and resolve the top result's photo reference
   try {
     const queryStr = place.address ? `${place.name} ${place.address}` : place.name;
     const searchResults = await searchPlaces(
@@ -409,7 +417,10 @@ export const fetchFreshPhoto = async (place: {
       place.lat && place.lng ? { lat: place.lat, lng: place.lng } : undefined
     );
     if (searchResults && searchResults.length > 0) {
-      return searchResults[0].photoUrl;
+      const topResult = searchResults[0];
+      if (topResult.photoReference) {
+        return await resolvePhotoUrl(topResult.photoReference, apiKey);
+      }
     }
   } catch (e) {
     console.warn("Search fallback photo lookup failed:", e);

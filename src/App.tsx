@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Header } from "./components/layout/Header";
 import { PlaceSearch } from "./components/trip-builder/PlaceSearch";
 import { PlaceList } from "./components/trip-builder/PlaceList";
@@ -25,6 +25,7 @@ import { summarizePlacesBatch, romanizePlaceNames, generateHighlightsBatch } fro
 import { hasNonLatinScript } from "./utils/textUtils";
 import type { DayRoute, Place } from "./types";
 import { isLocalDev } from "./utils/envUtils";
+import { getCategoryLabel } from "./utils/categoryUtils";
 import {
   getSpecificMockHighlight,
   getSpecificMockPrice,
@@ -58,6 +59,10 @@ function App() {
     toggleDayExemption,
     setExemptDays,
     dayTitles,
+    filteredPlaceIds,
+    hasActiveFilter,
+    activeFilterCategory,
+    activeFilterDescription,
   } = useRouteStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -362,7 +367,18 @@ function App() {
                   ...(aiData.romanizedName ? { romanizedName: aiData.romanizedName } : {}),
                   ...(aiData.highlight ? { highlight: aiData.highlight } : {}),
                   ...(aiData.priceEstimate ? { priceEstimate: aiData.priceEstimate } : {}),
-                  ...(aiData.reservation ? { reservation: aiData.reservation } : {}),
+                  ...(aiData.reservation
+                    ? {
+                        reservation: {
+                          ...p.reservation,
+                          ...aiData.reservation,
+                          isBooked: p.reservation?.isBooked,
+                          bookingUrl: p.reservation?.bookingUrl,
+                          confirmationNumber: p.reservation?.confirmationNumber,
+                          whosInterested: p.reservation?.whosInterested,
+                        },
+                      }
+                    : {}),
                 },
               });
             } else if (p.editorialSummary) {
@@ -410,7 +426,14 @@ function App() {
               descriptionSource: "ai" as const,
               highlight: mockHighlight,
               priceEstimate: mockPrice,
-              reservation: mockReservation,
+              reservation: {
+                ...p.reservation,
+                ...mockReservation,
+                isBooked: p.reservation?.isBooked,
+                bookingUrl: p.reservation?.bookingUrl,
+                confirmationNumber: p.reservation?.confirmationNumber,
+                whosInterested: p.reservation?.whosInterested,
+              },
             },
           });
         }
@@ -479,17 +502,88 @@ function App() {
 
   const [isRegeneratingAll, setIsRegeneratingAll] = useState(false);
 
+  const candidatePlaces: Place[] = useMemo(() => {
+    if (filteredPlaceIds !== null) {
+      return places.filter((p) => filteredPlaceIds.includes(p.id));
+    }
+    return places;
+  }, [places, filteredPlaceIds]);
+
+  const targetRegeneratePlaces = useMemo(() => {
+    return candidatePlaces.filter((p) => p.descriptionSource !== "user");
+  }, [candidatePlaces]);
+
+  const devRegenerateLabel = useMemo(() => {
+    if (isRegeneratingAll) return "Regenerating...";
+    if (activeFilterCategory && activeFilterCategory !== "all") {
+      return `Regenerate ${getCategoryLabel(activeFilterCategory)} (${targetRegeneratePlaces.length})`;
+    }
+    if (hasActiveFilter && activeFilterDescription) {
+      if (activeFilterDescription === "Excluded") {
+        return `Regenerate Excluded (${targetRegeneratePlaces.length})`;
+      }
+      if (activeFilterDescription === "Unassigned" || activeFilterDescription === "Unassigned Tab") {
+        return `Regenerate Unassigned (${targetRegeneratePlaces.length})`;
+      }
+      return `Regenerate Filtered (${targetRegeneratePlaces.length})`;
+    }
+    return `Regenerate All AI (${targetRegeneratePlaces.length})`;
+  }, [
+    isRegeneratingAll,
+    activeFilterCategory,
+    hasActiveFilter,
+    activeFilterDescription,
+    targetRegeneratePlaces.length,
+  ]);
+
+  const devRegenerateTooltip = useMemo(() => {
+    if (isRegeneratingAll) return "Regenerating AI data...";
+    if (candidatePlaces.length === 0) {
+      return `[Local Dev Only] No places match active filter${activeFilterDescription ? ` (${activeFilterDescription})` : ""}`;
+    }
+    if (targetRegeneratePlaces.length === 0) {
+      return `[Local Dev Only] All ${candidatePlaces.length} place(s) in current view are user-written and protected`;
+    }
+    if (activeFilterCategory && activeFilterCategory !== "all") {
+      return `[Local Dev Only] Regenerate descriptions & highlights for ${targetRegeneratePlaces.length} ${getCategoryLabel(activeFilterCategory)} place(s)`;
+    }
+    if (activeFilterDescription) {
+      return `[Local Dev Only] Regenerate descriptions & highlights for ${targetRegeneratePlaces.length} place(s) matching ${activeFilterDescription}`;
+    }
+    return `[Local Dev Only] Regenerate descriptions & specific highlights for all ${targetRegeneratePlaces.length} non-user-inputted places`;
+  }, [
+    isRegeneratingAll,
+    candidatePlaces.length,
+    targetRegeneratePlaces.length,
+    activeFilterCategory,
+    activeFilterDescription,
+  ]);
+
   const handleRegenerateAllAiData = async () => {
-    const targetPlaces = places.filter((p) => p.descriptionSource !== "user");
+    const targetPlaces = candidatePlaces.filter((p) => p.descriptionSource !== "user");
     if (isRegeneratingAll || targetPlaces.length === 0) {
-      if (targetPlaces.length === 0) {
-        toast.info("All descriptions are user-written and protected from regeneration.", "Regenerate AI");
+      if (candidatePlaces.length === 0) {
+        toast.info(
+          activeFilterDescription
+            ? `No places match the active filter (${activeFilterDescription}).`
+            : "No places found to regenerate.",
+          "Regenerate AI"
+        );
+      } else if (targetPlaces.length === 0) {
+        toast.info(
+          "All places in this view are user-written and protected from regeneration.",
+          "Regenerate AI"
+        );
       }
       return;
     }
 
     setIsRegeneratingAll(true);
-    toast.info(`Regenerating descriptions & highlights for ${targetPlaces.length} places...`, "Regenerating All AI");
+    const scopeNotice = activeFilterDescription ? ` (${activeFilterDescription})` : "";
+    toast.info(
+      `Regenerating descriptions & highlights for ${targetPlaces.length} places${scopeNotice}...`,
+      "Regenerating AI"
+    );
 
     try {
       const updates: { id: string; updates: Partial<Place> }[] = [];
@@ -520,7 +614,18 @@ function App() {
                 ...(aiData.romanizedName ? { romanizedName: aiData.romanizedName } : {}),
                 ...(aiData.highlight ? { highlight: aiData.highlight } : {}),
                 ...(aiData.priceEstimate ? { priceEstimate: aiData.priceEstimate } : {}),
-                ...(aiData.reservation ? { reservation: aiData.reservation } : {}),
+                ...(aiData.reservation
+                  ? {
+                      reservation: {
+                        ...p.reservation,
+                        ...aiData.reservation,
+                        isBooked: p.reservation?.isBooked,
+                        bookingUrl: p.reservation?.bookingUrl,
+                        confirmationNumber: p.reservation?.confirmationNumber,
+                        whosInterested: p.reservation?.whosInterested,
+                      },
+                    }
+                  : {}),
               },
             });
           } else if (p.editorialSummary) {
@@ -544,7 +649,14 @@ function App() {
               descriptionSource: "mock",
               highlight: getSpecificMockHighlight(p),
               priceEstimate: getSpecificMockPrice(p),
-              reservation: getSpecificMockReservation(p),
+              reservation: {
+                ...p.reservation,
+                ...getSpecificMockReservation(p),
+                isBooked: p.reservation?.isBooked,
+                bookingUrl: p.reservation?.bookingUrl,
+                confirmationNumber: p.reservation?.confirmationNumber,
+                whosInterested: p.reservation?.whosInterested,
+              },
             },
           });
         }
@@ -552,7 +664,10 @@ function App() {
 
       if (updates.length > 0) {
         updatePlacesBulk(updates);
-        toast.success(`Regenerated AI data & highlights for ${updates.length} places!`, "Regeneration Complete");
+        toast.success(
+          `Regenerated AI data & highlights for ${updates.length} places${scopeNotice}!`,
+          "Regeneration Complete"
+        );
       } else {
         toast.info("No updates were made.", "Regenerate AI");
       }
@@ -736,16 +851,16 @@ function App() {
                 {isLocalDev() && places.some((p) => p.descriptionSource !== "user") && (
                   <button
                     onClick={handleRegenerateAllAiData}
-                    disabled={isRegeneratingAll || isGenerating || isGeneratingHighlights}
+                    disabled={isRegeneratingAll || isGenerating || isGeneratingHighlights || targetRegeneratePlaces.length === 0}
                     className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 bg-indigo-50 hover:bg-indigo-100/90 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-700/60 px-3 py-1.5 rounded-lg transition-all shadow-2xs disabled:opacity-50"
-                    title="[Local Dev Only] Regenerate descriptions & specific highlights for all non-user-inputted places"
+                    title={devRegenerateTooltip}
                   >
                     {isRegeneratingAll ? (
                       <Loader2 className="w-4 h-4 animate-spin text-indigo-600 dark:text-indigo-400" />
                     ) : (
                       <RefreshCw className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     )}
-                    <span>{isRegeneratingAll ? "Regenerating..." : "Regenerate All AI"}</span>
+                    <span>{devRegenerateLabel}</span>
                     <span className="text-[10px] bg-indigo-200/80 dark:bg-indigo-900/80 text-indigo-800 dark:text-indigo-200 font-bold px-1.5 py-0.5 rounded tracking-wide uppercase">
                       Dev
                     </span>

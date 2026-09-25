@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { PlaceHighlightBadge } from "../common/PlaceHighlightBadge";
 import { ReservationBadge } from "../common/ReservationBadge";
+import { toast } from "../../services/toastService";
 import {
   getSpecificMockHighlight,
   getSpecificMockPrice,
@@ -102,29 +103,48 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
 
   // Explicit user-triggered fetch function (NEVER run automatically in a background effect)
   const handleFetchSuggestions = useCallback(
-    async (overrideAnchor?: { lat: number; lng: number; label: string }) => {
+    async (
+      overrideAnchor?: { lat: number; lng: number; label: string },
+      forceRefresh = false
+    ) => {
       const anchorToUse = overrideAnchor !== undefined ? overrideAnchor : customAnchor;
       if (!hasTripContext && !anchorToUse) return;
 
       setLoading(true);
       try {
         const flights = [arrivalFlight?.location || null, departureFlight?.location || null];
+        // When force refreshing, reject currently displayed suggestions so new ones are returned
+        const currentNames = forceRefresh ? suggestions.map((s) => s.name) : [];
+        const allRejected = Array.from(new Set([...dismissedNames, ...currentNames]));
+
         const fetched = await getSuggestedPlaces(
           places,
           hotels,
           appMode,
-          dismissedNames,
+          allRejected,
           anchorToUse,
-          flights
+          flights,
+          forceRefresh
         );
-        setSuggestions(fetched);
+        if (fetched && fetched.length > 0) {
+          setSuggestions(fetched);
+          scrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+          if (forceRefresh) {
+            toast.success(`Found ${fetched.length} new suggested sights!`, "Suggestions Refreshed");
+          }
+        } else if (forceRefresh) {
+          toast.info("No additional suggestions found for this area.", "Suggestions Refreshed");
+        }
       } catch (err) {
         console.error("Failed to fetch suggestions on user request:", err);
+        if (forceRefresh) {
+          toast.error("Failed to refresh suggestions.", "Suggestions");
+        }
       } finally {
         setLoading(false);
       }
     },
-    [places, hotels, appMode, dismissedNames, customAnchor, arrivalFlight, departureFlight, hasTripContext]
+    [places, hotels, appMode, dismissedNames, customAnchor, arrivalFlight, departureFlight, hasTripContext, suggestions]
   );
 
   // Search logic for custom destination input
@@ -407,12 +427,13 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
 
           {/* Explicit Refresh Button */}
           <button
-            onClick={() => handleFetchSuggestions()}
-            className="text-[11px] font-semibold text-surface-500 hover:text-purple-600 dark:text-surface-400 dark:hover:text-purple-300 flex items-center gap-1 transition-colors ml-1"
-            title="Refresh suggestions"
+            onClick={() => handleFetchSuggestions(undefined, true)}
+            disabled={loading}
+            className="text-[11px] font-semibold text-surface-500 hover:text-purple-600 dark:text-surface-400 dark:hover:text-purple-300 flex items-center gap-1 transition-colors ml-1 disabled:opacity-50"
+            title="Refresh suggestions with new places"
           >
-            <RefreshCw className="w-3 h-3" />
-            <span>Refresh</span>
+            <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin text-purple-600 dark:text-purple-400" : ""}`} />
+            <span>{loading ? "Refreshing..." : "Refresh"}</span>
           </button>
 
           {/* Toggle Search Another Area */}
@@ -487,8 +508,32 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
       )}
 
       {/* Suggested Carousel Container */}
-      <div className="relative">
-        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white dark:from-surface-800 to-transparent pointer-events-none z-10 opacity-60" />
+      <div className="relative min-h-[160px] flex items-center justify-center">
+        {loading && suggestions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-surface-400">
+            <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+            <span className="text-xs font-semibold text-surface-600 dark:text-surface-300">
+              Discovering fresh sights for your itinerary...
+            </span>
+          </div>
+        ) : suggestions.length === 0 ? (
+          <div className="w-full py-8 px-4 text-center border border-dashed border-surface-200 dark:border-surface-700 rounded-xl bg-surface-50/50 dark:bg-surface-800/30">
+            <Compass className="w-7 h-7 text-purple-400 mx-auto mb-2 opacity-60" />
+            <p className="text-xs font-semibold text-surface-600 dark:text-surface-300">
+              No suggested sights loaded yet. Click Refresh to explore ideas!
+            </p>
+            <button
+              onClick={() => handleFetchSuggestions(undefined, true)}
+              disabled={loading}
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Explore Suggestions
+            </button>
+          </div>
+        ) : (
+          <div className="w-full relative">
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white dark:from-surface-800 to-transparent pointer-events-none z-10 opacity-60" />
 
         <div
           ref={scrollRef}
@@ -673,6 +718,8 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
         </div>
 
         <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white dark:from-surface-800 to-transparent pointer-events-none z-10 opacity-60" />
+          </div>
+        )}
       </div>
     </div>
   );

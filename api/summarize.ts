@@ -99,6 +99,18 @@ export default async function handler(req: Request) {
             "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
           }
 
+        TABELOG GUIDELINES (FOR RESTAURANTS IN JAPAN):
+        If a place is a restaurant in Japan:
+        - Identify its official Tabelog (食べログ) listing if available.
+        - "tabelog": {
+            "rating": <number e.g. 3.74, or null if unknown>,
+            "url": <string official Tabelog url e.g. "https://tabelog.com/...", or null>,
+            "award": <string e.g. "Hyakumeiten 2024", "Bronze", or null>
+          }
+        - If a Tabelog rating is identified (e.g. 3.74), PREPEND it to the beginning of the "description" field in the exact format:
+          "★ 3.74 Tabelog • <description text>"
+        If not a restaurant in Japan, set "tabelog" to null.
+
         Places:
         ${places
           .map(
@@ -124,6 +136,11 @@ export default async function handler(req: Request) {
               "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
               "advanceTime": "string",
               "notes": "string or null"
+            },
+            "tabelog": {
+              "rating": "number or null",
+              "url": "string or null",
+              "award": "string or null"
             }
           }
         ]
@@ -163,6 +180,18 @@ export default async function handler(req: Request) {
             "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
           }
 
+        TABELOG GUIDELINES (FOR RESTAURANTS IN JAPAN):
+        If a place is a restaurant in Japan:
+        - Identify its official Tabelog (食べログ) listing if available.
+        - "tabelog": {
+            "rating": <number e.g. 3.74, or null if unknown>,
+            "url": <string official Tabelog url e.g. "https://tabelog.com/...", or null>,
+            "award": <string e.g. "Hyakumeiten 2024", "Bronze", or null>
+          }
+        - If a Tabelog rating is identified (e.g. 3.74), PREPEND it to the beginning of the "description" field in the exact format:
+          "★ 3.74 Tabelog • <description text>"
+        If not a restaurant in Japan, set "tabelog" to null.
+
         Return ONLY a JSON object in this format:
         {
           "description": "string",
@@ -178,6 +207,11 @@ export default async function handler(req: Request) {
             "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
             "advanceTime": "string",
             "notes": "string or null"
+          },
+          "tabelog": {
+            "rating": "number or null",
+            "url": "string or null",
+            "award": "string or null"
           }
         }
       `;

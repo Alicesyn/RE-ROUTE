@@ -8,6 +8,7 @@ import {
 } from "../../../utils/categoryUtils";
 import { formatMultiRangeBadge } from "../../../utils/dayRangeUtils";
 import { ReservationBadge } from "../../common/ReservationBadge";
+import { isJapanRestaurant, getTabelogSearchUrl, getTabelogBadgeStyle } from "../../../utils/tabelogUtils";
 import { format, addDays, parseISO } from "date-fns";
 
 const DAY_COLORS = [
@@ -212,6 +213,38 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
             <Coins className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{place.priceEstimate}</span>
           </div>
+        )}
+
+        {/* Tabelog (Japan Restaurants) badge */}
+        {isJapanRestaurant(place) && (
+          place.tabelog?.rating ? (
+            (() => {
+              const tbStyle = getTabelogBadgeStyle(place.tabelog.rating);
+              return (
+                <a
+                  href={place.tabelog.url || getTabelogSearchUrl(place)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md border whitespace-nowrap transition-colors hover:opacity-85 ${tbStyle.badgeBg} ${tbStyle.textColor} ${tbStyle.borderColor}`}
+                  title={`Tabelog: ★ ${place.tabelog.rating.toFixed(2)}${place.tabelog.award ? ` (${place.tabelog.award})` : ""} [${tbStyle.tierLabel}] - Click to open listing`}
+                >
+                  <span className="font-bold">★ {place.tabelog.rating.toFixed(2)}</span>
+                  <span className="text-[10px] font-normal opacity-85">Tabelog</span>
+                  <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                </a>
+              );
+            })()
+          ) : (
+            <a
+              href={getTabelogSearchUrl(place)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800/60 rounded-md px-1.5 py-0.5 transition-colors whitespace-nowrap"
+              title="Search on Tabelog (食べログ)"
+            >
+              <span>Tabelog ↗</span>
+            </a>
+          )
         )}
 
         {/* View on Google link */}

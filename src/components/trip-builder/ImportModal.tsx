@@ -395,6 +395,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         const newPlace = {
           ...bestMatch,
           id: newId,
+          googlePlaceId: bestMatch.id,
+          photoReference: (bestMatch as any).photoReference || undefined,
           category,
           estimatedDuration,
           description: "",

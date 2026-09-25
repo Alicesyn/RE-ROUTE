@@ -128,8 +128,19 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
         descriptionSource: "ai",
         ...(aiData.romanizedName ? { romanizedName: aiData.romanizedName } : {}),
         ...(aiData.highlight ? { highlight: aiData.highlight } : {}),
-        ...(aiData.priceEstimate ? { priceEstimate: aiData.priceEstimate } : {}),
-        ...(aiData.reservation ? { reservation: aiData.reservation } : {}),
+        ...(aiData.reservation
+          ? {
+              reservation: {
+                ...place.reservation,
+                ...aiData.reservation,
+                isBooked: place.reservation?.isBooked,
+                bookingUrl: place.reservation?.bookingUrl,
+                confirmationNumber: place.reservation?.confirmationNumber,
+                whosInterested: place.reservation?.whosInterested,
+              },
+            }
+          : {}),
+        ...(aiData.tabelog ? { tabelog: aiData.tabelog } : {}),
       });
       setDesc(finalDesc);
     } catch (err) {

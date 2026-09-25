@@ -170,6 +170,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
         notes: item.place.reservation?.notes,
         bookingUrl: item.place.reservation?.bookingUrl,
         confirmationNumber: item.place.reservation?.confirmationNumber,
+        whosInterested: item.place.reservation?.whosInterested,
         isBooked: newStatus,
       },
     });

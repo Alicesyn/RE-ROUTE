@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import {
   DndContext,
@@ -28,6 +28,7 @@ import { findDuplicatePlaceIds, getDuplicatePlaceIdsToRemove } from "../../utils
 import { formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
 import { isAreaPlace } from "../../utils/areaOpeningHoursUtils";
+import { getCategoryLabel } from "../../utils/categoryUtils";
 
 const EditPlaceModal = React.lazy(() =>
   import("../schedule/EditPlaceModal").then((m) => ({ default: m.EditPlaceModal }))
@@ -59,6 +60,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
     const days = useRouteStore((s) => s.days);
     const dayTitles = useRouteStore((s) => s.dayTitles);
     const startDate = useRouteStore((s) => s.startDate);
+    const setFilteredPlacesState = useRouteStore((s) => s.setFilteredPlacesState);
 
     const [internalIsExpanded, setInternalIsExpanded] = useState(false);
     const isExpanded = controlledIsExpanded !== undefined ? controlledIsExpanded : internalIsExpanded;
@@ -351,6 +353,86 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       () => filteredPlaces.map((p) => p.id),
       [filteredPlaces]
     );
+
+    const hasActiveFilter = useMemo(() => {
+      return (
+        categoryFilter !== "all" ||
+        searchQuery.trim() !== "" ||
+        dayFilter !== "all" ||
+        activeTab !== "active" ||
+        starredOnly ||
+        reservationOnly ||
+        duplicatesOnly
+      );
+    }, [
+      categoryFilter,
+      searchQuery,
+      dayFilter,
+      activeTab,
+      starredOnly,
+      reservationOnly,
+      duplicatesOnly,
+    ]);
+
+    const activeFilterDescription = useMemo(() => {
+      const parts: string[] = [];
+      if (categoryFilter !== "all") {
+        parts.push(getCategoryLabel(categoryFilter));
+      }
+      if (searchQuery.trim()) {
+        parts.push(`"${searchQuery.trim()}"`);
+      }
+      if (dayFilter === "unassigned") {
+        parts.push("Unassigned");
+      } else if (typeof dayFilter === "number") {
+        parts.push(`Day ${dayFilter + 1}`);
+      }
+      if (activeTab === "disabled") {
+        parts.push("Excluded");
+      } else if (activeTab === "unassigned" && dayFilter === "all") {
+        parts.push("Unassigned Tab");
+      } else if (activeTab === "all") {
+        parts.push("All Places");
+      }
+      if (starredOnly) parts.push("Starred");
+      if (reservationOnly) parts.push("Reservations");
+      if (duplicatesOnly) parts.push("Duplicates");
+
+      return parts.length > 0 ? parts.join(", ") : null;
+    }, [
+      categoryFilter,
+      searchQuery,
+      dayFilter,
+      activeTab,
+      starredOnly,
+      reservationOnly,
+      duplicatesOnly,
+    ]);
+
+    const filteredPlaceIdsKey = sortableItemIds.join(",");
+    useEffect(() => {
+      setFilteredPlacesState({
+        ids: sortableItemIds,
+        hasActiveFilter,
+        category: categoryFilter,
+        filterDescription: activeFilterDescription,
+      });
+
+      return () => {
+        setFilteredPlacesState({
+          ids: null,
+          hasActiveFilter: false,
+          category: "all",
+          filterDescription: null,
+        });
+      };
+    }, [
+      filteredPlaceIdsKey,
+      hasActiveFilter,
+      categoryFilter,
+      activeFilterDescription,
+      setFilteredPlacesState,
+    ]);
 
     // Mass Edit Actions
     const allFilteredStarred = useMemo(() => {

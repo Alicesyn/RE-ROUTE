@@ -43,6 +43,14 @@ export interface ReservationInfo {
   isBooked?: boolean;   // Whether the reservation has been confirmed/completed
   bookingUrl?: string;  // Direct booking link (e.g. TableCheck, Klook, official ticket URL)
   confirmationNumber?: string; // Optional booking reference / confirmation code
+  whosInterested?: string;     // Group trip planning: travelers/members interested (e.g., "Alice, Bob", "All")
+}
+
+export interface TabelogInfo {
+  rating?: number; // e.g. 3.74 (Tabelog scores: >=3.5 top ~3%, >=3.8 top tier)
+  url?: string; // Direct URL to Tabelog restaurant page (e.g. https://tabelog.com/tokyo/...)
+  award?: string; // Optional recognition (e.g. "The Tabelog Award 2024 Bronze", "Hyakumeiten 2024")
+  savedAt?: number; // Unix timestamp
 }
 
 export interface Place {
@@ -66,17 +74,20 @@ export interface Place {
   unfeasibleReason?: string;
   editorialSummary?: string; // Fallback description from Google Maps
   photoUrl?: string;
+  photoReference?: string; // Raw Places API photo name — resolve to CDN URL via resolvePhotoUrl()
   isDisabled?: boolean; // If true, excluded from routing/schedule but kept in reserve
   romanizedName?: string; // English/romanized transliteration for foreign script names
   highlight?: PlaceHighlight; // Contextual highlight (Must-Try for restaurants, Photo Spot, Advice, etc.)
   googlePlaceId?: string; // Original Google Maps Place ID for deduplication and syncing
   priceEstimate?: string; // Estimated cost per person or admission (e.g. "Free", "$15 - $25", "¥800")
   reservation?: ReservationInfo; // Reservation requirements and advance booking timing
+  tabelog?: TabelogInfo; // Tabelog rating, link, and awards for restaurants in Japan
   customTime?: string; // Optional locked arrival/reservation time in "HH:mm" format (e.g. "13:30", "19:00")
   isStarred?: boolean; // If true, optimizer will force this place into the schedule (never leave unassigned)
   dismissedDuplicate?: boolean; // If true, user manually removed/dismissed the duplicate flag for this place
   allowedDayRanges?: DayRangeConstraint[]; // Multiple disjoint day range constraints (e.g., Oct 3–6 AND Oct 9–12)
   allowedTimeRange?: TimeRangeConstraint; // User-defined scheduling time window (e.g., only visit between 7 AM – 5 PM)
+  whosInterested?: string; // Group trip planning: travelers/members interested in this place
   addedAt?: number; // Unix timestamp (ms) when place was added/saved
 }
 

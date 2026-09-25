@@ -1,5 +1,6 @@
-import { PlaceCategory, ReservationInfo } from "../types";
+import { PlaceCategory, ReservationInfo, TabelogInfo } from "../types";
 import { isLocalDev } from "../utils/envUtils";
+import { formatDescriptionWithTabelog } from "../utils/tabelogUtils";
 import { hasNonLatinScript } from "../utils/textUtils";
 import { emitApiError } from "./apiErrorBus";
 import { apiUsageService } from "./apiUsageService";
@@ -21,6 +22,7 @@ export interface AISummary {
   highlight?: { label: string; text: string } | null;
   priceEstimate?: string;
   reservation?: ReservationInfo;
+  tabelog?: TabelogInfo | null;
 }
 
 const parseJsonResponse = <T>(rawText: string): T => {
@@ -174,6 +176,18 @@ export const summarizePlace = async (
         "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
       }
 
+    TABELOG GUIDELINES (FOR RESTAURANTS IN JAPAN):
+    If this place is a restaurant in Japan:
+    - Identify its official Tabelog (食べログ) listing if available.
+    - "tabelog": {
+        "rating": <number e.g. 3.74, or null if unknown>,
+        "url": <string official Tabelog url e.g. "https://tabelog.com/...", or null>,
+        "award": <string e.g. "Hyakumeiten 2024", "Bronze", or null>
+      }
+    - If a Tabelog rating is identified (e.g. 3.74), PREPEND it to the beginning of the "description" field in the exact format:
+      "★ 3.74 Tabelog • <description text>"
+    If not a restaurant in Japan, set "tabelog" to null.
+
     Return ONLY a JSON object in this format:
     {
       "description": "string",
@@ -189,11 +203,16 @@ export const summarizePlace = async (
         "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
         "advanceTime": "string",
         "notes": "string or null"
+      },
+      "tabelog": {
+        "rating": "number or null",
+        "url": "string or null",
+        "award": "string or null"
       }
     }
   `;
 
-  return await callGeminiDirectWithFallback(
+  const rawResult = await callGeminiDirectWithFallback(
     activeKey,
     {
       contents: [{ parts: [{ text: prompt }] }],
@@ -201,6 +220,16 @@ export const summarizePlace = async (
     },
     signal
   );
+
+  if (rawResult && rawResult.tabelog?.rating) {
+    rawResult.description = formatDescriptionWithTabelog(
+      rawResult.description,
+      rawResult.tabelog.rating,
+      rawResult.tabelog.award
+    );
+  }
+
+  return rawResult;
 };
 
 export const summarizePlacesBatch = async (
@@ -223,7 +252,20 @@ export const summarizePlacesBatch = async (
       });
 
       if (proxyRes.ok) {
-        return await proxyRes.json();
+        const batchResults = await proxyRes.json();
+        if (Array.isArray(batchResults)) {
+          return batchResults.map((r: any) => {
+            if (r.tabelog?.rating) {
+              r.description = formatDescriptionWithTabelog(
+                r.description,
+                r.tabelog.rating,
+                r.tabelog.award
+              );
+            }
+            return r;
+          });
+        }
+        return batchResults;
       }
 
       if (proxyRes.status !== 404 && proxyRes.status !== 500) {
@@ -274,6 +316,18 @@ export const summarizePlacesBatch = async (
         "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
       }
 
+    TABELOG GUIDELINES (FOR RESTAURANTS IN JAPAN):
+    If a place is a restaurant in Japan:
+    - Identify its official Tabelog (食べログ) listing if available.
+    - "tabelog": {
+        "rating": <number e.g. 3.74, or null if unknown>,
+        "url": <string official Tabelog url e.g. "https://tabelog.com/...", or null>,
+        "award": <string e.g. "Hyakumeiten 2024", "Bronze", or null>
+      }
+    - If a Tabelog rating is identified (e.g. 3.74), PREPEND it to the beginning of the "description" field in the exact format:
+      "★ 3.74 Tabelog • <description text>"
+    If not a restaurant in Japan, set "tabelog" to null.
+
     Places:
     ${places.map(p => `ID: "${p.id}", Name: "${p.name}", Address: "${p.address}", Types: ${p.types.join(", ")}`).join("\n\n")}
 
@@ -294,12 +348,17 @@ export const summarizePlacesBatch = async (
           "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
           "advanceTime": "string",
           "notes": "string or null"
+        },
+        "tabelog": {
+          "rating": "number or null",
+          "url": "string or null",
+          "award": "string or null"
         }
       }
     ]
   `;
 
-  return await callGeminiDirectWithFallback(
+  const rawBatchResults = await callGeminiDirectWithFallback(
     activeKey,
     {
       contents: [{ parts: [{ text: prompt }] }],
@@ -307,6 +366,73 @@ export const summarizePlacesBatch = async (
     },
     signal
   );
+
+  if (Array.isArray(rawBatchResults)) {
+    return rawBatchResults.map((r: any) => {
+      if (r.tabelog?.rating) {
+        r.description = formatDescriptionWithTabelog(
+          r.description,
+          r.tabelog.rating,
+          r.tabelog.award
+        );
+      }
+      return r;
+    });
+  }
+
+  return rawBatchResults;
+};
+
+/**
+ * Direct lookup for Tabelog rating and URL for a restaurant in Japan.
+ */
+export const fetchTabelogInfo = async (
+  name: string,
+  address: string,
+  romanizedName?: string,
+  signal?: AbortSignal
+): Promise<TabelogInfo | null> => {
+  const activeKey = apiUsageService.getActiveGeminiKey();
+  if (!activeKey) return null;
+
+  const prompt = `
+    Find the official Tabelog (食べログ - tabelog.com) restaurant listing and current score for:
+    Name: "${name}"
+    ${romanizedName ? `Romanized Name: "${romanizedName}"` : ""}
+    Address: "${address}"
+
+    Tabelog is Japan's premier restaurant review website.
+    Return ONLY a JSON object:
+    {
+      "rating": <number e.g. 3.74, or null if not found>,
+      "url": <direct string URL e.g. "https://tabelog.com/tokyo/A1301/...", or null>,
+      "award": <string e.g. "Hyakumeiten 2024", "The Tabelog Award 2024 Bronze", or null>
+    }
+  `;
+
+  try {
+    const res = await callGeminiDirectWithFallback(
+      activeKey,
+      {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      },
+      signal
+    );
+
+    if (res && (typeof res.rating === "number" || typeof res.url === "string")) {
+      return {
+        rating: typeof res.rating === "number" ? res.rating : undefined,
+        url: typeof res.url === "string" ? res.url : undefined,
+        award: typeof res.award === "string" ? res.award : undefined,
+        savedAt: Date.now(),
+      };
+    }
+    return null;
+  } catch (err) {
+    console.error("fetchTabelogInfo error:", err);
+    return null;
+  }
 };
 
 export const romanizePlaceNames = async (

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useRouteStore } from "../../store/useRouteStore";
 import { MOCK_PLACES } from "../../services/mockData";
-import { searchPlaces } from "../../services/mapsService";
+import { searchPlaces, fetchFreshPhoto } from "../../services/mapsService";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   getCategoryEmoji,
@@ -146,6 +146,7 @@ export const PlaceSearch: React.FC = () => {
       ...place,
       id: newId,
       googlePlaceId: place.id,
+      photoReference: place.photoReference || undefined,
       category,
       estimatedDuration,
       description: place.description || "",
@@ -156,6 +157,23 @@ export const PlaceSearch: React.FC = () => {
       isArea: isArea || undefined,
     };
     addPlace(newPlace, selectedDay !== null ? selectedDay : undefined);
+
+    // Eagerly resolve photo for instant display in real mode
+    if (appMode === "real" && (place.photoReference || place.id)) {
+      fetchFreshPhoto({
+        id: newId,
+        googlePlaceId: place.id,
+        photoReference: place.photoReference,
+        name: place.name,
+        address: place.address,
+        lat: place.lat,
+        lng: place.lng,
+      }).then((freshUrl) => {
+        if (freshUrl) {
+          updatePlace(newId, { photoUrl: freshUrl });
+        }
+      }).catch((e) => console.warn("Failed to eagerly fetch fresh photo:", e));
+    }
 
     // RC3: Background area opening hours enrichment
     // If this is a shopping/restaurant neighborhood/district with no openingHours

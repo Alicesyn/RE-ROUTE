@@ -15,6 +15,53 @@ import {
   isReservationRelevant,
 } from "../utils/reservationUtils";
 import { formatDayIndexLabel } from "../utils/dayRangeUtils";
+import { hasNonLatinScript } from "../utils/textUtils";
+import { isJapanRestaurant, getTabelogSearchUrl } from "../utils/tabelogUtils";
+
+/**
+ * Resolves the full display name for a place without truncation or losing branch details.
+ * - If the place name is in English/Latin, keeps the full name (doesn't abbreviate with a shorter romanized string).
+ * - If the place has foreign script (e.g. Japanese Kanji), displays the Romanized name first
+ *   with the full original local name in parentheses: e.g. "Gyukatsu Motomura (牛かつ もと村 コレド室町店)"
+ */
+const getPlaceFullDisplayName = (place: {
+  name: string;
+  romanizedName?: string;
+}): string => {
+  const rawName = place.name?.trim() || "";
+  const rawRom = place.romanizedName?.trim() || "";
+
+  if (!rawRom) return rawName;
+  if (!rawName) return rawRom;
+
+  if (rawName.toLowerCase() === rawRom.toLowerCase()) {
+    return rawName;
+  }
+
+  // If rawName does NOT contain foreign script (pure English/Latin):
+  // Keep the full name, which usually includes branch, venue subtitle, etc.
+  if (!hasNonLatinScript(rawName)) {
+    if (
+      rawName.length >= rawRom.length ||
+      rawName.toLowerCase().includes(rawRom.toLowerCase())
+    ) {
+      return rawName;
+    }
+  }
+
+  // If rawName already contains the romanized string
+  if (rawName.toLowerCase().includes(rawRom.toLowerCase())) {
+    return rawName;
+  }
+
+  // If rawRom already contains rawName
+  if (rawRom.toLowerCase().includes(rawName.toLowerCase())) {
+    return rawRom;
+  }
+
+  // For foreign script names, show Romanized name first with full original name in parentheses
+  return `${rawRom} (${rawName})`;
+};
 
 const getCategoryEmoji = (cat: PlaceCategory): string =>
   CATEGORY_DEFAULTS[cat]?.emoji || "📍";
@@ -1362,14 +1409,18 @@ export async function exportReservationsChecklistToExcel(
     });
   }
 
-  // 3. Sort items: Action Needed (urgent) -> Soon -> Other unbooked -> Confirmed Booked
+  // 3. Sort items in order of Booking Status & Countdown / Urgency:
+  // 1) Booking Status: Unbooked (Action Needed / Pending) before Confirmed (Booked)
+  // 2) Countdown / Urgency: Urgent (open/overdue) -> Soon -> Future (earliest target date first)
+  // 3) Requirement Priority: Required (🔴) -> Recommended (🟡) -> Walk-in / Not Needed (🚶)
+  // 4) Trip Schedule: Scheduled Day Index -> Schedule Start Time -> Place Name
   reservationItems.sort((a, b) => {
-    // Unbooked before booked
+    // 1. Booking Status: Unbooked before booked
     if (a.isBooked !== b.isBooked) {
       return a.isBooked ? 1 : -1;
     }
 
-    // Among unbooked, sort by urgency: urgent -> soon -> future -> unknown
+    // 2. Among unbooked, sort by Countdown / Urgency: urgent -> soon -> future -> unknown
     if (!a.isBooked && !b.isBooked) {
       const urgencyRank: Record<string, number> = {
         urgent: 1,
@@ -1382,15 +1433,31 @@ export async function exportReservationsChecklistToExcel(
         (urgencyRank[a.urgency] || 99) - (urgencyRank[b.urgency] || 99);
       if (rankDiff !== 0) return rankDiff;
 
-      // Within same urgency, sort by targetBookingDate ascending
+      // Within same urgency, sort by targetBookingDate ascending (soonest deadline first)
       if (a.targetBookingDate && b.targetBookingDate) {
         const timeDiff =
           a.targetBookingDate.getTime() - b.targetBookingDate.getTime();
         if (timeDiff !== 0) return timeDiff;
+      } else if (a.targetBookingDate && !b.targetBookingDate) {
+        return -1;
+      } else if (!a.targetBookingDate && b.targetBookingDate) {
+        return 1;
       }
     }
 
-    // Then by scheduled day & order
+    // 3. Reservation Requirement Priority: Required (🔴) -> Recommended (🟡) -> Walk-in (🚶)
+    const getReqRank = (req: string) => {
+      if (req === "required") return 1;
+      if (req === "recommended") return 2;
+      return 3;
+    };
+    const reqRankA = getReqRank(a.requirement);
+    const reqRankB = getReqRank(b.requirement);
+    if (reqRankA !== reqRankB) {
+      return reqRankA - reqRankB;
+    }
+
+    // 4. Then by scheduled day & order
     const dayA = a.place.dayIndex ?? 999;
     const dayB = b.place.dayIndex ?? 999;
     if (dayA !== dayB) return dayA - dayB;
@@ -1431,36 +1498,34 @@ export async function exportReservationsChecklistToExcel(
   // SHEET 1: Reservations Checklist
   // -------------------------------------------------------------------------
   const checklistSheet = workbook.addWorksheet("Reservations Checklist", {
-    views: [{ state: "frozen", ySplit: 8, xSplit: 0, showGridLines: true }],
+    views: [{ showGridLines: true }],
     properties: { tabColor: { argb: COLORS.EMERALD_ACCENT } },
   });
 
   checklistSheet.columns = [
-    { key: "status", width: 18 },        // 1: Status
-    { key: "requirement", width: 16 },   // 2: Requirement
-    { key: "name", width: 34 },          // 3: Place Name
-    { key: "romanized", width: 24 },     // 4: Romanized / Native
-    { key: "category", width: 20 },      // 5: Category
-    { key: "visitDay", width: 28 },      // 6: Scheduled Day & Date
-    { key: "visitTime", width: 18 },     // 7: Visit Time
-    { key: "advanceNotice", width: 30 }, // 8: Booking Window / Notice
+    { key: "status", width: 14 },        // 1: Status (smaller)
+    { key: "requirement", width: 8 },    // 2: Requirement
+    { key: "name", width: 42 },          // 3: Place Name (clickable to Google, full name displayed)
+    { key: "description", width: 40 },   // 4: Description (after name)
+    { key: "category", width: 14 },      // 5: Category (smaller)
+    { key: "whosInterested", width: 26 }, // 6: Who's Interested (Group Trip Planning)
+    { key: "notes", width: 36 },         // 7: Notes (user-manually inserted notes, after Who's Interested)
+    { key: "tabelog", width: 22 },       // 8: Tabelog (Rating & Link for Japan Restaurants)
     { key: "targetDate", width: 20 },    // 9: Target Booking Date
     { key: "countdown", width: 28 },     // 10: Countdown / Urgency
-    { key: "confirmNum", width: 22 },    // 11: Confirmation Code
-    { key: "bookingLink", width: 20 },   // 12: Direct Booking Link
-    { key: "notes", width: 42 },         // 13: Notes & Instructions
-    { key: "address", width: 34 },       // 14: Address
-    { key: "viewOnGoogle", width: 20 },  // 15: View on Google
+    { key: "advanceNotice", width: 30 }, // 11: Booking Window / Notice
+    { key: "reservedTime", width: 18 },  // 12: Reserved Time
+    { key: "address", width: 36 },       // 13: Address (at end)
   ];
 
   // Row 1: Margin
   checklistSheet.addRow([]);
 
-  // Row 2: Title Block
+  // Row 2: Title Block (Cols A-M)
   const titleRow = checklistSheet.addRow([
     "RE-ROUTE  •  RESERVATIONS & BOOKING CHECKLIST",
   ]);
-  checklistSheet.mergeCells("A2:O2");
+  checklistSheet.mergeCells("A2:M2");
   const titleCell = checklistSheet.getCell("A2");
   titleCell.font = {
     name: FONT_FAMILY,
@@ -1476,7 +1541,7 @@ export async function exportReservationsChecklistToExcel(
   titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
   titleRow.height = 36;
 
-  // Row 3: Subtitle / Metadata
+  // Row 3: Subtitle / Metadata (Cols A-M)
   let datesStr = "Flexible Dates";
   if (trip.startDate) {
     try {
@@ -1493,7 +1558,7 @@ export async function exportReservationsChecklistToExcel(
   const subtitleRow = checklistSheet.addRow([
     `Trip: ${trip.title || "My Trip"}  |  ${datesStr}  |  Required: ${requiredCount}  •  Recommended: ${recommendedCount}  |  Exported: ${format(new Date(), "yyyy-MM-dd HH:mm")}`,
   ]);
-  checklistSheet.mergeCells("A3:O3");
+  checklistSheet.mergeCells("A3:M3");
   const subtitleCell = checklistSheet.getCell("A3");
   subtitleCell.font = {
     name: FONT_FAMILY,
@@ -1508,24 +1573,51 @@ export async function exportReservationsChecklistToExcel(
   subtitleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
   subtitleRow.height = 22;
 
-  // Row 4: Spacer
+  // Row 4: Emoji Key Legend in Top Section (Cols A-M)
+  const keyRow = checklistSheet.addRow([
+    "KEY:    🔴 Required (Reservation mandatory)      🟡 Recommended (Booking strongly advised to avoid long waits)      🚶 Walk-in (No reservation needed)",
+  ]);
+  checklistSheet.mergeCells("A4:M4");
+  const keyCell = checklistSheet.getCell("A4");
+  keyCell.font = {
+    name: FONT_FAMILY,
+    size: 9,
+    bold: true,
+    color: { argb: COLORS.NAVY_SUBHEADER },
+  };
+  keyCell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: COLORS.INDIGO_LIGHT },
+  };
+  keyCell.border = {
+    top: { style: "thin", color: { argb: COLORS.INDIGO_BORDER } },
+    bottom: { style: "thin", color: { argb: COLORS.INDIGO_BORDER } },
+    left: { style: "thin", color: { argb: COLORS.INDIGO_BORDER } },
+    right: { style: "thin", color: { argb: COLORS.INDIGO_BORDER } },
+  };
+  keyCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+  keyRow.height = 24;
+
+  // Row 5: Spacer
   checklistSheet.addRow([]);
 
-  // Rows 5-6: KPI Cards
-  // Total (Cols A-C), Urgent (Cols D-F), Pending (Cols G-I), Booked (Cols J-L), Readiness (Cols M-O)
-  checklistSheet.mergeCells("A5:C5");
-  checklistSheet.mergeCells("A6:C6");
-  checklistSheet.mergeCells("D5:F5");
-  checklistSheet.mergeCells("D6:F6");
-  checklistSheet.mergeCells("G5:I5");
-  checklistSheet.mergeCells("G6:I6");
-  checklistSheet.mergeCells("J5:L5");
-  checklistSheet.mergeCells("J6:L6");
-  checklistSheet.mergeCells("M5:O5");
-  checklistSheet.mergeCells("M6:O6");
+  // Rows 6-7: Dynamic KPI Cards across 13 columns (A to M)
+  // Total (Cols A-B), Urgent (Cols C-D), Pending (Cols E-F), Booked (Cols G-H), Readiness (Cols I-M)
+  // Formulas auto-update dynamically when users edit rows in Excel / Google Sheets
+  checklistSheet.mergeCells("A6:B6");
+  checklistSheet.mergeCells("A7:B7");
+  checklistSheet.mergeCells("C6:D6");
+  checklistSheet.mergeCells("C7:D7");
+  checklistSheet.mergeCells("E6:F6");
+  checklistSheet.mergeCells("E7:F7");
+  checklistSheet.mergeCells("G6:H6");
+  checklistSheet.mergeCells("G7:H7");
+  checklistSheet.mergeCells("I6:M6");
+  checklistSheet.mergeCells("I7:M7");
 
-  const kpiValRow = checklistSheet.getRow(5);
-  const kpiLblRow = checklistSheet.getRow(6);
+  const kpiValRow = checklistSheet.getRow(6);
+  const kpiLblRow = checklistSheet.getRow(7);
   kpiValRow.height = 28;
   kpiLblRow.height = 18;
 
@@ -1539,16 +1631,16 @@ export async function exportReservationsChecklistToExcel(
   const styleCard = (
     valCol: string,
     lblCol: string,
-    valText: string,
+    valText: string | { formula: string; result?: any },
     lblText: string,
     valColor: string,
     bgColor: string
   ) => {
-    const valCell = checklistSheet.getCell(`${valCol}5`);
+    const valCell = checklistSheet.getCell(`${valCol}6`);
     valCell.value = valText;
     valCell.font = {
       name: FONT_FAMILY,
-      size: 16,
+      size: 15,
       bold: true,
       color: { argb: valColor },
     };
@@ -1560,7 +1652,7 @@ export async function exportReservationsChecklistToExcel(
     };
     valCell.border = cardBorder;
 
-    const lblCell = checklistSheet.getCell(`${lblCol}6`);
+    const lblCell = checklistSheet.getCell(`${lblCol}7`);
     lblCell.value = lblText;
     lblCell.font = {
       name: FONT_FAMILY,
@@ -1577,72 +1669,89 @@ export async function exportReservationsChecklistToExcel(
     lblCell.border = cardBorder;
   };
 
+  const dataStartRow = 10;
+  const dataEndRow = Math.max(10, 10 + reservationItems.length - 1);
+
+  // Dynamic header formulas that auto-update when users change booking status
   styleCard(
     "A",
     "A",
-    `${totalCount}`,
+    {
+      formula: `COUNTA(A${dataStartRow}:A${dataEndRow})`,
+      result: totalCount,
+    },
     "📋 TOTAL RESERVATIONS",
     COLORS.INDIGO_PRIMARY,
     COLORS.INDIGO_LIGHT
   );
   styleCard(
-    "D",
-    "D",
-    `${urgentCount}`,
-    "🚨 ACTION NEEDED (< 7 DAYS)",
+    "C",
+    "C",
+    {
+      formula: `COUNTIF(A${dataStartRow}:A${dataEndRow},"*Action Needed*")`,
+      result: urgentCount,
+    },
+    "🚨 ACTION NEEDED",
     urgentCount > 0 ? COLORS.ROSE_ACCENT : COLORS.TEXT_MUTED,
     urgentCount > 0 ? COLORS.ROSE_LIGHT : COLORS.SLATE_CARD
   );
   styleCard(
-    "G",
-    "G",
-    `${pendingCount}`,
+    "E",
+    "E",
+    {
+      formula: `MAX(0,COUNTA(A${dataStartRow}:A${dataEndRow})-COUNTIF(A${dataStartRow}:A${dataEndRow},"*Confirmed*"))`,
+      result: pendingCount,
+    },
     "⏰ PENDING ACTION",
     COLORS.AMBER_ACCENT,
     COLORS.AMBER_LIGHT
   );
   styleCard(
-    "J",
-    "J",
-    `${bookedCount}`,
+    "G",
+    "G",
+    {
+      formula: `COUNTIF(A${dataStartRow}:A${dataEndRow},"*Confirmed*")`,
+      result: bookedCount,
+    },
     "✅ CONFIRMED & BOOKED",
     COLORS.EMERALD_ACCENT,
     COLORS.EMERALD_LIGHT
   );
   styleCard(
-    "M",
-    "M",
-    `${readinessPct}%`,
-    "🎯 TRIP READINESS",
+    "I",
+    "I",
+    {
+      formula: `IF(A6>0,ROUND((G6/A6)*100,0)&"%","0%")`,
+      result: `${readinessPct}%`,
+    },
+    "🎯 READINESS",
     COLORS.INDIGO_PRIMARY,
     COLORS.INDIGO_LIGHT
   );
 
-  // Row 7: Spacer
+  // Row 8: Spacer
   checklistSheet.addRow([]);
 
-  // Row 8: Table Header
+  // Row 9: Table Header (13 columns)
   const headers = [
     "Status",
-    "Requirement",
+    "Req",
     "Place Name",
-    "Romanized / Subtitle",
+    "Description",
     "Category",
-    "Scheduled Day & Date",
-    "Visit Time",
-    "Booking Window / Timing",
+    "Who's Interested",
+    "Notes",
+    "Tabelog",
     "Target Booking Date",
-    "Booking Status / Countdown",
-    "Confirmation #",
-    "Booking Link",
-    "Reservation Notes & Instructions",
+    "Countdown / Urgency",
+    "Booking Window / Timing",
+    "Reserved Time",
     "Address",
-    "View on Google",
   ];
   const headerRow = checklistSheet.addRow(headers);
   headerRow.height = 26;
 
-  for (let c = 1; c <= 15; c++) {
+  for (let c = 1; c <= 13; c++) {
     const cell = headerRow.getCell(c);
     cell.font = {
       name: FONT_FAMILY,
@@ -1664,21 +1773,13 @@ export async function exportReservationsChecklistToExcel(
     cell.alignment = {
       vertical: "middle",
       horizontal:
-        c === 1 ||
-        c === 2 ||
-        c === 5 ||
-        c === 6 ||
-        c === 7 ||
-        c === 9 ||
-        c === 11 ||
-        c === 12 ||
-        c === 15
+        c === 1 || c === 2 || c === 5 || c === 8 || c === 9 || c === 10 || c === 12
           ? "center"
           : "left",
     };
   }
 
-  // Row 9+: Data Rows
+  // Row 10+: Data Rows
   reservationItems.forEach((item, idx) => {
     const {
       place,
@@ -1710,76 +1811,141 @@ export async function exportReservationsChecklistToExcel(
       statusColor = COLORS.AMBER_ACCENT;
     }
 
-    // Requirement Text & Styling
-    const reqText =
+    // Requirement: Just the emoji
+    const reqEmoji =
       requirement === "required"
-        ? "🔴 Required"
+        ? "🔴"
         : requirement === "recommended"
-          ? "🟡 Recommended"
-          : "Walk-in";
+          ? "🟡"
+          : "🚶";
     const reqBg =
       requirement === "required"
         ? COLORS.ROSE_LIGHT
         : requirement === "recommended"
           ? COLORS.AMBER_LIGHT
           : baseBg;
-    const reqColor =
-      requirement === "required"
-        ? COLORS.ROSE_ACCENT
-        : requirement === "recommended"
-          ? COLORS.AMBER_ACCENT
-          : COLORS.TEXT_MUTED;
 
-    // Scheduled Day & Date
-    const dayText =
+    // Reserved Time (Combines Scheduled Day & Visit Time)
+    let reservedTimeText = "TBD";
+    const dayLabel =
       place.dayIndex !== null && place.dayIndex !== undefined
-        ? formatDayIndexLabel(place.dayIndex, trip.startDate, trip.dayTitles)
-        : "Unassigned (Reserve List)";
+        ? `Day ${place.dayIndex + 1}`
+        : null;
 
-    // Scheduled Visit Time
-    let timeText = "Flexible / TBD";
     const sched = placeScheduleTimes.get(place.id);
+    let timeLabel: string | null = null;
     if (place.customTime) {
-      timeText = `${formatMinutesToDisplay(parseTimeToMinutes(place.customTime), timeFormat)} (Locked)`;
+      timeLabel = `${formatMinutesToDisplay(parseTimeToMinutes(place.customTime), timeFormat)} (Locked)`;
     } else if (sched) {
-      timeText = `~${formatMinutesToDisplay(sched.startTime, timeFormat)} (${formatDuration(sched.endTime - sched.startTime)})`;
+      timeLabel = `~${formatMinutesToDisplay(sched.startTime, timeFormat)}`;
+    }
+
+    if (dayLabel && timeLabel) {
+      reservedTimeText = `${dayLabel} • ${timeLabel}`;
+    } else if (dayLabel) {
+      reservedTimeText = dayLabel;
+    } else if (timeLabel) {
+      reservedTimeText = timeLabel;
     }
 
     const emoji = getCategoryEmoji(place.category);
     const catLabel = getCategoryLabel(place.category);
 
-    const targetDateText = targetBookingDate
-      ? format(targetBookingDate, "yyyy-MM-dd (EEE)")
-      : "-";
+    // User-manually inserted notes
+    const userNotes = place.notes?.trim() || "";
 
-    const bookingUrl = place.reservation?.bookingUrl;
+    // Who's Interested (Group Trip Planning)
+    let interestedVal =
+      place.reservation?.whosInterested ||
+      place.whosInterested ||
+      "";
+    if (!interestedVal && place.notes) {
+      const match = place.notes.match(
+        /(?:who(?:'s|\s+is)?\s+interested|interested|attendees?|group):\s*([^\n\r;]+)/i
+      );
+      if (match) {
+        interestedVal = match[1].trim();
+      }
+    }
+    if (!interestedVal && place.reservation?.notes) {
+      const match = place.reservation.notes.match(
+        /(?:who(?:'s|\s+is)?\s+interested|interested|attendees?|group):\s*([^\n\r;]+)/i
+      );
+      if (match) {
+        interestedVal = match[1].trim();
+      }
+    }
+
+    const descText =
+      place.description?.trim() ||
+      place.editorialSummary?.trim() ||
+      place.highlight?.text?.trim() ||
+      "-";
+
+    // Place Name: Resolves full display name without truncation or losing branch/details
+    const displayName = getPlaceFullDisplayName(place);
     const mapsUrl = place.address?.trim()
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + " " + place.address.trim())}`
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayName + " " + place.address.trim())}`
       : place.lat && place.lng
         ? `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`
-        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}`;
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayName)}`;
 
-    const row = checklistSheet.addRow([
-      statusText,
-      reqText,
-      place.name,
-      place.romanizedName || "-",
-      `${emoji} ${catLabel}`,
-      dayText,
-      timeText,
-      place.reservation?.advanceTime || "-",
-      targetDateText,
-      countdownLabel,
-      place.reservation?.confirmationNumber || "-",
-      bookingUrl ? { text: "Book Online ↗", hyperlink: bookingUrl } : "-",
-      place.reservation?.notes || place.notes || "-",
-      place.address || "-",
-      mapsUrl ? { text: "View on Google ↗", hyperlink: mapsUrl } : "-",
-    ]);
+    // Add empty row first to determine row number for dynamic formula
+    const row = checklistSheet.addRow([]);
+    const rowNum = row.number;
 
-    row.height = 24;
+    // Tabelog rating & link (Japan Restaurants)
+    let tabelogVal: any = "-";
+    let isTabelogLink = false;
+    if (isJapanRestaurant(place)) {
+      if (place.tabelog?.rating) {
+        const ratingStr = `★ ${place.tabelog.rating.toFixed(2)}${place.tabelog.award ? ` (${place.tabelog.award})` : ""}`;
+        const url = place.tabelog.url || getTabelogSearchUrl(place);
+        tabelogVal = { text: ratingStr, hyperlink: url };
+        isTabelogLink = true;
+      } else {
+        const searchUrl = getTabelogSearchUrl(place);
+        tabelogVal = { text: "Search Tabelog ↗", hyperlink: searchUrl };
+        isTabelogLink = true;
+      }
+    }
 
-    for (let c = 1; c <= 15; c++) {
+    // Dynamic Excel Countdown Formula referencing Target Date in Column I
+    const dynamicCountdown = isBooked
+      ? "✅ Booked & Confirmed"
+      : targetBookingDate
+        ? {
+            formula: `IF(ISBLANK(I${rowNum}),"TBD",IF(I${rowNum}="-","TBD",IF(I${rowNum}-TODAY()<0,IF(TODAY()-I${rowNum}=1,"Opened yesterday (Book now)","Opened " & TEXT(TODAY()-I${rowNum},"0") & " days ago (Book now)"),IF(I${rowNum}-TODAY()=0,"Opens TODAY!",IF(I${rowNum}-TODAY()=1,"Opens TOMORROW!","Opens in " & TEXT(I${rowNum}-TODAY(),"0") & " days")))))`,
+            result: countdownLabel,
+          }
+        : "TBD / Flexible";
+
+    // Populate Row Cells (13 columns matching requested order)
+    row.values = [
+      statusText,                                // 1: Status
+      reqEmoji,                                  // 2: Requirement (Just emoji)
+      { text: displayName, hyperlink: mapsUrl }, // 3: Place Name (Clickable Google Link, full display name)
+      descText,                                  // 4: Description (after name)
+      `${emoji} ${catLabel}`,                    // 5: Category
+      interestedVal,                             // 6: Who's Interested (Group Trip Planning)
+      userNotes,                                 // 7: Notes (user-manually inserted notes)
+      tabelogVal,                                // 8: Tabelog (Rating & Link for Japan Restaurants)
+      targetBookingDate || "-",                  // 9: Target Booking Date
+      dynamicCountdown,                          // 10: Countdown / Urgency (Dynamic Formula referencing Col I)
+      place.reservation?.advanceTime || "-",     // 11: Booking Window / Notice
+      reservedTimeText,                          // 12: Reserved Time
+      place.address || "-",                      // 13: Address (at end)
+    ];
+
+    // Dynamic row height to prevent cutting off multi-line names and descriptions
+    const maxContentLen = Math.max(
+      displayName.length,
+      descText.length,
+      userNotes.length
+    );
+    row.height = maxContentLen > 70 ? 36 : maxContentLen > 40 ? 28 : 24;
+
+    for (let c = 1; c <= 13; c++) {
       const cell = row.getCell(c);
       cell.font = {
         name: FONT_FAMILY,
@@ -1800,22 +1966,14 @@ export async function exportReservationsChecklistToExcel(
       cell.alignment = {
         vertical: "middle",
         horizontal:
-          c === 1 ||
-          c === 2 ||
-          c === 5 ||
-          c === 6 ||
-          c === 7 ||
-          c === 9 ||
-          c === 11 ||
-          c === 12 ||
-          c === 15
+          c === 1 || c === 2 || c === 5 || c === 8 || c === 9 || c === 10 || c === 12
             ? "center"
             : "left",
-        wrapText: c === 8 || c === 10 || c === 13 || c === 14,
+        wrapText: c === 3 || c === 4 || c === 6 || c === 7 || c === 11 || c === 13,
       };
     }
 
-    // Specific highlight styling for Status
+    // Specific highlight styling for Status (Col 1)
     const statusCell = row.getCell(1);
     statusCell.fill = {
       type: "pattern",
@@ -1829,7 +1987,7 @@ export async function exportReservationsChecklistToExcel(
       color: { argb: statusColor },
     };
 
-    // Specific highlight styling for Requirement
+    // Specific highlight styling for Requirement Emoji (Col 2)
     const reqCell = row.getCell(2);
     reqCell.fill = {
       type: "pattern",
@@ -1838,49 +1996,63 @@ export async function exportReservationsChecklistToExcel(
     };
     reqCell.font = {
       name: FONT_FAMILY,
-      size: 9.5,
+      size: 11,
       bold: true,
-      color: { argb: reqColor },
     };
+    reqCell.alignment = { vertical: "middle", horizontal: "center" };
 
-    // Place Name Bold
+    // Place Name (Col 3): Bold, Link Blue, Underlined (Clickable Google Maps link)
     row.getCell(3).font = {
       name: FONT_FAMILY,
       size: 9.5,
       bold: true,
-      color: { argb: COLORS.TEXT_MAIN },
+      color: { argb: COLORS.LINK_BLUE },
+      underline: true,
     };
 
-    // Romanized muted
+    // Description (Col 4): Subtle Muted text
     row.getCell(4).font = {
       name: FONT_FAMILY,
       size: 9,
       color: { argb: COLORS.TEXT_MUTED },
     };
 
-    // Hyperlinks
-    if (bookingUrl) {
-      row.getCell(12).font = {
+    // Tabelog link styling (Col 8)
+    if (isTabelogLink) {
+      row.getCell(8).font = {
         name: FONT_FAMILY,
         size: 9.5,
+        bold: true,
         color: { argb: COLORS.LINK_BLUE },
         underline: true,
       };
     }
-    if (mapsUrl) {
-      row.getCell(15).font = {
-        name: FONT_FAMILY,
-        size: 9.5,
-        color: { argb: COLORS.LINK_BLUE },
-        underline: true,
-      };
+
+    // Target Booking Date (Col 9): Date format so Excel formulas can compute on it
+    if (targetBookingDate) {
+      row.getCell(9).numFmt = "yyyy-mm-dd (ddd)";
     }
+
+    // Reserved Time (Col 12): Bold
+    row.getCell(12).font = {
+      name: FONT_FAMILY,
+      size: 9.5,
+      bold: true,
+      color: { argb: COLORS.TEXT_MAIN },
+    };
+
+    // Address (Col 13): Subtle Muted text
+    row.getCell(13).font = {
+      name: FONT_FAMILY,
+      size: 9,
+      color: { argb: COLORS.TEXT_MUTED },
+    };
   });
 
-  // Enable AutoFilter on Table
+  // Enable AutoFilter on Table (13 columns)
   checklistSheet.autoFilter = {
-    from: { row: 8, column: 1 },
-    to: { row: 8 + reservationItems.length, column: 15 },
+    from: { row: 9, column: 1 },
+    to: { row: 9 + reservationItems.length, column: 13 },
   };
 
   // -------------------------------------------------------------------------
@@ -1890,20 +2062,20 @@ export async function exportReservationsChecklistToExcel(
   const confirmedItems = reservationItems.filter((i) => i.isBooked);
   if (confirmedItems.length > 0) {
     const voucherSheet = workbook.addWorksheet("Confirmed Vouchers", {
-      views: [{ state: "frozen", ySplit: 4, xSplit: 0, showGridLines: true }],
+      views: [{ showGridLines: true }],
       properties: { tabColor: { argb: COLORS.EMERALD_ACCENT } },
     });
 
     voucherSheet.columns = [
       { key: "confirmNum", width: 22 },    // 1: Confirmation #
-      { key: "name", width: 34 },          // 2: Place Name
+      { key: "name", width: 42 },          // 2: Place Name (clickable to Google, full name displayed)
       { key: "category", width: 20 },      // 3: Category
-      { key: "visitDay", width: 28 },      // 4: Scheduled Day & Date
-      { key: "visitTime", width: 18 },     // 5: Visit Time
-      { key: "bookingLink", width: 20 },   // 6: Direct Booking Link
-      { key: "notes", width: 42 },         // 7: Notes & Instructions
-      { key: "address", width: 34 },       // 8: Address
-      { key: "viewOnGoogle", width: 20 },  // 9: View on Google
+      { key: "bookingLink", width: 20 },   // 4: Direct Booking Link
+      { key: "notes", width: 42 },         // 5: Notes & Instructions
+      { key: "address", width: 34 },       // 6: Address
+      { key: "viewOnGoogle", width: 20 },  // 7: View on Google
+      { key: "visitDay", width: 28 },      // 8: Scheduled Day & Date (at end)
+      { key: "visitTime", width: 18 },     // 9: Visit Time (at end)
     ];
 
     voucherSheet.addRow([]);
@@ -1932,12 +2104,12 @@ export async function exportReservationsChecklistToExcel(
       "Confirmation #",
       "Place Name",
       "Category",
-      "Scheduled Day & Date",
-      "Visit Time",
       "Booking Link",
       "Reservation Notes & Instructions",
       "Address",
       "View on Google",
+      "Scheduled Day & Date",
+      "Visit Time",
     ];
     const vHeaderRow = voucherSheet.addRow(vHeaders);
     vHeaderRow.height = 24;
@@ -1964,7 +2136,7 @@ export async function exportReservationsChecklistToExcel(
       cell.alignment = {
         vertical: "middle",
         horizontal:
-          c === 1 || c === 3 || c === 4 || c === 5 || c === 6 || c === 9
+          c === 1 || c === 3 || c === 4 || c === 7 || c === 8 || c === 9
             ? "center"
             : "left",
       };
@@ -1991,25 +2163,27 @@ export async function exportReservationsChecklistToExcel(
       const emoji = getCategoryEmoji(place.category);
       const catLabel = getCategoryLabel(place.category);
       const bookingUrl = place.reservation?.bookingUrl;
+
+      const vDisplayName = getPlaceFullDisplayName(place);
       const mapsUrl = place.address?.trim()
-        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + " " + place.address.trim())}`
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vDisplayName + " " + place.address.trim())}`
         : place.lat && place.lng
           ? `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`
-          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}`;
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vDisplayName)}`;
 
       const vRow = voucherSheet.addRow([
         place.reservation?.confirmationNumber || "-",
-        place.name,
+        { text: vDisplayName, hyperlink: mapsUrl },
         `${emoji} ${catLabel}`,
-        dayText,
-        timeText,
         bookingUrl ? { text: "Open Booking ↗", hyperlink: bookingUrl } : "-",
         place.reservation?.notes || place.notes || "-",
         place.address || "-",
         mapsUrl ? { text: "View on Google ↗", hyperlink: mapsUrl } : "-",
+        dayText,
+        timeText,
       ]);
 
-      vRow.height = 24;
+      vRow.height = vDisplayName.length > 50 ? 32 : 24;
 
       for (let c = 1; c <= 9; c++) {
         const cell = vRow.getCell(c);
@@ -2032,10 +2206,10 @@ export async function exportReservationsChecklistToExcel(
         cell.alignment = {
           vertical: "middle",
           horizontal:
-            c === 1 || c === 3 || c === 4 || c === 5 || c === 6 || c === 9
+            c === 1 || c === 3 || c === 4 || c === 7 || c === 8 || c === 9
               ? "center"
               : "left",
-          wrapText: c === 7 || c === 8,
+          wrapText: c === 2 || c === 5 || c === 6,
         };
       }
 
@@ -2046,15 +2220,18 @@ export async function exportReservationsChecklistToExcel(
         bold: true,
         color: { argb: COLORS.EMERALD_ACCENT },
       };
+
+      // Place Name: bold, link blue, underlined (clickable Google Maps link)
       vRow.getCell(2).font = {
         name: FONT_FAMILY,
         size: 9.5,
         bold: true,
-        color: { argb: COLORS.TEXT_MAIN },
+        color: { argb: COLORS.LINK_BLUE },
+        underline: true,
       };
 
       if (bookingUrl) {
-        vRow.getCell(6).font = {
+        vRow.getCell(4).font = {
           name: FONT_FAMILY,
           size: 9.5,
           color: { argb: COLORS.LINK_BLUE },
@@ -2062,7 +2239,7 @@ export async function exportReservationsChecklistToExcel(
         };
       }
       if (mapsUrl) {
-        vRow.getCell(9).font = {
+        vRow.getCell(7).font = {
           name: FONT_FAMILY,
           size: 9.5,
           color: { argb: COLORS.LINK_BLUE },
