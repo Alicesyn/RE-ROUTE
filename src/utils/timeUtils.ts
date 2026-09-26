@@ -1,5 +1,7 @@
-import { format } from "date-fns";
 import type { TimeRangeConstraint } from "../types";
+
+const WEEKDAYS_LONG = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const WEEKDAYS_SHORT = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 export interface ParsedOpeningHours {
   open: number;
@@ -118,8 +120,9 @@ export const getPlaceDayHours = (
 
   try {
     const targetDate = date instanceof Date ? date : new Date(date);
-    const dayOfWeekLong = format(targetDate, "EEEE").toLowerCase(); // e.g. "monday"
-    const dayOfWeekShort = format(targetDate, "EEE").toLowerCase(); // e.g. "mon"
+    const dayIdx = targetDate.getDay();
+    const dayOfWeekLong = WEEKDAYS_LONG[dayIdx];
+    const dayOfWeekShort = WEEKDAYS_SHORT[dayIdx];
 
     // 1. Try finding by matching weekday name (full or 3-letter abbreviation)
     let todaysHours = openingHours.find((h) => {

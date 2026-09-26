@@ -66,6 +66,109 @@ export const isNameMatch = (aName: string, bName: string, isNearby: boolean): bo
   return false;
 };
 
+export interface NormalizedPlaceComparison {
+  id?: string;
+  name: string;
+  normName: string;
+  normRom: string;
+  normAddr: string;
+  normAddrNoSpace: string;
+  lat?: number;
+  lng?: number;
+  googlePlaceId?: string;
+  dismissedDuplicate?: boolean;
+}
+
+export const toNormalizedComparison = (p: {
+  id?: string;
+  name: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  googlePlaceId?: string;
+  romanizedName?: string;
+  dismissedDuplicate?: boolean;
+}): NormalizedPlaceComparison => {
+  const normName = normalizeString(p.name);
+  const normRom = p.romanizedName ? normalizeString(p.romanizedName) : "";
+  const normAddr = p.address ? normalizeString(p.address) : "";
+  return {
+    id: p.id,
+    name: p.name,
+    normName,
+    normRom,
+    normAddr,
+    normAddrNoSpace: normAddr.replace(/\s+/g, ""),
+    lat: p.lat,
+    lng: p.lng,
+    googlePlaceId: p.googlePlaceId,
+    dismissedDuplicate: p.dismissedDuplicate,
+  };
+};
+
+export const areNormalizedPlacesDuplicate = (
+  a: NormalizedPlaceComparison,
+  b: NormalizedPlaceComparison
+): boolean => {
+  if (!a || !b) return false;
+  if (a.id && b.id && a.id === b.id) return false;
+
+  // 1. Google Place ID match
+  if (
+    (a.googlePlaceId && b.googlePlaceId && a.googlePlaceId === b.googlePlaceId) ||
+    (a.googlePlaceId && b.id && a.googlePlaceId === b.id) ||
+    (a.id && b.googlePlaceId && a.id === b.googlePlaceId)
+  ) {
+    return true;
+  }
+
+  if (!a.normName || !b.normName) return false;
+
+  const hasCoordsA = typeof a.lat === "number" && typeof a.lng === "number";
+  const hasCoordsB = typeof b.lat === "number" && typeof b.lng === "number";
+
+  // 2. Both places have coordinates
+  if (hasCoordsA && hasCoordsB) {
+    const dLat = Math.abs(a.lat! - b.lat!);
+    const dLng = Math.abs(a.lng! - b.lng!);
+    const isNearby = dLat < 0.0025 && dLng < 0.0025; // within ~250m
+
+    if (!isNearby) {
+      return false;
+    }
+
+    // Name match at the same location
+    return (
+      isNameMatch(a.normName, b.normName, true) ||
+      (Boolean(a.normRom) && isNameMatch(a.normRom!, b.normName, true)) ||
+      (Boolean(b.normRom) && isNameMatch(a.normName, b.normRom!, true)) ||
+      (Boolean(a.normRom && b.normRom) && isNameMatch(a.normRom!, b.normRom!, true))
+    );
+  }
+
+  // 3. Fallback when coordinates are missing on one or both
+  if (
+    isNameMatch(a.normName, b.normName, false) ||
+    (Boolean(a.normRom) && isNameMatch(a.normRom!, b.normName, false)) ||
+    (Boolean(b.normRom) && isNameMatch(a.normName, b.normRom!, false)) ||
+    (Boolean(a.normRom && b.normRom) && isNameMatch(a.normRom!, b.normRom!, false))
+  ) {
+    if (a.normAddr && b.normAddr) {
+      return (
+        a.normAddr === b.normAddr ||
+        a.normAddrNoSpace === b.normAddrNoSpace ||
+        a.normAddr.includes(b.normAddr) ||
+        b.normAddr.includes(a.normAddr) ||
+        a.normAddrNoSpace.includes(b.normAddrNoSpace) ||
+        b.normAddrNoSpace.includes(a.normAddrNoSpace)
+      );
+    }
+    return true;
+  }
+
+  return false;
+};
+
 /**
  * Checks whether two places are considered duplicates of each other.
  */
@@ -89,95 +192,24 @@ export const isDuplicatePlace = (
     romanizedName?: string;
   }
 ): boolean => {
-  if (!a || !b) return false;
-  if (a.id && b.id && a.id === b.id) return false; // Not a duplicate of self
-
-  // 1. Google Place ID match
-  if (
-    (a.googlePlaceId && b.googlePlaceId && a.googlePlaceId === b.googlePlaceId) ||
-    (a.googlePlaceId && b.id && a.googlePlaceId === b.id) ||
-    (a.id && b.googlePlaceId && a.id === b.googlePlaceId)
-  ) {
-    return true;
-  }
-
-  const aName = normalizeString(a.name);
-  const bName = normalizeString(b.name);
-  const aRom = a.romanizedName ? normalizeString(a.romanizedName) : "";
-  const bRom = b.romanizedName ? normalizeString(b.romanizedName) : "";
-
-  if (!aName || !bName) return false;
-
-  const hasCoordsA = typeof a.lat === "number" && typeof a.lng === "number";
-  const hasCoordsB = typeof b.lat === "number" && typeof b.lng === "number";
-
-  // 2. Both places have coordinates
-  if (hasCoordsA && hasCoordsB) {
-    const dLat = Math.abs(a.lat! - b.lat!);
-    const dLng = Math.abs(a.lng! - b.lng!);
-    const isNearby = dLat < 0.0025 && dLng < 0.0025; // within ~250m
-
-    // If locations are more than 250m apart, they are distinct locations
-    if (!isNearby) {
-      return false;
-    }
-
-    // Name match at the same location
-    if (
-      isNameMatch(aName, bName, true) ||
-      (aRom && isNameMatch(aRom, bName, true)) ||
-      (bRom && isNameMatch(aName, bRom, true)) ||
-      (aRom && bRom && isNameMatch(aRom, bRom, true))
-    ) {
-      return true;
-    }
-
-    return false;
-  }
-
-  // 3. Fallback when coordinates are missing on one or both:
-  // Must have name match (without relaxed substring matching)
-  if (
-    isNameMatch(aName, bName, false) ||
-    (aRom && isNameMatch(aRom, bName, false)) ||
-    (bRom && isNameMatch(aName, bRom, false)) ||
-    (aRom && bRom && isNameMatch(aRom, bRom, false))
-  ) {
-    const aAddr = normalizeString(a.address || "");
-    const bAddr = normalizeString(b.address || "");
-
-    // If both have addresses, ensure they don't clearly conflict
-    if (aAddr && bAddr) {
-      const aAddrNoSpace = aAddr.replace(/\s+/g, "");
-      const bAddrNoSpace = bAddr.replace(/\s+/g, "");
-      return (
-        aAddr === bAddr ||
-        aAddrNoSpace === bAddrNoSpace ||
-        aAddr.includes(bAddr) ||
-        bAddr.includes(aAddr) ||
-        aAddrNoSpace.includes(bAddrNoSpace) ||
-        bAddrNoSpace.includes(aAddrNoSpace)
-      );
-    }
-    return true;
-  }
-
-  return false;
+  return areNormalizedPlacesDuplicate(toNormalizedComparison(a), toNormalizedComparison(b));
 };
 
 /**
  * Finds all place IDs that have at least one duplicate in the given list.
+ * Uses pre-normalization to avoid redundant string computations across pairs.
  */
 export const findDuplicatePlaceIds = (places: Place[]): Set<string> => {
   const duplicates = new Set<string>();
+  const normalized = places.map((p) => toNormalizedComparison(p));
 
-  for (let i = 0; i < places.length; i++) {
-    if (places[i].dismissedDuplicate) continue;
-    for (let j = i + 1; j < places.length; j++) {
-      if (places[j].dismissedDuplicate) continue;
-      if (isDuplicatePlace(places[i], places[j])) {
-        duplicates.add(places[i].id);
-        duplicates.add(places[j].id);
+  for (let i = 0; i < normalized.length; i++) {
+    if (normalized[i].dismissedDuplicate) continue;
+    for (let j = i + 1; j < normalized.length; j++) {
+      if (normalized[j].dismissedDuplicate) continue;
+      if (areNormalizedPlacesDuplicate(normalized[i], normalized[j])) {
+        if (normalized[i].id) duplicates.add(normalized[i].id!);
+        if (normalized[j].id) duplicates.add(normalized[j].id!);
       }
     }
   }
@@ -191,9 +223,11 @@ export const findDuplicatePlaceIds = (places: Place[]): Set<string> => {
 export const getDuplicateGroups = (places: Place[]): Place[][] => {
   const visited = new Set<string>();
   const groups: Place[][] = [];
+  const normalized = places.map((p) => toNormalizedComparison(p));
 
   for (let i = 0; i < places.length; i++) {
     const current = places[i];
+    const currentNorm = normalized[i];
     if (current.dismissedDuplicate) continue;
     if (visited.has(current.id)) continue;
 
@@ -202,10 +236,11 @@ export const getDuplicateGroups = (places: Place[]): Place[][] => {
 
     for (let j = i + 1; j < places.length; j++) {
       const candidate = places[j];
+      const candidateNorm = normalized[j];
       if (candidate.dismissedDuplicate) continue;
       if (visited.has(candidate.id)) continue;
 
-      if (isDuplicatePlace(current, candidate)) {
+      if (areNormalizedPlacesDuplicate(currentNorm, candidateNorm)) {
         group.push(candidate);
         visited.add(candidate.id);
       }

@@ -16,6 +16,14 @@ export interface PlaceLike {
   lng?: number;
 }
 
+const JAPAN_KEYWORDS_REGEX =
+  /(?:japan|tokyo|kyoto|osaka|hokkaido|sapporo|fukuoka|kanagawa|yokohama|aichi|nagoya|hiroshima|okinawa|nara|kobe|hyogo|shizuoka|sendai|miyagi|chiba|saitama|shibuya|shinjuku|ginza|roppongi|asakusa)/i;
+
+const JAPANESE_CHAR_REGEX = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
+
+const TABELOG_PREFIX_REGEX =
+  /^(?:\[Tabelog\s*[^\]]+\]|★\s*[\d.]+\s*(?:Tabelog)?(?:\s*\([^)]+\))?)\s*[•—–-]?\s*/i;
+
 /**
  * Determines whether a place is a restaurant located in Japan.
  */
@@ -34,44 +42,11 @@ export function isJapanRestaurant(place?: PlaceLike | null): boolean {
     }
   }
 
-  // 2. Address keywords check
-  const addr = (place.address || "").toLowerCase();
-  const japanKeywords = [
-    "japan",
-    "tokyo",
-    "kyoto",
-    "osaka",
-    "hokkaido",
-    "sapporo",
-    "fukuoka",
-    "kanagawa",
-    "yokohama",
-    "aichi",
-    "nagoya",
-    "hiroshima",
-    "okinawa",
-    "nara",
-    "kobe",
-    "hyogo",
-    "shizuoka",
-    "sendai",
-    "miyagi",
-    "chiba",
-    "saitama",
-    "shibuya",
-    "shinjuku",
-    "ginza",
-    "roppongi",
-    "asakusa",
-  ];
-
-  if (japanKeywords.some((kw) => addr.includes(kw))) {
-    return true;
-  }
-
-  // 3. Japanese character presence (Kanji/Hiragana/Katakana) in address
-  if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(place.address || "")) {
-    return true;
+  // 2. Address check via pre-compiled keyword & character regexes
+  const address = place.address;
+  if (address) {
+    if (JAPAN_KEYWORDS_REGEX.test(address)) return true;
+    if (JAPANESE_CHAR_REGEX.test(address)) return true;
   }
 
   return false;
@@ -96,12 +71,7 @@ export function getTabelogSearchUrl(place: PlaceLike): string {
  */
 export function stripTabelogPrefix(description?: string | null): string {
   if (!description) return "";
-  return description
-    .replace(
-      /^(?:\[Tabelog\s*[^\]]+\]|★\s*[\d.]+\s*(?:Tabelog)?(?:\s*\([^)]+\))?)\s*[•—–-]?\s*/i,
-      ""
-    )
-    .trim();
+  return description.replace(TABELOG_PREFIX_REGEX, "").trim();
 }
 
 /**

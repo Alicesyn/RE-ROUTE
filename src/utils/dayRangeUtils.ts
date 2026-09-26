@@ -168,7 +168,7 @@ export function formatDayRangeBadge(
   const startTitle = dayTitles?.[range.startDay]?.trim();
   const endTitle = dayTitles?.[range.endDay]?.trim();
 
-  let dayText = isSingleDay
+  const dayText = isSingleDay
     ? (startTitle || `Day ${startDayNum}`)
     : (startTitle || endTitle)
       ? `${startTitle || `D${startDayNum}`} – ${endTitle || `D${endDayNum}`}`

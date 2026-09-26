@@ -791,7 +791,7 @@ export async function getSuggestedPlaces(
         candidateSights = enrichedSuggestions;
         try {
           localStorage.setItem(cacheKeyV4, JSON.stringify(candidateSights));
-        } catch (_) {
+        } catch {
           sessionStorage.setItem(cacheKeyV4, JSON.stringify(candidateSights));
         }
       } catch (err) {

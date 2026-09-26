@@ -1269,7 +1269,7 @@ function buildDayRoute(
     const existing = existingSegments?.find((s) => s.fromId === fromId && s.toId === toId);
 
     const isWalkableDist = segDist <= 800;
-    let segMode = existing?.travelMode ?? (isWalkableDist ? "walking" : travelMode);
+    const segMode = existing?.travelMode ?? (isWalkableDist ? "walking" : travelMode);
     let segTime = estimateTime(segDist, segMode);
     let customDuration: number | undefined = undefined;
     let originalTime: number | undefined = undefined;

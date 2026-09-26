@@ -251,7 +251,9 @@ const idbStorage: StateStorage = {
       ) {
         localStorage.setItem("reroute_safety_backup", value);
       }
-    } catch {}
+    } catch {
+      // Ignore JSON parse or localStorage quota errors for safety backup
+    }
 
     if (setTimer) clearTimeout(setTimer);
     setTimer = setTimeout(async () => {
@@ -618,7 +620,7 @@ export const useRouteStore = create<RouteState>()(
           p.id === id ? mergePlaceUpdates(p, updates) : p,
         );
 
-        let newRoutes = state.optimizedRoutes.map((r) => ({
+        const newRoutes = state.optimizedRoutes.map((r) => ({
           ...r,
           stops: r.stops.map((s) => (s.id === id ? mergePlaceUpdates(s, updates) : s)),
         }));
@@ -718,7 +720,7 @@ export const useRouteStore = create<RouteState>()(
           if (dayIndex !== null && dayIndex !== undefined) {
             set({ isCalculating: true, calculatingText: "Updating routes..." });
             try {
-              let newRoutes = [...state.optimizedRoutes];
+              const newRoutes = [...state.optimizedRoutes];
               const dayPlaces = newPlaces.filter((p) => p.dayIndex === dayIndex && !p.isDisabled);
               const idx = newRoutes.findIndex((r) => r.day === dayIndex);
               let manualSequence: string[] | undefined = undefined;
@@ -789,7 +791,7 @@ export const useRouteStore = create<RouteState>()(
           if (affectedDays.size > 0) {
             set({ isCalculating: true, calculatingText: "Updating routes..." });
             try {
-              let newRoutes = [...state.optimizedRoutes];
+              const newRoutes = [...state.optimizedRoutes];
               for (const dayIndex of affectedDays) {
                 const dayPlaces = newPlaces.filter((p) => p.dayIndex === dayIndex && !p.isDisabled);
                 const idx = newRoutes.findIndex((r) => r.day === dayIndex);
@@ -1009,7 +1011,7 @@ export const useRouteStore = create<RouteState>()(
               : p,
           );
 
-          let newRoutes = [...state.optimizedRoutes];
+          const newRoutes = [...state.optimizedRoutes];
 
           // If place was previously on another day, re-solve the previous day to remove it
           if (oldDayIndex !== null && oldDayIndex !== undefined && oldDayIndex !== dayIndex) {
@@ -1098,7 +1100,7 @@ export const useRouteStore = create<RouteState>()(
               : p,
           );
 
-          let newRoutes = [...state.optimizedRoutes];
+          const newRoutes = [...state.optimizedRoutes];
           if (dayIndex !== null && dayIndex !== undefined) {
             const dayPlaces = newPlaces.filter((p) => p.dayIndex === dayIndex && !p.isDisabled);
 
@@ -1162,7 +1164,7 @@ export const useRouteStore = create<RouteState>()(
 
       setHotelRange: (startDay, endDay, hotel) =>
         set((state) => {
-          let existing = state.hotels.filter(
+          const existing = state.hotels.filter(
             (h) => h.dayIndex < startDay || h.dayIndex > endDay
           );
           if (hotel) {
@@ -1943,7 +1945,9 @@ export const useRouteStore = create<RouteState>()(
         set({ isAutoSyncEnabled: enabled });
         try {
           localStorage.setItem("reroute_auto_sync_enabled", String(enabled));
-        } catch {}
+        } catch {
+          // Ignore localStorage availability or quota errors
+        }
         if (enabled && get().user) {
           get().saveActiveTripToCloud(true);
         }

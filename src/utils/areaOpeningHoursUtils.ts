@@ -84,6 +84,8 @@ export interface AreaHoursResult {
  *   - shops: list of qualifying businesses found with their hours
  *   - areaNote: human-readable description note for the place card
  */
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+
 export const deriveAreaOpeningHours = async (
   place: Pick<Place, "name" | "lat" | "lng" | "category"> & {
     openingHours?: string[];
@@ -99,8 +101,7 @@ export const deriveAreaOpeningHours = async (
     const isRestaurant = place.category === "restaurant";
     const categoryQuery = isRestaurant ? "restaurants" : "shops";
     const repHoursStr = isRestaurant ? "11:30 AM – 9:30 PM" : "11:00 AM – 8:00 PM";
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-    const hours = days.map((day) => `${day}: ${repHoursStr}`);
+    const hours = WEEKDAY_NAMES.map((day) => `${day}: ${repHoursStr}`);
     const sampleShops: AreaShopInfo[] = isRestaurant
       ? [
           { name: `${place.name} Dining Lane`, hours: "11:30 AM–9:30 PM" },
@@ -168,8 +169,7 @@ export const deriveAreaOpeningHours = async (
     const repClose = median(closeMinutes);
     const repHoursStr = `${toTimeStr(repOpen)} – ${toTimeStr(repClose)}`;
 
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-    const hours = days.map((day) => `${day}: ${repHoursStr}`);
+    const hours = WEEKDAY_NAMES.map((day) => `${day}: ${repHoursStr}`);
 
     // Build a readable area note listing up to 5 notable shops
     const shopListStr = shops

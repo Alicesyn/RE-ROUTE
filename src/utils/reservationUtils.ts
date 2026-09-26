@@ -1,6 +1,11 @@
 import { Place, ReservationRequirement } from "../types";
 import { parseISO, addDays, subDays, startOfDay, differenceInCalendarDays, format, isValid } from "date-fns";
 
+const MONTH_REGEX = /(?:(\d+)\s*(?:-\s*(\d+))?|a|one)\s*month/;
+const WEEK_REGEX = /(?:(\d+)\s*(?:-\s*(\d+))?|a|one)\s*week/;
+const DAY_REGEX = /(?:(\d+)\s*(?:-\s*(\d+))?|a|one)\s*day/;
+const HOUR_REGEX = /(\d+)\s*hour/;
+
 /**
  * Parses natural language advance notice timing strings into number of days.
  * Examples:
@@ -22,7 +27,7 @@ export function parseAdvanceNoticeDays(advanceTime?: string): number | null {
   }
 
   // Months: e.g. "1 month", "2-3 months", "a month"
-  const monthMatch = text.match(/(?:(\d+)\s*(?:-\s*(\d+))?|a|one)\s*month/);
+  const monthMatch = text.match(MONTH_REGEX);
   if (monthMatch) {
     if (monthMatch[1] && monthMatch[2]) {
       return Math.max(parseInt(monthMatch[1], 10), parseInt(monthMatch[2], 10)) * 30;
@@ -34,7 +39,7 @@ export function parseAdvanceNoticeDays(advanceTime?: string): number | null {
   }
 
   // Weeks: e.g. "1 week", "2-3 weeks", "a week", "one week"
-  const weekMatch = text.match(/(?:(\d+)\s*(?:-\s*(\d+))?|a|one)\s*week/);
+  const weekMatch = text.match(WEEK_REGEX);
   if (weekMatch) {
     if (weekMatch[1] && weekMatch[2]) {
       return Math.max(parseInt(weekMatch[1], 10), parseInt(weekMatch[2], 10)) * 7;
@@ -46,7 +51,7 @@ export function parseAdvanceNoticeDays(advanceTime?: string): number | null {
   }
 
   // Days: e.g. "30 days", "3-5 days", "1 day", "14 days prior"
-  const dayMatch = text.match(/(?:(\d+)\s*(?:-\s*(\d+))?|a|one)\s*day/);
+  const dayMatch = text.match(DAY_REGEX);
   if (dayMatch) {
     if (dayMatch[1] && dayMatch[2]) {
       return Math.max(parseInt(dayMatch[1], 10), parseInt(dayMatch[2], 10));
@@ -58,7 +63,7 @@ export function parseAdvanceNoticeDays(advanceTime?: string): number | null {
   }
 
   // Hours: e.g. "24 hours" -> 1 day, "48 hours" -> 2 days
-  const hourMatch = text.match(/(\d+)\s*hour/);
+  const hourMatch = text.match(HOUR_REGEX);
   if (hourMatch && hourMatch[1]) {
     const hours = parseInt(hourMatch[1], 10);
     return Math.max(1, Math.round(hours / 24));
