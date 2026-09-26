@@ -9,7 +9,6 @@ import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { ToastContainer } from "./components/layout/ToastContainer";
 import { toast } from "./services/toastService";
 import { useRouteStore } from "./store/useRouteStore";
-import { solveTSP } from "./services/tspSolver";
 import { clearMapsCache, fetchFreshPhoto } from "./services/mapsService";
 import { analyticsService } from "./services/analyticsService";
 import { Wand2, Sparkles, RefreshCw, Loader2, MapPin, RotateCcw, Trash2, Lock, X } from "lucide-react";
@@ -21,7 +20,6 @@ const MapView = React.lazy(() =>
 const ResetTripModal = React.lazy(() =>
   import("./components/layout/ResetTripModal").then((m) => ({ default: m.ResetTripModal }))
 );
-import { summarizePlacesBatch, romanizePlaceNames, generateHighlightsBatch } from "./services/aiService";
 import { hasNonLatinScript } from "./utils/textUtils";
 import type { DayRoute, Place } from "./types";
 import { isLocalDev } from "./utils/envUtils";
@@ -34,36 +32,22 @@ import {
 } from "./utils/mockAiUtils";
 
 function App() {
-  const {
-    places,
-    hotels,
-    days,
-    travelMode,
-    strictBudget,
-    avoidClosedHours,
-    optimizedRoutes,
-    setOptimizedRoutes,
-    unassignAll,
-    clearOptimizedSchedule,
-    appMode,
-    updatePlacesBulk,
-    theme,
-    showFlights,
-    arrivalFlight,
-    departureFlight,
-    startDate,
-    dayStartTime,
-    dayEndTime,
-    categoryConfigs,
-    exemptDays,
-    toggleDayExemption,
-    setExemptDays,
-    dayTitles,
-    filteredPlaceIds,
-    hasActiveFilter,
-    activeFilterCategory,
-    activeFilterDescription,
-  } = useRouteStore();
+  const places = useRouteStore((s) => s.places);
+  const hotels = useRouteStore((s) => s.hotels);
+  const days = useRouteStore((s) => s.days);
+  const theme = useRouteStore((s) => s.theme);
+  const appMode = useRouteStore((s) => s.appMode);
+  const exemptDays = useRouteStore((s) => s.exemptDays);
+  const toggleDayExemption = useRouteStore((s) => s.toggleDayExemption);
+  const setExemptDays = useRouteStore((s) => s.setExemptDays);
+  const optimizedRoutes = useRouteStore((s) => s.optimizedRoutes);
+  const dayTitles = useRouteStore((s) => s.dayTitles);
+  const filteredPlaceIds = useRouteStore((s) => s.filteredPlaceIds);
+  const hasActiveFilter = useRouteStore((s) => s.hasActiveFilter);
+  const activeFilterCategory = useRouteStore((s) => s.activeFilterCategory);
+  const activeFilterDescription = useRouteStore((s) => s.activeFilterDescription);
+  const updatePlacesBulk = useRouteStore((s) => s.updatePlacesBulk);
+  const startDate = useRouteStore((s) => s.startDate);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showMobileMap, setShowMobileMap] = useState(false);
@@ -127,6 +111,7 @@ function App() {
 
     const timer = setTimeout(async () => {
       try {
+        const { romanizePlaceNames } = await import("./services/aiService");
         const results = await romanizePlaceNames(
           foreignUnromanized.map((p) => ({ id: p.id, name: p.name, address: p.address }))
         );
@@ -160,6 +145,22 @@ function App() {
 
     setIsOptimizing(true);
     try {
+      const state = useRouteStore.getState();
+      const {
+        hotels,
+        travelMode,
+        strictBudget,
+        avoidClosedHours,
+        showFlights,
+        arrivalFlight,
+        departureFlight,
+        dayStartTime,
+        dayEndTime,
+        categoryConfigs,
+        customTransitTimes,
+        setOptimizedRoutes,
+      } = state;
+
       const [startH, startM] = dayStartTime.split(":").map(Number);
       const [endH, endM] = dayEndTime.split(":").map(Number);
       let baseDayMinutes = endH * 60 + endM - (startH * 60 + startM);
@@ -196,8 +197,9 @@ function App() {
         return dayAvailableMinutes;
       });
 
-      const { categoryConfigs: latestConfigs, customTransitTimes } = useRouteStore.getState();
+      const latestConfigs = state.categoryConfigs;
 
+      const { solveTSP } = await import("./services/tspSolver");
       const result = await solveTSP(
         activePlaces,
         hotels,
@@ -351,6 +353,7 @@ function App() {
           }));
 
           console.log(`[AI Describe] Sending request to Gemini... Please wait.`);
+          const { summarizePlacesBatch } = await import("./services/aiService");
           const aiDataArray = await summarizePlacesBatch(batchPlaces, 3, abortControllerRef.current.signal);
           console.log(`[AI Describe] Received response from Gemini! Formatting updates...`);
 
@@ -464,6 +467,7 @@ function App() {
     try {
       if (appMode === "real") {
         toast.info(`Generating Must-Try & highlights for ${placesMissingHighlights.length} places...`, "Generating Highlights");
+        const { generateHighlightsBatch } = await import("./services/aiService");
         const results = await generateHighlightsBatch(
           placesMissingHighlights.map((p) => ({
             id: p.id,
@@ -596,6 +600,7 @@ function App() {
           types: (p as any).types || [],
         }));
 
+        const { summarizePlacesBatch } = await import("./services/aiService");
         const aiDataArray = await summarizePlacesBatch(batchPlaces, 3);
 
         for (const p of targetPlaces) {
@@ -719,13 +724,13 @@ function App() {
   };
 
   const handleUnassignAll = () => {
-    unassignAll();
+    useRouteStore.getState().unassignAll();
     toast.info("Unpinned places returned to pool. Restrictions, pins, and reservations preserved.", "Schedule Cleared");
   };
 
   const handleClearOptimizedSchedule = () => {
     if (window.confirm("Are you sure you want to clear the optimized schedule? Unpinned places will return to the unassigned pool; restrictions, pins, and reservations will be preserved.")) {
-      clearOptimizedSchedule();
+      useRouteStore.getState().clearOptimizedSchedule();
       toast.info("Schedule cleared. Restrictions, pins, and reservations preserved.", "Schedule Cleared");
     }
   };

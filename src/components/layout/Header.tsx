@@ -22,6 +22,8 @@ import {
   LogOut,
   Zap,
   Ticket,
+  Menu,
+  X,
 } from "lucide-react";
 
 const ImportModal = React.lazy(() =>
@@ -119,7 +121,9 @@ export const Header: React.FC = React.memo(() => {
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [saveModalMode, setSaveModalMode] = useState<"local" | "cloud">("local");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
+  const mobileMenuRef = React.useRef<HTMLDivElement>(null);
 
   const handleOpenSaveModal = (mode: "local" | "cloud" = "local") => {
     setSaveModalMode(mode);
@@ -148,12 +152,15 @@ export const Header: React.FC = React.memo(() => {
       if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
         setIsAccountMenuOpen(false);
       }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setIsMobileMenuOpen(false);
+      }
     };
-    if (isExportMenuOpen || isAccountMenuOpen) {
+    if (isExportMenuOpen || isAccountMenuOpen || isMobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [isExportMenuOpen, isAccountMenuOpen]);
+  }, [isExportMenuOpen, isAccountMenuOpen, isMobileMenuOpen]);
 
   // Restore auth session & subscribe to OAuth redirects
   React.useEffect(() => {
@@ -298,21 +305,22 @@ export const Header: React.FC = React.memo(() => {
 
 
   return (
-    <header className="bg-white dark:bg-surface-800 border-b border-gray-200 dark:border-surface-700 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between sticky top-0 z-50 transition-colors safe-pt flex-wrap gap-2 sm:gap-4">
-      <div className="flex items-center gap-2.5 sm:gap-3">
+    <header className="bg-white dark:bg-surface-800 border-b border-gray-200 dark:border-surface-700 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between sticky top-0 z-50 transition-colors safe-pt gap-2 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="bg-primary-500 p-1.5 sm:p-2 rounded-lg shrink-0">
-          <Map className="text-white w-5 h-5 sm:w-6 h-6" />
+          <Map className="text-white w-4 h-4 sm:w-6 h-6" />
         </div>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="text-lg sm:text-2xl font-bold text-surface-900 dark:text-white tracking-tight bg-transparent border-none outline-none focus:ring-0 focus:border-b focus:border-primary-500 transition-all p-0 w-36 sm:w-64 truncate"
+          className="text-base sm:text-2xl font-bold text-surface-900 dark:text-white tracking-tight bg-transparent border-none outline-none focus:ring-0 focus:border-b focus:border-primary-500 transition-all p-0 w-28 sm:w-64 truncate"
           placeholder="Trip Title..."
         />
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
+      {/* Desktop Actions */}
+      <div className="hidden sm:flex items-center gap-1.5 sm:gap-3 flex-wrap">
         {isLocalDev() && (
           <div className="relative">
             <select
@@ -771,6 +779,172 @@ export const Header: React.FC = React.memo(() => {
                   <List className="w-4 h-4 shrink-0 text-surface-400" />
                 )}
                 Export Place Names List
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Actions (Single-Line Compact Header) */}
+      <div className="flex sm:hidden items-center gap-1.5 shrink-0">
+        <button
+          onClick={() => handleOpenSaveModal("local")}
+          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 shadow-2xs hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors cursor-pointer"
+          title="Save trip"
+        >
+          <Save className="w-3.5 h-3.5 text-primary-500" />
+          <span>Save</span>
+        </button>
+
+        {reservationPlaces.length > 0 && (
+          <button
+            onClick={() => setIsReservationsOpen(true)}
+            className="flex items-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 relative cursor-pointer"
+            title="Open Reservations Hub"
+          >
+            <Ticket className="w-3.5 h-3.5" />
+            {pendingReservationsCount > 0 && (
+              <span className="w-4 h-4 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {pendingReservationsCount}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Mobile Overflow Menu */}
+        <div className="relative" ref={mobileMenuRef}>
+          <button
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+            className="p-1.5 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors cursor-pointer"
+            title="Menu & More Options"
+            aria-label="Toggle navigation menu"
+          >
+            {isMobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
+
+          {isMobileMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-surface-800 rounded-2xl shadow-xl border border-surface-200 dark:border-surface-700 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+              {/* Account / Sign-in */}
+              {user ? (
+                <div className="px-3 py-2 border-b border-surface-100 dark:border-surface-700 mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <UserAvatar user={user} size="sm" />
+                    <span className="text-xs font-bold text-surface-800 dark:text-surface-100 truncate">
+                      {user.displayName || "Account"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsAccountMenuOpen(true);
+                    }}
+                    className="text-[10px] text-primary-600 dark:text-primary-400 font-bold"
+                  >
+                    Manage
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setIsAuthOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 flex items-center gap-2 transition-colors cursor-pointer mb-1 border-b border-surface-100 dark:border-surface-700"
+                >
+                  <Cloud className="w-4 h-4" />
+                  <span>Sign in to Cloud Sync</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsCategorySettingsOpen(true);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <Settings className="w-4 h-4 text-surface-400" />
+                <span>Trip Settings</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsImportOpen(true);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-surface-400" />
+                <span>Import Trip</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setLoadModalTab("all");
+                  setIsLoadOpen(true);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <FolderOpen className="w-4 h-4 text-surface-400" />
+                <span>Load Saved Trips</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleExportTripExcel();
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                <span>Export to Excel</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleExportTripJson();
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <FileJson className="w-4 h-4 text-primary-500" />
+                <span>Export as JSON</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsApiBudgetOpen(true);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <Activity className="w-4 h-4 text-surface-400" />
+                <span>API Usage & Keys</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsAboutOpen(true);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <HelpCircle className="w-4 h-4 text-surface-400" />
+                <span>About RE-ROUTE</span>
+              </button>
+
+              <div className="my-1 border-t border-surface-100 dark:border-surface-700" />
+
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsResetOpen(true);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4 text-red-500" />
+                <span>Reset Trip</span>
               </button>
             </div>
           )}

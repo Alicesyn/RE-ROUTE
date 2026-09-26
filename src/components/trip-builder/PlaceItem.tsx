@@ -224,7 +224,7 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
         <div
           {...attributes}
           {...listeners}
-          className="mt-1 text-surface-400 hover:text-surface-600 cursor-grab active:cursor-grabbing p-1 -ml-1 rounded"
+          className="mt-1 text-surface-400 hover:text-surface-600 cursor-grab active:cursor-grabbing p-1 -ml-1 rounded touch-none"
         >
           <GripVertical className="w-5 h-5" />
         </div>

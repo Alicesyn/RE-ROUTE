@@ -375,7 +375,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       }}
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
     >
-      <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-surface-200 dark:border-surface-700">
+      <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90dvh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-surface-200 dark:border-surface-700">
 
         <div className="flex items-center justify-between p-5 border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-900/70 shrink-0">
           <div className="flex-1 min-w-0 pr-4">
@@ -1175,7 +1175,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
           </div>
         </div>
 
-        <div className="p-4 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="p-4 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0 safe-pb">
           <div className="flex items-center gap-3">
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + " " + place.address)}`}
@@ -1189,22 +1189,22 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
             </a>
 
             {place.addedAt && (
-              <span className="text-[11px] font-medium text-surface-400 dark:text-surface-500 flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-surface-400 dark:text-surface-500 hidden sm:flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-surface-400" />
                 Added {format(new Date(place.addedAt), "MMM d, yyyy 'at' h:mm a")}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm font-bold text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700 rounded-lg transition-colors"
+              className="flex-1 sm:flex-initial px-4 py-2 text-sm font-bold text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700 rounded-lg transition-colors min-h-[40px] text-center"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors"
+              className="flex-1 sm:flex-initial px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors min-h-[40px] text-center"
             >
               Save Changes
             </button>

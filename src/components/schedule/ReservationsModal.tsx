@@ -279,7 +279,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ duration: 0.18 }}
-          className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh] border border-surface-200 dark:border-surface-700 transition-colors"
+          className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[92dvh] border border-surface-200 dark:border-surface-700 transition-colors"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-surface-200 dark:border-surface-700 bg-surface-50/80 dark:bg-surface-800/80">
@@ -734,7 +734,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
           </div>
 
           {/* Footer Bar */}
-          <div className="flex items-center justify-between px-5 py-3 border-t border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs text-surface-500 dark:text-surface-400">
+          <div className="flex flex-wrap items-center justify-between px-5 py-3 border-t border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs text-surface-500 dark:text-surface-400 gap-2 safe-pb">
             <span className="flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>Target booking opening dates automatically compute from your trip schedule.</span>

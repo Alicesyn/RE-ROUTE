@@ -467,7 +467,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="relative w-full max-w-2xl bg-white dark:bg-surface-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-2xl bg-white dark:bg-surface-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]"
           >
             {/* Header */}
             <div className="p-6 border-b border-surface-100 dark:border-surface-700 flex items-center justify-between shrink-0 bg-surface-50/50 dark:bg-surface-800/50">

@@ -211,7 +211,7 @@ export const ApiBudgetModal: React.FC<ApiBudgetModalProps> = ({
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
-          className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh] border border-surface-200 dark:border-surface-700 transition-colors"
+          className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[92dvh] border border-surface-200 dark:border-surface-700 transition-colors"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70">

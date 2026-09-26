@@ -27,7 +27,7 @@ const ImportModal = React.lazy(() =>
 import { MissingPlacesList } from "./MissingPlacesList";
 import { isDuplicatePlace } from "../../utils/duplicateUtils";
 
-export const PlaceSearch: React.FC = () => {
+export const PlaceSearch: React.FC = React.memo(() => {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -35,7 +35,11 @@ export const PlaceSearch: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay] = useState<number | null>(null);
-  const { addPlace, updatePlace, appMode, places, hotels } = useRouteStore();
+  const addPlace = useRouteStore((s) => s.addPlace);
+  const updatePlace = useRouteStore((s) => s.updatePlace);
+  const appMode = useRouteStore((s) => s.appMode);
+  const places = useRouteStore((s) => s.places);
+  const hotels = useRouteStore((s) => s.hotels);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -403,4 +407,4 @@ export const PlaceSearch: React.FC = () => {
       </AnimatePresence>
     </div>
   );
-};
+});

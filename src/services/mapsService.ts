@@ -23,8 +23,21 @@ export const clearMapsCache = () => {
   localStorage.removeItem(PHOTO_URL_CACHE_KEY);
 };
 
+const MAX_SEARCH_CACHE = 150;
+const MAX_PHOTO_CACHE = 200;
+const MAX_ROUTES_CACHE = 150;
+
+const pruneCache = (cache: Record<string, any>, maxItems: number) => {
+  const keys = Object.keys(cache);
+  if (keys.length > maxItems) {
+    const toRemove = keys.slice(0, keys.length - maxItems);
+    toRemove.forEach((k) => delete cache[k]);
+  }
+};
+
 const saveToCache = (query: string, results: any[]) => {
   searchCache[query] = results;
+  pruneCache(searchCache, MAX_SEARCH_CACHE);
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(searchCache));
   } catch (e) {
@@ -40,6 +53,7 @@ let photoUrlCache: Record<string, string> = JSON.parse(
 
 const savePhotoUrl = (photoName: string, url: string) => {
   photoUrlCache[photoName] = url;
+  pruneCache(photoUrlCache, MAX_PHOTO_CACHE);
   try {
     localStorage.setItem(PHOTO_URL_CACHE_KEY, JSON.stringify(photoUrlCache));
   } catch (e) {
@@ -50,6 +64,7 @@ const savePhotoUrl = (photoName: string, url: string) => {
 /**
  * Lazily resolves a Places API photo reference to a CDN URL.
  * Results are persisted so the same photo is never fetched twice across sessions.
+ * Automatically requests smaller thumbnails (300px) on mobile viewports to save cellular bandwidth.
  */
 export const resolvePhotoUrl = async (photoName: string, apiKey: string): Promise<string | undefined> => {
   if (!photoName || !apiKey) return undefined;
@@ -57,8 +72,10 @@ export const resolvePhotoUrl = async (photoName: string, apiKey: string): Promis
 
   try {
     apiUsageService.recordCall("maps_photo");
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+    const maxHeightPx = isMobile ? 300 : 400;
     const photoRes = await fetch(
-      `https://places.googleapis.com/v1/${photoName}/media?key=${apiKey}&maxHeightPx=400&skipHttpRedirect=true`
+      `https://places.googleapis.com/v1/${photoName}/media?key=${apiKey}&maxHeightPx=${maxHeightPx}&skipHttpRedirect=true`
     );
     if (photoRes.ok) {
       const pData = await photoRes.json();
@@ -93,6 +110,7 @@ try {
 
 const saveToRoutesCache = (key: string, result: { distanceM: number; durationS: number }) => {
   routesCache[key] = { ...result, savedAt: Date.now() };
+  pruneCache(routesCache, MAX_ROUTES_CACHE);
   try {
     localStorage.setItem(ROUTES_CACHE_KEY, JSON.stringify(routesCache));
   } catch (e) {

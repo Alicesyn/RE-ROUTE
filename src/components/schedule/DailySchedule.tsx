@@ -53,7 +53,7 @@ const EditPlaceModal = React.lazy(() =>
   import("./EditPlaceModal").then((m) => ({ default: m.EditPlaceModal }))
 );
 
-export const DailySchedule: React.FC = () => {
+export const DailySchedule: React.FC = React.memo(() => {
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
   const [optimizingDayIndex, setOptimizingDayIndex] = useState<number | null>(null);
   const [isBannerDismissed, setIsBannerDismissed] = useState(false);
@@ -1414,4 +1414,4 @@ export const DailySchedule: React.FC = () => {
       )}
     </>
   );
-};
+});

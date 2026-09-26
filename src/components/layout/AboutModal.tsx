@@ -83,7 +83,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 15 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-10"
+          className="relative w-full max-w-4xl max-h-[90dvh] bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-10"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 sm:px-8 py-4 border-b border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/90 backdrop-blur-md shrink-0">
@@ -626,7 +626,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
           </div>
 
           {/* Footer */}
-          <div className="px-5 sm:px-8 py-3.5 border-t border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/90 flex items-center justify-between shrink-0">
+          <div className="px-5 sm:px-8 py-3.5 border-t border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/90 flex items-center justify-between shrink-0 safe-pb">
             <div className="text-[11px] text-surface-500 dark:text-surface-400 hidden sm:block">
               RE-ROUTE • MIT License • <a href="https://github.com/Alicesyn/RE-ROUTE" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary-500">GitHub Repository</a>
             </div>

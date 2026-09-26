@@ -146,7 +146,7 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
             <div
               {...attributes}
               {...listeners}
-              className="absolute -left-6 top-5 -translate-y-1/2 p-1.5 text-surface-400 dark:text-surface-500 hover:text-surface-700 dark:hover:text-surface-200 cursor-grab active:cursor-grabbing opacity-40 group-hover:opacity-100 hover:opacity-100 transition-opacity touch-none"
+              className="absolute -left-6 top-5 -translate-y-1/2 p-1.5 text-surface-400 dark:text-surface-500 hover:text-surface-700 dark:hover:text-surface-200 cursor-grab active:cursor-grabbing opacity-70 sm:opacity-40 sm:group-hover:opacity-100 hover:opacity-100 transition-opacity touch-none"
               title="Drag to reorder"
             >
               <GripVertical className="w-4 h-4" />

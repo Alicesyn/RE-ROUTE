@@ -137,7 +137,7 @@ export const SaveTripModal: React.FC<SaveTripModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 12 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-surface-200 dark:border-surface-700 w-full max-w-md overflow-hidden flex flex-col transition-colors"
+          className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-surface-200 dark:border-surface-700 w-full max-w-md max-h-[90dvh] overflow-hidden flex flex-col transition-colors"
         >
           {/* Header */}
           <div className="flex items-center justify-between p-5 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">

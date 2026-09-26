@@ -15,7 +15,7 @@ export default defineConfig({
   build: {
     target: "esnext",
     cssCodeSplit: true,
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -38,12 +38,21 @@ export default defineConfig({
             if (id.includes("lucide-react")) {
               return "vendor-icons";
             }
+            if (id.includes("@supabase")) {
+              return "vendor-supabase";
+            }
             if (id.includes("xlsx") || id.includes("papaparse")) {
               return "vendor-parsers";
             }
             if (id.includes("exceljs")) {
               return "vendor-excel";
             }
+          }
+          if (id.includes("src/services/tspSolver") || id.includes("src/services/ekispertService")) {
+            return "solver-engine";
+          }
+          if (id.includes("src/services/aiService")) {
+            return "ai-engine";
           }
         },
       },
