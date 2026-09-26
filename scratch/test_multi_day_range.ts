@@ -1,4 +1,4 @@
- ccccccimport { mergeOverlappingRanges, formatMultiRangeBadge, MAX_DAY_RANGES } from "../src/utils/dayRangeUtils";
+import { mergeOverlappingRanges, formatMultiRangeBadge, MAX_DAY_RANGES } from "../src/utils/dayRangeUtils";
 import { DayRangeConstraint } from "../src/types";
 
 console.log("=== Testing Multiple Date Range Restrictions Logic ===");

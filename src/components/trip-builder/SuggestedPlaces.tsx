@@ -654,9 +654,27 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                       {place.address}
                     </p>
                   )}
-                  <p className="text-[11px] text-surface-500 dark:text-surface-400 leading-relaxed line-clamp-2 relative z-10 mb-2">
-                    {place.description}
-                  </p>
+                  {place.description ? (
+                    <div className="relative group/desc mb-2 z-20">
+                      <p
+                        className="text-[11px] text-surface-500 dark:text-surface-400 leading-relaxed line-clamp-2 cursor-help hover:text-surface-700 dark:hover:text-surface-300 transition-colors"
+                        title={place.description}
+                      >
+                        {place.description}
+                      </p>
+                      <div className="absolute -inset-x-2.5 -top-2.5 bottom-auto z-40 hidden group-hover/desc:block animate-in fade-in zoom-in-95 duration-150">
+                        <div className="p-3 rounded-xl bg-surface-900/95 dark:bg-surface-800/98 text-white shadow-2xl border border-surface-700/80 backdrop-blur-md">
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">
+                            <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
+                            <span>About this sight</span>
+                          </div>
+                          <p className="text-[11px] leading-relaxed text-surface-100 select-text font-normal">
+                            {place.description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {/* Reservation Requirement Badge */}
                   {place.reservation && (
