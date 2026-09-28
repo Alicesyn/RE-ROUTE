@@ -41,7 +41,19 @@ export const parseOpeningHoursString = (
 
   const lower = normalized.toLowerCase();
   if (lower.includes("closed")) return "closed";
-  if (lower.includes("24 hours") || lower.includes("open 24")) return "24hours";
+  if (
+    lower.includes("24 hours") ||
+    lower.includes("24hours") ||
+    lower.includes("open 24") ||
+    lower.includes("24 hrs") ||
+    lower.includes("24hrs") ||
+    lower.includes("24/7") ||
+    lower.includes("all day") ||
+    lower.includes("24 hour") ||
+    lower.includes("24-hour")
+  ) {
+    return "24hours";
+  }
 
   const intervals: { open: number; close: number }[] = [];
 
@@ -70,8 +82,9 @@ export const parseOpeningHoursString = (
           startPeriod = oH <= cH ? "PM" : "AM";
         }
       } else {
-        // e.g. 9:00 - 2:00 AM -> overnight spot starts at 9:00 PM
-        if (oH >= 5 && oH <= 11) {
+        // e.g. 9:00 - 2:00 AM -> overnight spot starts at 9:00 PM (oH > cH and post-midnight close)
+        // but 7:00 - 10:00 AM -> morning shift 7:00 AM to 10:00 AM (oH < cH)
+        if (oH > cH && oH >= 4 && oH <= 11 && cH <= 8) {
           startPeriod = "PM";
         } else {
           startPeriod = "AM";
@@ -84,6 +97,11 @@ export const parseOpeningHoursString = (
 
     let closeMinutes = (cH % 12) * 60 + (closeM ? parseInt(closeM, 10) : 0);
     if (endPeriod === "PM") closeMinutes += 12 * 60;
+
+    // 12:00 AM to 12:00 AM represents open 24 hours
+    if (openMinutes === 0 && closeMinutes === 0 && oH === 12 && cH === 12) {
+      return "24hours";
+    }
 
     if (closeMinutes < openMinutes) {
       closeMinutes += 24 * 60;
@@ -99,6 +117,10 @@ export const parseOpeningHoursString = (
       const [, oH, oM, cH, cM] = match;
       const openMinutes = parseInt(oH, 10) * 60 + parseInt(oM, 10);
       let closeMinutes = parseInt(cH, 10) * 60 + parseInt(cM, 10);
+      // 00:00 to 00:00 or 00:00 to 24:00 represents 24 hours
+      if (openMinutes === 0 && (closeMinutes === 0 || closeMinutes >= 24 * 60)) {
+        return "24hours";
+      }
       if (closeMinutes < openMinutes) closeMinutes += 24 * 60;
       intervals.push({ open: openMinutes, close: closeMinutes });
     }
@@ -135,17 +157,28 @@ export const getPlaceDayHours = (
       return clean.startsWith(dayOfWeekLong) || clean.startsWith(dayOfWeekShort);
     });
 
-    // 2. If not found by day, check for generic daily entries e.g. "Daily: 9 AM - 5 PM" or "Every day"
+    // 2. If not found by day, check for generic daily entries e.g. "Daily: 9 AM - 5 PM", "Every day", or 24-hour entries
     if (!todaysHours) {
       todaysHours = openingHours.find((h) => {
         if (typeof h !== "string") return false;
         const clean = h.trim().toLowerCase();
-        return clean.startsWith("daily") || clean.startsWith("every day") || clean.startsWith("everyday");
+        return (
+          clean.startsWith("daily") ||
+          clean.startsWith("every day") ||
+          clean.startsWith("everyday") ||
+          clean.includes("24 hours") ||
+          clean.includes("24hours") ||
+          clean.includes("open 24") ||
+          clean.includes("24 hrs") ||
+          clean.includes("24hrs") ||
+          clean.includes("24/7") ||
+          clean.includes("all day")
+        );
       });
     }
 
-    // 3. Fallback: if openingHours has only 1 entry or plain time without day prefix, test it directly
-    if (!todaysHours && openingHours.length === 1 && typeof openingHours[0] === "string") {
+    // 3. Fallback: if openingHours has plain time without day prefix, test first entry
+    if (!todaysHours && openingHours.length > 0 && typeof openingHours[0] === "string") {
       todaysHours = openingHours[0];
     }
 
@@ -158,11 +191,21 @@ export const getPlaceDayHours = (
 
 
 /**
- * Parses "HH:MM" (24h) string into minutes from midnight
+ * Parses "HH:MM" (24h) or "H:MM AM/PM" string into minutes from midnight
  */
 export const parseTimeToMinutes = (timeStr: string): number => {
   if (!timeStr) return 0;
-  const [hours, minutes] = timeStr.split(":").map(Number);
+  const trimmed = timeStr.trim();
+  const match12 = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (match12 && match12[3]) {
+    let h = parseInt(match12[1], 10);
+    const m = match12[2] ? parseInt(match12[2], 10) : 0;
+    const isPm = match12[3].toLowerCase() === "pm";
+    if (isPm && h < 12) h += 12;
+    if (!isPm && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  const [hours, minutes] = trimmed.split(":").map(Number);
   return (hours || 0) * 60 + (minutes || 0);
 };
 
@@ -198,7 +241,14 @@ export const checkTimeConflict = (
   // 1. Check user-defined preferred time window constraint (allowedTimeRange)
   if (allowedTimeRange && allowedTimeRange.startTime && allowedTimeRange.endTime) {
     const rangeStart = parseTimeToMinutes(allowedTimeRange.startTime);
-    const rangeEnd = parseTimeToMinutes(allowedTimeRange.endTime);
+    let rangeEnd = parseTimeToMinutes(allowedTimeRange.endTime);
+    // If rangeEnd is 0 (e.g. "00:00" / 12:00 AM) or wraps past midnight (rangeEnd < rangeStart),
+    // treat midnight as the end of the day (1440 min) or overnight window (+1440 min)
+    if (rangeEnd === 0) {
+      rangeEnd = 24 * 60;
+    } else if (rangeEnd < rangeStart) {
+      rangeEnd += 24 * 60;
+    }
     const depTime = arrivalTimeMinutes + durationMinutes;
 
     if (arrivalTimeMinutes < rangeStart) {

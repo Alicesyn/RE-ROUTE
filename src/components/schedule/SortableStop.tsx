@@ -176,7 +176,11 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
                     title={timeConflict.reason}
                   >
                     <AlertTriangle className="w-3 h-3" />
-                    <span className="hidden sm:inline">Closed</span>
+                    <span className="hidden sm:inline">
+                      {timeConflict.reason?.startsWith("Outside preferred hours")
+                        ? "Outside Window"
+                        : "Closed"}
+                    </span>
                   </div>
                 )}
                 {/* Pin Toggle Button */}

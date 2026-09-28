@@ -697,6 +697,34 @@ function evaluateRouteCost(
       const place = to as Place;
       const duration = place.estimatedDuration || 60;
 
+      // First stop from hotel morning adjustment: if venue opens later, traveler departs hotel to arrive at opening
+      if (i === 0 && !place.customTime) {
+        if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
+          const parsed = getPlaceDayHours(place.openingHours, currentDate);
+          if (parsed && typeof parsed === "object") {
+            const intervals = parsed.intervals || [{ open: parsed.open, close: parsed.close }];
+            const candidate = intervals.find((inv) => inv.open > currentTime);
+            if (candidate && candidate.open > currentTime) {
+              currentTime = candidate.open;
+            }
+          }
+        }
+        if (place.allowedTimeRange?.startTime) {
+          const rangeStart = parseTimeToMinutes(place.allowedTimeRange.startTime);
+          if (rangeStart > currentTime) {
+            currentTime = rangeStart;
+          }
+        }
+      }
+
+      // Advance time to reserved arrival time if stop has locked customTime
+      if (place.customTime) {
+        const customMin = parseTimeToMinutes(place.customTime);
+        if (customMin > currentTime) {
+          currentTime = customMin;
+        }
+      }
+
       if (avoidClosedHours && ((place.openingHours && place.openingHours.length > 0) || place.allowedTimeRange)) {
         const earlyMins = parseEarlyArrivalMinutes(place.reservation?.advanceTime);
         const conflict = checkTimeConflict(currentTime, duration, place.openingHours, currentDate, place.allowedTimeRange, earlyMins);
@@ -1059,7 +1087,9 @@ function optimizeDayRoute(
       // Penalize assigning to a window outside user-defined allowedTimeRange
       if (place.allowedTimeRange?.startTime && place.allowedTimeRange?.endTime) {
         const rangeStart = parseTimeToMinutes(place.allowedTimeRange.startTime);
-        const rangeEnd = parseTimeToMinutes(place.allowedTimeRange.endTime);
+        let rangeEnd = parseTimeToMinutes(place.allowedTimeRange.endTime);
+        if (rangeEnd === 0) rangeEnd = 24 * 60;
+        if (rangeEnd < rangeStart) rangeEnd += 24 * 60;
         if (windowEndTimes[w] <= rangeStart || windowStartTimes[w] >= rangeEnd) {
           score += 50000000;
         } else {
@@ -1384,6 +1414,36 @@ function evictClosedHourConflicts(
       const seg = route.segments[sIdx];
       const travelMin = seg ? Math.round(seg.time / 60) : 0;
       currTime += travelMin;
+
+      // 1. First stop from hotel in the morning:
+      // If the venue opens later than the earliest start time, travelers depart hotel to arrive at opening
+      if (sIdx === 0 && !stop.customTime) {
+        if (stop.openingHours && stop.openingHours.length > 0) {
+          const parsed = getPlaceDayHours(stop.openingHours, currentDate);
+          if (parsed && typeof parsed === "object") {
+            const intervals = parsed.intervals || [{ open: parsed.open, close: parsed.close }];
+            const candidate = intervals.find((inv) => inv.open > currTime);
+            if (candidate && candidate.open > currTime) {
+              currTime = candidate.open;
+            }
+          }
+        }
+        if (stop.allowedTimeRange?.startTime) {
+          const rangeStart = parseTimeToMinutes(stop.allowedTimeRange.startTime);
+          if (rangeStart > currTime) {
+            currTime = rangeStart;
+          }
+        }
+      }
+
+      // 2. Reserved stop with locked customTime:
+      // Jump arrival time to the reserved time (same as DailySchedule.tsx and excelExportService.ts)
+      if (stop.customTime) {
+        const customMin = parseTimeToMinutes(stop.customTime);
+        if (customMin > currTime) {
+          currTime = customMin;
+        }
+      }
 
       const isPinnedOrCustom = stop.pinnedToDay || !!stop.customTime || !!stop.isStarred;
 

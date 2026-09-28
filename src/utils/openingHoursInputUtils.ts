@@ -87,7 +87,17 @@ export function parseOpeningHoursArrayToEntries(openingHours?: string[]): DayHou
     }
 
     // Check 24 hours
-    if (lower.includes("24 hours") || lower.includes("open 24")) {
+    if (
+      lower.includes("24 hours") ||
+      lower.includes("24hours") ||
+      lower.includes("open 24") ||
+      lower.includes("24 hrs") ||
+      lower.includes("24hrs") ||
+      lower.includes("24/7") ||
+      lower.includes("all day") ||
+      lower.includes("24 hour") ||
+      lower.includes("24-hour")
+    ) {
       return {
         day: dayName,
         mode: "24hours",
@@ -101,7 +111,29 @@ export function parseOpeningHoursArrayToEntries(openingHours?: string[]): DayHou
 
     // Parse intervals
     const parsed = parseOpeningHoursString(matchedLine);
-    if (!parsed || parsed === "closed" || parsed === "24hours" || !parsed.intervals || parsed.intervals.length === 0) {
+    if (parsed === "24hours") {
+      return {
+        day: dayName,
+        mode: "24hours",
+        openTime: "00:00",
+        closeTime: "23:59",
+        hasSplitShift: false,
+        openTime2: "17:00",
+        closeTime2: "22:00",
+      };
+    }
+    if (parsed === "closed") {
+      return {
+        day: dayName,
+        mode: "closed",
+        openTime: "10:00",
+        closeTime: "20:00",
+        hasSplitShift: false,
+        openTime2: "17:00",
+        closeTime2: "22:00",
+      };
+    }
+    if (!parsed || !parsed.intervals || parsed.intervals.length === 0) {
       return {
         day: dayName,
         mode: "open",
@@ -114,6 +146,18 @@ export function parseOpeningHoursArrayToEntries(openingHours?: string[]): DayHou
     }
 
     const int1 = parsed.intervals[0];
+    // Check if interval represents 24 hours (e.g. 00:00 to 24:00 or 12:00 AM to 12:00 AM)
+    if (int1.open === 0 && (int1.close === 0 || int1.close >= 24 * 60)) {
+      return {
+        day: dayName,
+        mode: "24hours",
+        openTime: "00:00",
+        closeTime: "23:59",
+        hasSplitShift: false,
+        openTime2: "17:00",
+        closeTime2: "22:00",
+      };
+    }
     const hasSplit = parsed.intervals.length > 1;
     const int2 = hasSplit ? parsed.intervals[1] : undefined;
 
