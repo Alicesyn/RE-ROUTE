@@ -54,11 +54,14 @@ export function isJapanRestaurant(place?: PlaceLike | null): boolean {
 
 /**
  * Builds direct search URL on Tabelog for a restaurant.
+ * Points to Tabelog's English site search (/en/rstLst/).
+ * Example: https://tabelog.com/en/rstLst/?utf8=✓&pal=&LstPrf=&LstAre=&station_id=&area_datatype=&area_id=&genre_name=&sw=Jambo+Hanare&search_mode=
  */
 export function getTabelogSearchUrl(place: PlaceLike): string {
-  // Prefer native name if available, fallback to romanized or standard name
-  const query = (place.name || place.romanizedName || "").trim();
-  return `https://tabelog.com/rstLst/?vs=1&sa=&sk=${encodeURIComponent(query)}`;
+  // Prefer romanized name if available for English search, fallback to standard or native name
+  const query = (place.romanizedName || place.name || "").trim();
+  const encodedQuery = encodeURIComponent(query).replace(/%20/g, "+");
+  return `https://tabelog.com/en/rstLst/?utf8=✓&pal=&LstPrf=&LstAre=&station_id=&area_datatype=&area_id=&genre_name=&sw=${encodedQuery}&search_mode=`;
 }
 
 /**

@@ -5,11 +5,13 @@
  */
 
 export type ApiErrorSource = "google-maps" | "gemini";
+export type ApiErrorKind = "quota" | "rate_limit" | "high_demand" | "general";
 
 export interface ApiError {
   source: ApiErrorSource;
   message: string;
-  isQuota: boolean; // true = quota exhausted, false = temporary rate limit
+  isQuota: boolean; // true = quota exhausted, false = temporary rate limit / high demand
+  kind?: ApiErrorKind;
   timestamp: number;
 }
 

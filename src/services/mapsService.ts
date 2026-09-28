@@ -10,14 +10,15 @@ import { TransitLegBreakdown } from "../types";
 const getApiKey = () => apiUsageService.getActiveMapsKey();
 
 // Persistent cache for search queries
-const CACHE_KEY = "reroute_search_cache_v2";
+const CACHE_KEY = "reroute_search_cache_v3";
 let searchCache: Record<string, any[]> = JSON.parse(
-  localStorage.getItem(CACHE_KEY) || "{}",
+  localStorage.getItem(CACHE_KEY) || "{}"
 );
 
 export const clearMapsCache = () => {
   searchCache = {};
   localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem("reroute_search_cache_v2");
   localStorage.removeItem("reroute_search_cache");
   photoUrlCache = {};
   localStorage.removeItem(PHOTO_URL_CACHE_KEY);
@@ -66,8 +67,9 @@ const savePhotoUrl = (photoName: string, url: string) => {
  * Results are persisted so the same photo is never fetched twice across sessions.
  * Automatically requests smaller thumbnails (300px) on mobile viewports to save cellular bandwidth.
  */
-export const resolvePhotoUrl = async (photoName: string, apiKey: string): Promise<string | undefined> => {
-  if (!photoName || !apiKey) return undefined;
+export const resolvePhotoUrl = async (photoName: string, apiKey?: string): Promise<string | undefined> => {
+  const activeKey = apiKey || getApiKey();
+  if (!photoName || !activeKey || activeKey === "undefined") return undefined;
   if (photoUrlCache[photoName]) return photoUrlCache[photoName];
 
   try {
@@ -75,7 +77,7 @@ export const resolvePhotoUrl = async (photoName: string, apiKey: string): Promis
     const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
     const maxHeightPx = isMobile ? 300 : 400;
     const photoRes = await fetch(
-      `https://places.googleapis.com/v1/${photoName}/media?key=${apiKey}&maxHeightPx=${maxHeightPx}&skipHttpRedirect=true`
+      `https://places.googleapis.com/v1/${photoName}/media?key=${activeKey}&maxHeightPx=${maxHeightPx}&skipHttpRedirect=true`
     );
     if (photoRes.ok) {
       const pData = await photoRes.json();
@@ -131,6 +133,7 @@ export interface MapsPlace {
   photoUrl?: string;
   priceLevel?: string;
   priceEstimate?: string;
+  businessStatus?: string;
 }
 
 export const searchPlaces = async (
@@ -167,7 +170,7 @@ export const searchPlaces = async (
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey,
           "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.regularOpeningHours,places.editorialSummary,places.photos,places.priceLevel",
+            "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.regularOpeningHours,places.editorialSummary,places.photos,places.priceLevel,places.businessStatus",
         },
         body: JSON.stringify({
           textQuery: query,
@@ -226,6 +229,7 @@ export const searchPlaces = async (
           photoUrl: undefined,
           priceLevel: p.priceLevel,
           priceEstimate,
+          businessStatus: p.businessStatus || "OPERATIONAL",
         };
       });
 

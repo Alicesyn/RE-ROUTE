@@ -71,7 +71,10 @@ function App() {
 
     const placesNeedingPhotos = places.filter(
       (p) =>
-        (!p.photoUrl || p.photoUrl.includes("places.googleapis.com")) &&
+        (!p.photoUrl ||
+          p.photoUrl.includes("places.googleapis.com") ||
+          p.photoUrl.includes("loremflickr") ||
+          p.photoUrl.includes("unsplash")) &&
         !upgradedPhotoPlaceIdsRef.current.has(p.id)
     );
     if (placesNeedingPhotos.length === 0) return;
@@ -86,6 +89,8 @@ function App() {
             const freshPhotoUri = await fetchFreshPhoto(p);
             if (freshPhotoUri) {
               updates.push({ id: p.id, updates: { photoUrl: freshPhotoUri } });
+            } else if (p.photoUrl && (p.photoUrl.includes("loremflickr") || p.photoUrl.includes("unsplash") || p.photoUrl.includes("places.googleapis.com"))) {
+              updates.push({ id: p.id, updates: { photoUrl: undefined } });
             }
           } catch (e) {
             console.warn(`[Auto-Upgrade Photo] Failed for ${p.name}:`, e);
@@ -701,6 +706,11 @@ function App() {
               updates.push({
                 id: p.id,
                 updates: { photoUrl: freshPhotoUri },
+              });
+            } else if (p.photoUrl && (p.photoUrl.includes("loremflickr") || p.photoUrl.includes("unsplash") || p.photoUrl.includes("places.googleapis.com"))) {
+              updates.push({
+                id: p.id,
+                updates: { photoUrl: undefined },
               });
             }
           } catch (err) {

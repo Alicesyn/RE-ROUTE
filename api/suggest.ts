@@ -2,10 +2,10 @@ export const config = {
   runtime: "edge",
 };
 
-const MODEL = "gemini-3.5-flash-lite";
+const MODEL = "gemini-3.8-flash";
 
 const callGeminiWithRetry = async (apiKey: string, body: any, retries = 2): Promise<Response> => {
-  const models = [MODEL, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash"];
+  const models = [MODEL, "gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.7-flash"];
   let lastRes: Response | null = null;
   
   for (let i = 0; i <= retries; i++) {
@@ -76,8 +76,14 @@ export default async function handler(req: Request) {
     const isFood = type === "food";
     const prompt = isFood
       ? `
-      You are a professional culinary travel expert, food critic, and local guide. I need exactly 6 highly rated, iconic restaurants, authentic local eateries, famous food stalls, street markets, or specialty cafes near latitude ${lat}, longitude ${lng}.
+      You are a professional culinary travel expert, food critic, and local guide. I need 8 to 10 highly rated, iconic restaurants, authentic local eateries, famous food stalls, street markets, or specialty cafes near latitude ${lat}, longitude ${lng}.
       DO NOT recommend any of these places: ${(rejectedNames || []).join(", ") || "None"}.
+      
+      CRITICAL OPERATIONAL REQUIREMENT:
+      - ONLY suggest places that are currently OPEN and fully OPERATIONAL as of today.
+      - Absolutely DO NOT suggest any places that have permanently closed, ceased operations, temporarily closed, shut down, gone out of business, or relocated.
+      - If a well-known establishment is no longer in business, skip it entirely and provide a current, active, open alternative.
+
       Focus on places celebrated for distinct must-try dishes, beloved local classics, or exceptional dining experiences.
       
       For each place, provide:
@@ -116,8 +122,13 @@ export default async function handler(req: Request) {
       ]
     `
       : `
-      You are a professional travel planner. I need exactly 6 highly recommended tourist attractions near latitude ${lat}, longitude ${lng}.
+      You are a professional travel planner. I need 8 to 10 highly recommended tourist attractions near latitude ${lat}, longitude ${lng}.
       DO NOT recommend any of these places: ${(rejectedNames || []).join(", ") || "None"}.
+      
+      CRITICAL OPERATIONAL REQUIREMENT:
+      - ONLY suggest attractions and sights that are currently OPEN, accessible, and fully OPERATIONAL as of today.
+      - Absolutely DO NOT suggest any places, attractions, theme parks, markets, or museums that have permanently closed, ceased operations, temporarily closed, shut down, or gone out of business.
+      - If a well-known spot has closed or relocated, skip it entirely and recommend an active, open alternative.
       
       For each place, provide:
       - 3-7 comma-separated, punchy phrases highlighting the core vibe and what it's famous for in "description".

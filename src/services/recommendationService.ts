@@ -1,8 +1,9 @@
 import { Place, Hotel, PlaceCategory } from "../types";
-import { searchPlaces, resolvePhotoUrl } from "./mapsService";
+import { searchPlaces, resolvePhotoUrl, fetchFreshPhoto } from "./mapsService";
 import { apiUsageService } from "./apiUsageService";
 import { getDistance } from "../utils/distance";
 import { isDuplicatePlace } from "../utils/duplicateUtils";
+import { isPlaceClosed } from "../utils/statusUtils";
 import { suggestSights } from "./aiService";
 import {
   getSpecificMockHighlight,
@@ -22,7 +23,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 120,
     description: "Famous for thousands of vermilion torii gates, winding mountain trails, and sacred fox statues.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,temple",
     priceEstimate: "Free",
     highlight: { label: "Scenic Spot", text: "Senbon Torii path just past Okusha shrine where crowds thin out" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed" },
@@ -37,7 +37,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 60,
     description: "Breathtaking Zen temple covered in brilliant gold leaf, reflecting beautifully across a mirror pond.",
     types: ["tourist_attraction", "temple"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,pavilion",
     priceEstimate: "¥500",
     highlight: { label: "Best Photo Spot", text: "Mirror pond vantage directly facing the golden reliquary hall" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Purchase tickets on-site at entrance" },
@@ -52,7 +51,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 90,
     description: "Kyoto's historic geisha district filled with traditional wooden machiya merchant houses and teahouses.",
     types: ["tourist_attraction", "neighborhood"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,geisha",
     priceEstimate: "Free",
     highlight: { label: "Best Walk", text: "Shirakawa canal stone path at twilight when lanterns illuminate" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Public historic preservation district" },
@@ -67,7 +65,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 75,
     description: "A serene and towering bamboo forest with sunlight filtering through stalks and pleasant walking paths.",
     types: ["tourist_attraction", "natural_feature"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,bamboo",
     priceEstimate: "Free",
     highlight: { label: "Best Time to Visit", text: "Early morning before 8:00 AM for peaceful photos without tour groups" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed" },
@@ -82,7 +79,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 90,
     description: "Historic temple famed for its massive wooden stage offering panoramic views of Kyoto without using any nails.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,pagoda",
     priceEstimate: "¥400",
     highlight: { label: "Must-See", text: "Main wooden stage for panoramic city views and Otowa waterfall below" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Tickets purchased at entrance gate" },
@@ -97,7 +93,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 90,
     description: "A vibrant five-block narrow shopping street packed with over a hundred lively food stalls and shops.",
     types: ["tourist_attraction", "shopping_mall"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,market",
     priceEstimate: "¥1,000 - ¥2,500",
     highlight: { label: "Must-Try", text: "Tako Tamago (baby octopus skewers stuffed with quail egg) and fresh dashi tamagoyaki" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in food stalls; peak crowds 11 AM - 3 PM" },
@@ -112,7 +107,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 90,
     description: "Historic 17th-century flatland castle featuring nightingale squeaking floors and beautiful Ninomaru palace gardens.",
     types: ["tourist_attraction", "castle"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,castle",
     priceEstimate: "¥1,030",
     highlight: { label: "Must-See", text: "Nightingale floors in Ninomaru Palace designed to chirp like birds when stepped on" },
     reservation: { requirement: "not_needed" as const, advanceTime: "On-site ticket kiosks" },
@@ -127,7 +121,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 60,
     description: "Elegant Zen temple famed for its sculpted sand garden, sea of silver sand, and moss garden walking trail.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,temple",
     priceEstimate: "¥500",
     highlight: { label: "Scenic Spot", text: "Hillside moss trail behind the pavilion overlooking the temple grounds" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Tickets purchased at gate" },
@@ -142,7 +135,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 45,
     description: "One of Kyoto's most beloved shrines, glowing with hundreds of lanterns at night at the eastern end of Shijo-dori.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,shrine",
     priceEstimate: "Free",
     highlight: { label: "Best Time to Visit", text: "Evening after sunset when the central dance stage lanterns are fully lit" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Open 24 hours" },
@@ -157,7 +149,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 60,
     description: "Head Zen temple of the Tenryu branch featuring a 14th-century pond garden framed by the Arashiyama mountains.",
     types: ["tourist_attraction", "temple"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,garden",
     priceEstimate: "¥500",
     highlight: { label: "Scenic Spot", text: "Sogenchi garden pond reflecting the autumn foliage or spring cherry blossoms" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Purchased at entrance" },
@@ -172,7 +163,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 45,
     description: "World-famous Zen temple housing Japan's most enigmatic karesansui rock garden of 15 boulders on white gravel.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,zen",
     priceEstimate: "¥600",
     highlight: { label: "Visitor Tip", text: "Sit along the wooden veranda to count the 15 stones — only 14 are visible from any single angle" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed" },
@@ -187,7 +177,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 75,
     description: "Former ruling residence of Japan's Emperor until 1869, nestled inside the peaceful, expansive Kyoto Gyoen National Garden.",
     types: ["tourist_attraction", "park"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,palace",
     priceEstimate: "Free",
     highlight: { label: "Must-See", text: "Shishinden hall where historic enthronement ceremonies took place" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Free entry via security check at Seisho-mon Gate" },
@@ -202,7 +191,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 60,
     description: "Sprawling Zen temple complex famous for its monumental Sanmon gate and Roman-style red brick water aqueduct.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,zen",
     priceEstimate: "¥600",
     highlight: { label: "Best Photo Spot", text: "Red-brick Suirokaku aqueduct arches framed by lush maple forest" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Grounds free; ticket for Hojo garden" },
@@ -217,7 +205,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 60,
     description: "Vibrant vermilion shrine built for Kyoto's 1100th anniversary with an enormous torii gate and weeping cherry gardens.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,shrine",
     priceEstimate: "Free",
     highlight: { label: "Must-See", text: "Shin-en stroll garden featuring stepping stones across the iris pond" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Garden fee ¥600; main grounds free" },
@@ -232,7 +219,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 45,
     description: "Awe-inspiring 120-meter wooden temple hall housing 1,001 life-sized statues of the Thousand-Armed Kannon.",
     types: ["tourist_attraction", "temple"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,statue",
     priceEstimate: "¥600",
     highlight: { label: "Must-See", text: "Main wooden hall displaying all 1,001 gleaming gilded Kannon statues" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Purchased at entrance gate" },
@@ -247,7 +233,6 @@ const KYOTO_SIGHTS = [
     estimatedDuration: 60,
     description: "Scenic riverside pedestrian path where locals and visitors stroll, picnic, and dine on elevated summer kawayuka patios.",
     types: ["tourist_attraction", "park"],
-    photoUrl: "https://loremflickr.com/800/600/kyoto,river",
     priceEstimate: "Free",
     highlight: { label: "Best Walk", text: "Stepping stone turtle crossings near Demachiyanagi confluence" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Open public riverbank path" },
@@ -266,7 +251,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 45,
     description: "The world's busiest pedestrian scramble crossing, surrounded by massive neon screens and towering skyscrapers.",
     types: ["tourist_attraction", "street"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,shibuya",
     priceEstimate: "Free",
     highlight: { label: "Best Vantage", text: "Sky Edge rooftop corner overlooking the scramble crossing at dusk" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed" },
@@ -281,7 +265,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "Tokyo's oldest and most iconic Buddhist temple, reached via the historic Nakamise shopping street.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,sensoji",
     priceEstimate: "Free",
     highlight: { label: "Must-Try", text: "Fresh jumbo melonpan from Kagetsudo and warm age-manju along Nakamise-dori" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed for grounds" },
@@ -296,7 +279,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 120,
     description: "Futuristic broadcasting tower and observation deck offering breathtaking views extending all the way to Mt. Fuji.",
     types: ["tourist_attraction", "observation_deck"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,skytree",
     priceEstimate: "¥2,100 - ¥3,100",
     highlight: { label: "Best Photo Spot", text: "Tembo Deck glass floor section at 350m looking straight down" },
     reservation: { requirement: "recommended" as const, advanceTime: "Book online 1-7 days ahead to skip the ticket queue" },
@@ -311,7 +293,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 75,
     description: "A tranquil Shinto shrine dedicated to Emperor Meiji, nestled deep inside a dense forest in the heart of Tokyo.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,meiji",
     priceEstimate: "Free",
     highlight: { label: "Visitor Tip", text: "Tranquil inner garden iris pond and giant cedar Torii gate along the forest walk" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed" },
@@ -326,7 +307,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "A sprawling city park combining English, French, and traditional Japanese garden designs with peaceful ponds.",
     types: ["tourist_attraction", "park"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,garden",
     priceEstimate: "¥500",
     highlight: { label: "Scenic Spot", text: "Traditional Japanese landscape garden and greenhouse pavilion" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Tickets purchased at ticket vending kiosks" },
@@ -341,7 +321,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 120,
     description: "The global epicenter of anime, gaming, manga culture, and massive multi-story electronics stores.",
     types: ["tourist_attraction", "neighborhood"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,akihabara",
     priceEstimate: "Free",
     highlight: { label: "Where to Go", text: "Radio Kaikan multi-floor hobby center and retro gaming shops along Chuo Dori" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Stores open around 10:00 - 11:00 AM" },
@@ -356,7 +335,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "Iconic red-and-white communications tower modeled after the Eiffel Tower, offering 360-degree observation decks.",
     types: ["tourist_attraction", "observation_deck"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,tower",
     priceEstimate: "¥1,200",
     highlight: { label: "Best Photo Spot", text: "Lookdown window on Main Deck looking 145m straight down" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Tickets on-site or online" },
@@ -371,7 +349,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "Bustling foodie haven of narrow alleys brimming with fresh sushi bars, grilled wagyu skewers, and seafood delicacies.",
     types: ["tourist_attraction", "food"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,sushi",
     priceEstimate: "¥1,500 - ¥3,500",
     highlight: { label: "Must-Try", text: "Fresh sea urchin (uni) bowls and warm tamagoyaki rolled omelet on a stick" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Morning market; best between 8 AM - 1 PM" },
@@ -386,7 +363,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 120,
     description: "Expansive cultural park home to the Tokyo National Museum, Shinobazu Pond, cherry blossom groves, and Ueno Zoo.",
     types: ["tourist_attraction", "park"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,park",
     priceEstimate: "Free",
     highlight: { label: "Best Walk", text: "Shinobazu lotus pond path and Bentendo temple island" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Park grounds open freely daily" },
@@ -401,7 +377,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "Immersive barefoot digital art museum where visitors walk through water and massive interactive projection gardens.",
     types: ["tourist_attraction", "art_gallery"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,digitalart",
     priceEstimate: "¥3,800",
     highlight: { label: "Must-See", text: "Infinite Crystal Universe room and the Floating Flower Garden" },
     reservation: { requirement: "required" as const, advanceTime: "Advance timed entry ticket required 2-4 weeks prior" },
@@ -416,7 +391,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "Skyscraper complex featuring Tokyo City View open-air sky deck and the acclaimed Mori Art Museum.",
     types: ["tourist_attraction", "observation_deck"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,skyline",
     priceEstimate: "¥2,000",
     highlight: { label: "Best Vantage", text: "Rooftop Sky Deck for unobstructed views of Tokyo Tower against the skyline" },
     reservation: { requirement: "recommended" as const, advanceTime: "Online booking recommended for sunset slots" },
@@ -431,7 +405,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 120,
     description: "Tokyo's premier luxury shopping and dining district with architectural flagship stores and historic department stores.",
     types: ["tourist_attraction", "shopping_mall"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,ginza",
     priceEstimate: "Free",
     highlight: { label: "Where to Go", text: "Pedestrian paradise along Chuo-dori on weekend afternoons" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Weekend pedestrian mall 12 PM - 5 PM" },
@@ -446,7 +419,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "Futuristic waterfront entertainment district with sandy beach, Rainbow Bridge views, and the life-sized Unicorn Gundam.",
     types: ["tourist_attraction", "park"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,gundam",
     priceEstimate: "Free",
     highlight: { label: "Must-See", text: "Life-sized Unicorn Gundam transformation show in front of DiverCity Tokyo" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Outdoor light shows daily at dusk" },
@@ -461,7 +433,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 45,
     description: "Tranquil historic shrine dating back over 1,900 years, renowned for its hill of thousands of vermilion mini-torii tunnels.",
     types: ["tourist_attraction", "place_of_worship"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,shrine",
     priceEstimate: "Free",
     highlight: { label: "Scenic Spot", text: "Hillside tunnel of vermilion torii gates winding through azalea bushes" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed" },
@@ -476,7 +447,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 90,
     description: "Architectural tree-lined boulevard lined with cutting-edge boutiques, street fashion, and specialty espresso bars.",
     types: ["tourist_attraction", "shopping_mall"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,street",
     priceEstimate: "Free",
     highlight: { label: "Where to Go", text: "Pedestrian Cat Street connecting Omotesando to Shibuya for independent boutiques" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Shops generally open 11:00 AM - 8:00 PM" },
@@ -491,7 +461,6 @@ const TOKYO_SIGHTS = [
     estimatedDuration: 75,
     description: "Charming historic old-town shopping street preserved from post-war Tokyo, famed for cat culture, croquettes, and sunset views.",
     types: ["tourist_attraction", "neighborhood"],
-    photoUrl: "https://loremflickr.com/800/600/tokyo,retro",
     priceEstimate: "Free",
     highlight: { label: "Best Vantage", text: "Yuyake Dandan (Sunset Steps) looking down into the bustling retro market" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Best visited mid-afternoon" },
@@ -510,7 +479,6 @@ const getGenericSights = (lat: number, lng: number) => [
     estimatedDuration: 90,
     description: "Quaint historic district with cobblestone alleys, unique local boutiques, and local architecture.",
     types: ["tourist_attraction"],
-    photoUrl: "https://loremflickr.com/800/600/historic,architecture",
     priceEstimate: "Free",
     highlight: { label: "Best Vantage", text: "Upper terrace balcony overlooking the grand architectural facade and skyline" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Open public district" },
@@ -525,7 +493,6 @@ const getGenericSights = (lat: number, lng: number) => [
     estimatedDuration: 75,
     description: "Scenic botanic gardens featuring thousands of plant species, tranquil lakes, and pleasant walking paths.",
     types: ["tourist_attraction", "park"],
-    photoUrl: "https://loremflickr.com/800/600/park,nature",
     priceEstimate: "Free",
     highlight: { label: "Best Time to Visit", text: "Early morning before 9:00 AM or golden hour right before sunset" },
     reservation: { requirement: "not_needed" as const, advanceTime: "No reservation needed" },
@@ -540,7 +507,6 @@ const getGenericSights = (lat: number, lng: number) => [
     estimatedDuration: 45,
     description: "A beautiful hillside observation point offering stunning panoramic views of the city skyline.",
     types: ["tourist_attraction", "viewpoint"],
-    photoUrl: "https://loremflickr.com/800/600/city,skyline",
     priceEstimate: "Free",
     highlight: { label: "Best Photo Spot", text: "Observation deck pointing west toward the setting sun" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Public viewpoint" },
@@ -555,7 +521,6 @@ const getGenericSights = (lat: number, lng: number) => [
     estimatedDuration: 120,
     description: "Celebrated regional museum featuring historical artifacts, interactive exhibits, and rotating fine art galleries.",
     types: ["tourist_attraction", "museum"],
-    photoUrl: "https://loremflickr.com/800/600/museum,art",
     priceEstimate: "$15 - $22",
     highlight: { label: "Must-See", text: "Central rotunda exhibition hall and historical antiquities wing" },
     reservation: { requirement: "recommended" as const, advanceTime: "Timed tickets recommended on weekends" },
@@ -570,7 +535,6 @@ const getGenericSights = (lat: number, lng: number) => [
     estimatedDuration: 60,
     description: "Pedestrian-only boardwalk running along the river with open-air cafes, street performers, and water taxis.",
     types: ["tourist_attraction"],
-    photoUrl: "https://loremflickr.com/800/600/waterfront,boardwalk",
     priceEstimate: "Free",
     highlight: { label: "Best Time to Visit", text: "Sunset hour for dining outdoors and sunset boat viewing" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Open public promenade" },
@@ -585,7 +549,6 @@ const getGenericSights = (lat: number, lng: number) => [
     estimatedDuration: 75,
     description: "Lively public bazaar showcasing local handmade jewelry, organic produce, baked pastries, and specialty coffees.",
     types: ["tourist_attraction", "market"],
-    photoUrl: "https://loremflickr.com/800/600/market,crafts",
     priceEstimate: "Free",
     highlight: { label: "Where to Go", text: "North arcade row for local culinary tastings and artisan pottery" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Free public access" },
@@ -606,7 +569,6 @@ const KYOTO_FOOD = [
     estimatedDuration: 60,
     description: "Michelin Bib Gourmand ramen shop famous for its delicate, crystal-clear dashi broth and shaved tororo kombu.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/ramen,dashi",
     priceEstimate: "¥1,300 - ¥1,800",
     highlight: { label: "Must-Try", text: "Special White Soy Sauce (Shiro Shoyu) Ramen with A5 Wagyu slices" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Queue 20-30 min before opening at lunch or dinner" },
@@ -621,7 +583,6 @@ const KYOTO_FOOD = [
     estimatedDuration: 50,
     description: "Lively, award-winning casual gyoza specialty bar serving crispy pan-fried gyoza with golden lattice wings.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/gyoza,japanese",
     priceEstimate: "¥1,000 - ¥2,000",
     highlight: { label: "Must-Try", text: "Signature Chao Chao Gyoza wings & shrimp gyoza with cold draft beer" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; casual fast turnaround" },
@@ -636,7 +597,6 @@ const KYOTO_FOOD = [
     estimatedDuration: 60,
     description: "Kyoto's legendary tonkatsu institution serving premium Sangenton pork with freshly ground sesame sauce.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/tonkatsu,pork",
     priceEstimate: "¥1,800 - ¥2,800",
     highlight: { label: "Must-Try", text: "Kurobuta Hirekatsu (pork tenderloin cutlet) with unlimited barley rice and shredded cabbage" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in; wait times 15-25 min during peak dinner" },
@@ -651,7 +611,6 @@ const KYOTO_FOOD = [
     estimatedDuration: 60,
     description: "World-famous cozy eatery where Chef Motokichi slices molten fluffy omelets over chicken fried rice with theatrical flair.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/omurice,egg",
     priceEstimate: "¥2,700 - ¥3,500",
     highlight: { label: "Must-Try", text: "Signature Fluffy Demi-Glace Omurice sliced open live at the counter" },
     reservation: { requirement: "required" as const, advanceTime: "Online booking opens every Sunday for the coming week" },
@@ -666,7 +625,6 @@ const KYOTO_FOOD = [
     estimatedDuration: 30,
     description: "Minimalist world-renowned specialty espresso bar situated on the scenic cobblestone approach to Yasaka Pagoda.",
     types: ["cafe", "coffee_shop"],
-    photoUrl: "https://loremflickr.com/800/600/latte,coffee",
     priceEstimate: "¥550 - ¥750",
     highlight: { label: "Must-Order", text: "Kyoto Latte with condensed milk and single-origin pour-over" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Walk-in takeaway; lines move steadily" },
@@ -681,7 +639,6 @@ const KYOTO_FOOD = [
     estimatedDuration: 45,
     description: "Historic 1860 teahouse legendary for premium Uji matcha sweets, elaborate green tea parfaits, and roasted hojicha.",
     types: ["cafe", "food"],
-    photoUrl: "https://loremflickr.com/800/600/matcha,parfait",
     priceEstimate: "¥1,200 - ¥1,800",
     highlight: { label: "Must-Order", text: "Tsujiri Tokusen Matcha Parfait layered with chiffon cake, warabimochi, and matcha soft serve" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; popular afternoons 2 PM - 5 PM" },
@@ -700,7 +657,6 @@ const TOKYO_FOOD = [
     estimatedDuration: 50,
     description: "Pioneering dipping noodle titan serving ultra-rich tonkotsu-seafood broth with thick, chewy handmade noodles.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/tsukemen,ramen",
     priceEstimate: "¥1,050 - ¥1,400",
     highlight: { label: "Must-Try", text: "Tokusei Tsukemen with seasoned ajitama egg and pork chashu, finished with soup-wari" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Ticket vending machine; queue averages 15-30 mins" },
@@ -715,7 +671,6 @@ const TOKYO_FOOD = [
     estimatedDuration: 60,
     description: "Beloved deep-fried beef cutlet eatery where diners sear rare Wagyu cutlets on individual sizzling stone grills.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/gyukatsu,beef",
     priceEstimate: "¥1,900 - ¥2,600",
     highlight: { label: "Must-Try", text: "Gyukatsu set with grated mountain yam (tororo) and wasabi soy sauce" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Arrive 20-30 min before opening to avoid lengthy queues" },
@@ -730,7 +685,6 @@ const TOKYO_FOOD = [
     estimatedDuration: 50,
     description: "Famous theater-style counter serving 100% freshly ground Japanese beef patties grilled over charcoal onto rice.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/hamburg,patty",
     priceEstimate: "¥1,800",
     highlight: { label: "Must-Try", text: "Charcoal-grilled hamburg steak set with unlimited hagama rice and fresh raw egg" },
     reservation: { requirement: "required" as const, advanceTime: "Numbered ticket distribution begins at 9:00 AM daily, or book weekly on TableCheck" },
@@ -745,7 +699,6 @@ const TOKYO_FOOD = [
     estimatedDuration: 45,
     description: "Modern, hip ramen joint renowned for light golden dashi broth scented with aromatic Japanese yuzu citrus.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/ramen,citrus",
     priceEstimate: "¥1,200 - ¥1,600",
     highlight: { label: "Must-Try", text: "Yuzu Shio Ramen with charcoal-grilled chashu and bamboo shoots" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Self-service ticket kiosk; steady turnover" },
@@ -760,7 +713,6 @@ const TOKYO_FOOD = [
     estimatedDuration: 45,
     description: "Legendary counter noodle shop famous for its velvety chicken and fish powder tsukemen dipping broth.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/noodles,ramen",
     priceEstimate: "¥1,000 - ¥1,300",
     highlight: { label: "Must-Try", text: "Special Tsukemen (Tokusei) with mountain of bonito fish powder" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Line forms around the block; fast 15-20 min line turnover" },
@@ -775,7 +727,6 @@ const TOKYO_FOOD = [
     estimatedDuration: 75,
     description: "Atmospheric post-war lantern-lit alleyway packed with intimate yakitori stalls, cold beer, and charcoal grills.",
     types: ["restaurant", "bar", "food"],
-    photoUrl: "https://loremflickr.com/800/600/yakitori,alley",
     priceEstimate: "¥2,000 - ¥3,500",
     highlight: { label: "Must-Try", text: "Charcoal-grilled chicken yakitori skewers, tsukune meatballs, and highballs" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Walk into any stall with empty stools after 5:00 PM" },
@@ -794,7 +745,6 @@ const getGenericFood = (lat: number, lng: number) => [
     estimatedDuration: 45,
     description: "Charming neighborhood bakery crafting naturally leavened sourdough, flaky pastries, and single-origin pour-overs.",
     types: ["cafe", "bakery", "food"],
-    photoUrl: "https://loremflickr.com/800/600/bakery,pastry",
     priceEstimate: "$8 - $16",
     highlight: { label: "Must-Order", text: "Warm almond croissant & house cardamom vanilla latte" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Walk-in daily" },
@@ -809,7 +759,6 @@ const getGenericFood = (lat: number, lng: number) => [
     estimatedDuration: 75,
     description: "Intimate rustic dining spot hand-rolling fresh pasta daily with regional heirloom recipes and natural wines.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/pasta,italian",
     priceEstimate: "$25 - $45 / person",
     highlight: { label: "Must-Try", text: "Handmade Cacio e Pepe tossed in aged pecorino wheel & wood-fired focaccia" },
     reservation: { requirement: "recommended" as const, advanceTime: "Reserve 3-7 days in advance for dinner tables" },
@@ -824,7 +773,6 @@ const getGenericFood = (lat: number, lng: number) => [
     estimatedDuration: 75,
     description: "Vibrant coastal eatery serving fresh daily catches, cold shellfish platters, and grilled whole fish.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/seafood,oysters",
     priceEstimate: "$30 - $60 / person",
     highlight: { label: "Must-Try", text: "Fresh local oyster sampler with mignonette and crispy beer-battered fish & chips" },
     reservation: { requirement: "recommended" as const, advanceTime: "Recommended for patio sunset seating" },
@@ -839,7 +787,6 @@ const getGenericFood = (lat: number, lng: number) => [
     estimatedDuration: 45,
     description: "Atmospheric noodle shop simmering pork and chicken bones for 16 hours for deeply comforting noodle bowls.",
     types: ["restaurant", "food"],
-    photoUrl: "https://loremflickr.com/800/600/ramen,noodles",
     priceEstimate: "$14 - $20",
     highlight: { label: "Must-Try", text: "Rich Tonkotsu Black Garlic ramen with soft-boiled nitamago and crispy pan-fried gyoza" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; 10-15m wait during dinner rush" },
@@ -854,7 +801,6 @@ const getGenericFood = (lat: number, lng: number) => [
     estimatedDuration: 60,
     description: "Bright sunlit cafe featuring locally sourced organic produce, signature breakfast skillets, and fresh juices.",
     types: ["restaurant", "cafe", "food"],
-    photoUrl: "https://loremflickr.com/800/600/brunch,food",
     priceEstimate: "$18 - $28",
     highlight: { label: "Must-Order", text: "Smoked salmon eggs benedict on toasted brioche and ricotta lemon pancakes" },
     reservation: { requirement: "recommended" as const, advanceTime: "Walk-ins welcome, reservation recommended on weekends" },
@@ -953,14 +899,15 @@ export async function getSuggestedPlaces(
   const seenSuggestionNames = new Set<string>();
 
   for (const anchor of anchors) {
+    const cacheKeyV5 = `re_route_suggestions_v5_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cacheKeyV4 = `re_route_suggestions_v4_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cacheKeyV3 = `re_route_suggestions_v3_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const legacyKeyV4 = `re_route_suggestions_v4_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const legacyKeyV3 = `re_route_suggestions_v3_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     let candidateSights: any[] = [];
 
     if (forceRefresh) {
       try {
+        localStorage.removeItem(cacheKeyV5);
+        sessionStorage.removeItem(cacheKeyV5);
         localStorage.removeItem(cacheKeyV4);
         sessionStorage.removeItem(cacheKeyV4);
         localStorage.removeItem(cacheKeyV3);
@@ -971,30 +918,28 @@ export async function getSuggestedPlaces(
     }
 
     if (appMode === "real" && !forceRefresh) {
-      // Check persistent localStorage first, then sessionStorage
+      // Check persistent localStorage first, then sessionStorage (v5, then legacy v4)
       const cachedData =
+        localStorage.getItem(cacheKeyV5) ||
+        sessionStorage.getItem(cacheKeyV5) ||
         localStorage.getItem(cacheKeyV4) ||
-        sessionStorage.getItem(cacheKeyV4) ||
-        localStorage.getItem(cacheKeyV3) ||
-        sessionStorage.getItem(cacheKeyV3) ||
-        (type === "sights"
-          ? localStorage.getItem(legacyKeyV4) ||
-            sessionStorage.getItem(legacyKeyV4) ||
-            localStorage.getItem(legacyKeyV3) ||
-            sessionStorage.getItem(legacyKeyV3)
-          : null);
+        sessionStorage.getItem(cacheKeyV4);
 
       if (cachedData) {
         try {
           candidateSights = JSON.parse(cachedData);
-          const validCached = candidateSights.filter((s) => !isDuplicate(s.name, s.lat, s.lng));
+          const validCached = candidateSights.filter(
+            (s) => !isDuplicate(s.name, s.lat, s.lng) && !isPlaceClosed(s)
+          );
           if (validCached.length < 3) candidateSights = [];
+          else candidateSights = validCached;
         } catch (e) {
           console.warn("Failed to parse cached suggestions", e);
         }
       }
     }
 
+    let aiErrorOccurred: Error | null = null;
     if (appMode === "real" && candidateSights.length === 0) {
       try {
         const aiSuggestions = await suggestSights(
@@ -1014,13 +959,34 @@ export async function getSuggestedPlaces(
             const fallbackPrice = suggestion.priceEstimate || getSpecificMockPrice(suggestion);
             const fallbackReservation = suggestion.reservation || getSpecificMockReservation(suggestion);
 
+            // Pre-check raw suggestion for closures
+            if (isPlaceClosed(suggestion)) {
+              console.warn(
+                `[AI Suggestions] Discarding place flagged as closed in suggestion: "${suggestion.name}"`
+              );
+              rejectedNames.push(suggestion.name);
+              seenSuggestionNames.add(suggestion.name.toLowerCase());
+              return null;
+            }
+
             try {
               const mapsResult = await searchPlaces(suggestion.name, {
                 lat: suggestion.lat,
                 lng: suggestion.lng,
               });
               if (mapsResult && mapsResult.length > 0) {
-                const bestMatch = mapsResult[0];
+                // Filter out any matches that are closed on Google Maps
+                const operationalMatches = mapsResult.filter((m) => !isPlaceClosed(m));
+                if (operationalMatches.length === 0) {
+                  console.warn(
+                    `[AI Suggestions] Discarding closed place: "${suggestion.name}" (Google status: ${mapsResult[0].businessStatus || "CLOSED"})`
+                  );
+                  rejectedNames.push(suggestion.name);
+                  seenSuggestionNames.add(suggestion.name.toLowerCase());
+                  return null;
+                }
+
+                const bestMatch = operationalMatches[0];
                 let photoUrl = bestMatch.photoUrl;
                 if (bestMatch.photoReference) {
                   try {
@@ -1048,11 +1014,19 @@ export async function getSuggestedPlaces(
                   highlight: fallbackHighlight,
                   priceEstimate: bestMatch.priceEstimate || fallbackPrice,
                   reservation: fallbackReservation,
+                  businessStatus: bestMatch.businessStatus,
+                  googlePlaceId: bestMatch.id,
                 };
               }
             } catch (e) {
               console.warn(`Failed to fetch Google Maps data for ${suggestion.name}`, e);
             }
+
+            // If Maps search didn't find the place, ensure the raw suggestion isn't closed
+            if (isPlaceClosed(suggestion)) {
+              return null;
+            }
+
             return {
               id: `rec_ai_${idx}_${Date.now()}`,
               name: suggestion.name,
@@ -1067,17 +1041,22 @@ export async function getSuggestedPlaces(
               highlight: fallbackHighlight,
               priceEstimate: fallbackPrice,
               reservation: fallbackReservation,
+              businessStatus: "OPERATIONAL",
             };
           })
         );
 
-        candidateSights = enrichedSuggestions;
+        candidateSights = (enrichedSuggestions.filter(Boolean) as Place[]).filter(
+          (p) => !isPlaceClosed(p)
+        );
+
         try {
-          localStorage.setItem(cacheKeyV4, JSON.stringify(candidateSights));
+          localStorage.setItem(cacheKeyV5, JSON.stringify(candidateSights));
         } catch {
-          sessionStorage.setItem(cacheKeyV4, JSON.stringify(candidateSights));
+          sessionStorage.setItem(cacheKeyV5, JSON.stringify(candidateSights));
         }
-      } catch (err) {
+      } catch (err: any) {
+        aiErrorOccurred = err;
         console.warn("Failed to fetch suggestions from Gemini API, falling back to local dataset:", err);
       }
     }
@@ -1112,6 +1091,12 @@ export async function getSuggestedPlaces(
           rejectedSet.has(s.name.toLowerCase())
       );
 
+      // If user explicitly requested refresh in real mode and AI threw an error,
+      // and no fresh fallback sights exist, surface the AI error to caller
+      if (forceRefresh && appMode === "real" && aiErrorOccurred && available.length === 0) {
+        throw aiErrorOccurred;
+      }
+
       // Prioritize fresh sights first; fill remaining slots from seen (shuffled)
       const shuffledAvailable = [...available].sort(() => Math.random() - 0.5);
       const shuffledSeen = [...seen].sort(() => Math.random() - 0.5);
@@ -1142,7 +1127,30 @@ export async function getSuggestedPlaces(
     return a._nearestHotelDistanceM - b._nearestHotelDistanceM;
   });
 
-  return allSuggestions.slice(0, 10).map((s) => ({
+  const topSuggestions = allSuggestions.slice(0, 10);
+
+  if (appMode === "real") {
+    await Promise.all(
+      topSuggestions.map(async (s) => {
+        if (!s.photoUrl) {
+          try {
+            const freshUrl = await fetchFreshPhoto({
+              id: s.id,
+              name: s.name,
+              address: s.address,
+              lat: s.lat,
+              lng: s.lng,
+            });
+            if (freshUrl) s.photoUrl = freshUrl;
+          } catch {
+            s.photoUrl = undefined;
+          }
+        }
+      })
+    );
+  }
+
+  return topSuggestions.map((s) => ({
     id: s.id,
     name: s.name,
     address: s.address,
@@ -1155,7 +1163,7 @@ export async function getSuggestedPlaces(
     dayIndex: null,
     orderInDay: null,
     pinnedToDay: false,
-    photoUrl: s.photoUrl,
+    photoUrl: s.photoUrl || undefined,
     highlight: s.highlight || getSpecificMockHighlight(s),
     priceEstimate: s.priceEstimate || getSpecificMockPrice(s),
     reservation: s.reservation || getSpecificMockReservation(s),
@@ -1203,26 +1211,19 @@ export function getCachedSuggestions(
   const seenSuggestionNames = new Set<string>();
 
   for (const anchor of anchors) {
+    const cacheKeyV5 = `re_route_suggestions_v5_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cacheKeyV4 = `re_route_suggestions_v4_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const cacheKeyV3 = `re_route_suggestions_v3_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const legacyKeyV4 = `re_route_suggestions_v4_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const legacyKeyV3 = `re_route_suggestions_v3_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cachedData =
+      localStorage.getItem(cacheKeyV5) ||
+      sessionStorage.getItem(cacheKeyV5) ||
       localStorage.getItem(cacheKeyV4) ||
-      sessionStorage.getItem(cacheKeyV4) ||
-      localStorage.getItem(cacheKeyV3) ||
-      sessionStorage.getItem(cacheKeyV3) ||
-      (type === "sights"
-        ? localStorage.getItem(legacyKeyV4) ||
-          sessionStorage.getItem(legacyKeyV4) ||
-          localStorage.getItem(legacyKeyV3) ||
-          sessionStorage.getItem(legacyKeyV3)
-        : null);
+      sessionStorage.getItem(cacheKeyV4);
     if (!cachedData) return null; // not cached yet
 
     try {
       const candidateSights: any[] = JSON.parse(cachedData);
       for (const s of candidateSights) {
+        if (isPlaceClosed(s)) continue;
         if (isDuplicate(s.name, s.lat, s.lng)) continue;
         if (seenSuggestionNames.has(s.name.toLowerCase())) continue;
         seenSuggestionNames.add(s.name.toLowerCase());

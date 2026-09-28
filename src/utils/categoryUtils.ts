@@ -9,8 +9,11 @@ export function getCategoryLabel(cat: PlaceCategory): string {
   return CATEGORY_DEFAULTS[cat]?.label ?? "Other";
 }
 
-export function getCategoryFallbackImage(cat: PlaceCategory): string {
-  return CATEGORY_DEFAULTS[cat]?.fallbackImage ?? CATEGORY_DEFAULTS.other.fallbackImage;
+/**
+ * @deprecated No default photos allowed. Returns undefined.
+ */
+export function getCategoryFallbackImage(): string | undefined {
+  return undefined;
 }
 
 export function getCategoryEmoji(cat: PlaceCategory): string {
@@ -24,15 +27,18 @@ export function getDefaultDuration(cat: PlaceCategory): number {
 
 export function getActivePhotoUrl(photoUrl: string | undefined): string | undefined {
   if (!photoUrl) return undefined;
-  // If it's a direct Google CDN or external photo, use directly
-  if (photoUrl.includes("googleusercontent.com") || photoUrl.includes("loremflickr.com")) {
-    return photoUrl;
-  }
-  // Prevent raw places.googleapis.com redirect URLs from rendering in <img> to avoid Safari 400 errors
-  if (photoUrl.includes("places.googleapis.com")) {
+
+  // Filter out any mock/stock or default fallback photo domains
+  if (
+    photoUrl.includes("loremflickr.com") ||
+    photoUrl.includes("images.unsplash.com") ||
+    photoUrl.includes("places.googleapis.com")
+  ) {
     return undefined;
   }
-  return photoUrl;
+
+  const trimmed = photoUrl.trim();
+  return trimmed || undefined;
 }
 
 

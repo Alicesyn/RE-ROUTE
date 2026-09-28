@@ -8,6 +8,7 @@ import {
 import { searchPlaces } from "../../services/mapsService";
 import { Place } from "../../types";
 import { getCategoryEmoji, getCategoryLabel, getActivePhotoUrl } from "../../utils/categoryUtils";
+import { isPlaceClosed } from "../../utils/statusUtils";
 import {
   Sparkles,
   MapPin,
@@ -92,22 +93,20 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
       return;
     }
 
-    const flights = [arrivalFlight?.location || null, departureFlight?.location || null];
-    const cached = getCachedSuggestions(places, hotels, customAnchor, flights, recType);
-    if (cached && cached.length > 0) {
-      setSuggestions(cached);
-    } else {
-      setSuggestions([]);
-    }
+    // Do NOT wipe or overwrite suggestions if user already has suggestions loaded and is actively browsing
+    setSuggestions((prev) => {
+      if (prev.length > 0) return prev.filter((p) => !isPlaceClosed(p));
+      const flights = [arrivalFlight?.location || null, departureFlight?.location || null];
+      const cached = getCachedSuggestions(places, hotels, customAnchor, flights, recType);
+      return cached && cached.length > 0 ? cached.filter((p) => !isPlaceClosed(p)) : [];
+    });
   }, [
-    places.length,
-    hotels.length,
-    arrivalFlight?.location?.id,
-    departureFlight?.location?.id,
     customAnchor?.lat,
     customAnchor?.lng,
     hasAnyAnchor,
-    recType,
+    hotels.length,
+    arrivalFlight?.location?.id,
+    departureFlight?.location?.id,
   ]);
 
   // Explicit user-triggered fetch function (NEVER run automatically in a background effect)
@@ -139,12 +138,13 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
           forceRefresh,
           typeToUse
         );
-        if (fetched && fetched.length > 0) {
-          setSuggestions(fetched);
+        const validFetched = fetched ? fetched.filter((p) => !isPlaceClosed(p)) : [];
+        if (validFetched.length > 0) {
+          setSuggestions(validFetched);
           scrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
           if (forceRefresh) {
             toast.success(
-              `Found ${fetched.length} new ${typeToUse === "food" ? "food spots" : "suggested sights"}!`,
+              `Found ${validFetched.length} new ${typeToUse === "food" ? "food spots" : "suggested sights"}!`,
               "Suggestions Refreshed"
             );
           }
@@ -154,10 +154,27 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
             "Suggestions Refreshed"
           );
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to fetch suggestions on user request:", err);
         if (forceRefresh) {
-          toast.error("Failed to refresh suggestions.", "Suggestions");
+          const msg = err?.message || "";
+          const isHighDemand = msg.includes("high demand") || msg.includes("503");
+          const isQuota = msg.includes("Quota") || msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED");
+          if (isHighDemand) {
+            toast.warning(
+              "Gemini AI is currently experiencing high demand (503). Spikes are temporary — please try refreshing again in a few moments.",
+              "Gemini Temporarily Busy",
+              8000
+            );
+          } else if (isQuota) {
+            toast.error(
+              "Gemini AI rate limit or quota exceeded. Please check your API budget in Settings.",
+              "Quota Exceeded",
+              8000
+            );
+          } else {
+            toast.error(msg || "Failed to refresh suggestions.", "Refresh Error");
+          }
         }
       } finally {
         setLoading(false);
@@ -173,7 +190,7 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
     const flights = [arrivalFlight?.location || null, departureFlight?.location || null];
     const cached = getCachedSuggestions(places, hotels, customAnchor, flights, newType);
     if (cached && cached.length > 0) {
-      setSuggestions(cached);
+      setSuggestions(cached.filter((p) => !isPlaceClosed(p)));
     } else if (suggestions.length > 0) {
       // If user had suggestions open, seamlessly fetch suggestions for the newly selected category
       handleFetchSuggestions(undefined, false, newType);
@@ -765,7 +782,7 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                 </button>
 
                 {hasImage && (
-                  <div className="h-32 w-full relative shrink-0">
+                  <div className="h-32 w-full relative shrink-0 bg-surface-100 dark:bg-surface-800">
                     <img
                       src={activePhotoUrl!}
                       alt={place.name}

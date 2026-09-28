@@ -53,6 +53,11 @@ export interface TabelogInfo {
   savedAt?: number; // Unix timestamp
 }
 
+export type BusinessStatus =
+  | "OPERATIONAL"
+  | "CLOSED_TEMPORARILY"
+  | "CLOSED_PERMANENTLY";
+
 export interface Place {
   id: string;
   name: string;
@@ -90,6 +95,7 @@ export interface Place {
   allowedTimeRange?: TimeRangeConstraint; // User-defined scheduling time window (e.g., only visit between 7 AM – 5 PM, or NOT between 7–10 AM)
   whosInterested?: string; // Group trip planning: travelers/members interested in this place
   addedAt?: number; // Unix timestamp (ms) when place was added/saved
+  businessStatus?: BusinessStatus | string; // Google Maps business status: OPERATIONAL, CLOSED_TEMPORARILY, or CLOSED_PERMANENTLY
 }
 
 export interface TimeRangeConstraint {

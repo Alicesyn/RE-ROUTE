@@ -8,6 +8,7 @@ import {
   Clock,
   Check,
   Coins,
+  AlertTriangle,
 } from "lucide-react";
 import { useRouteStore } from "../../store/useRouteStore";
 import { MOCK_PLACES } from "../../services/mockData";
@@ -19,6 +20,7 @@ import {
   autoCategorize,
   getDefaultDuration,
 } from "../../utils/categoryUtils";
+import { isPlaceClosed, isPermanentlyClosed } from "../../utils/statusUtils";
 import { toast } from "../../services/toastService";
 import { deriveAreaOpeningHours, isAreaPlace } from "../../utils/areaOpeningHoursUtils";
 const ImportModal = React.lazy(() =>
@@ -133,6 +135,14 @@ export const PlaceSearch: React.FC = React.memo(() => {
       toast.warning(`Added duplicate copy of "${place.name}".`, "Duplicate Added");
     }
 
+    if (isPlaceClosed(place)) {
+      const statusText = isPermanentlyClosed(place) ? "Permanently Closed" : "Temporarily Closed";
+      const confirmClosed = window.confirm(
+        `"${place.name}" is marked as ${statusText} on Google Maps.\n\nAre you sure you want to add this closed venue to your trip?`
+      );
+      if (!confirmClosed) return;
+    }
+
     // For real places, we initialize them with limited data; Gemini will fill the rest
     const category =
       place.category || autoCategorize(place.name, place.description || "", place.types || []);
@@ -159,6 +169,7 @@ export const PlaceSearch: React.FC = React.memo(() => {
       priceEstimate: place.priceEstimate || undefined,
       types: place.types || [],
       isArea: isArea || undefined,
+      businessStatus: place.businessStatus || (isPlaceClosed(place) ? "CLOSED_PERMANENTLY" : "OPERATIONAL"),
     };
     addPlace(newPlace, selectedDay !== null ? selectedDay : undefined);
 
@@ -333,6 +344,15 @@ export const PlaceSearch: React.FC = React.memo(() => {
                         <h4 className="font-medium text-surface-900 dark:text-white truncate">
                           {place.name}
                         </h4>
+                        {isPlaceClosed(place) && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 shrink-0"
+                            title={`Marked as ${isPermanentlyClosed(place) ? "permanently" : "temporarily"} closed on Google Maps`}
+                          >
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            {isPermanentlyClosed(place) ? "Permanently Closed" : "Temporarily Closed"}
+                          </span>
+                        )}
                         {isAdded && (
                           <span
                             className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${existing.isDisabled

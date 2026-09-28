@@ -8,9 +8,11 @@ import {
   Copy,
   Check,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { Place } from "../../../types";
 import { isAreaPlace } from "../../../utils/areaOpeningHoursUtils";
+import { isPlaceClosed, isPermanentlyClosed } from "../../../utils/statusUtils";
 
 export interface PlaceItemHeaderProps {
   place: Place;
@@ -59,6 +61,15 @@ export const PlaceItemHeader: React.FC<PlaceItemHeaderProps> = ({
             {place.isDisabled && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-300/80 dark:border-amber-800/80 ml-1.5 align-middle shrink-0">
                 <EyeOff className="w-2.5 h-2.5" /> Excluded
+              </span>
+            )}
+            {isPlaceClosed(place) && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 ml-1.5 align-middle shrink-0 shadow-2xs"
+                title={`This location is marked as ${isPermanentlyClosed(place) ? "permanently" : "temporarily"} closed on Google Maps.`}
+              >
+                <AlertTriangle className="w-2.5 h-2.5" />
+                <span>{isPermanentlyClosed(place) ? "Permanently Closed" : "Temporarily Closed"}</span>
               </span>
             )}
             {isAreaPlace(place) && (

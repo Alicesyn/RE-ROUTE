@@ -6,11 +6,14 @@ import { emitApiError } from "./apiErrorBus";
 import { apiUsageService } from "./apiUsageService";
 
 const FALLBACK_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3-flash-preview",
   "gemini-3.5-flash-lite",
   "gemini-3.7-flash",
   "gemini-3.5-flash",
-  "gemini-3.8-flash",
-  "gemini-3.6-flash",
+  "gemini-flash-latest",
   "gemini-flash-lite-latest",
 ];
 
@@ -64,10 +67,17 @@ const callGeminiDirectWithFallback = async (
 
       let errorMessage = `Failed with status ${response.status}`;
       let isQuota = response.status === 429;
+      let kind: "quota" | "rate_limit" | "high_demand" | "general" =
+        response.status === 503 ? "high_demand" : response.status === 429 ? "rate_limit" : "general";
       try {
         const errJson = await response.json();
         errorMessage = errJson.error?.message || errorMessage;
-        if (errorMessage.includes("Quota exceeded")) isQuota = true;
+        if (errorMessage.includes("Quota exceeded") || errorMessage.includes("RESOURCE_EXHAUSTED")) {
+          isQuota = true;
+          kind = "quota";
+        } else if (errorMessage.includes("high demand") || response.status === 503) {
+          kind = "high_demand";
+        }
       } catch (e) {}
 
       // If we have more fallback models available, log warning and try next
@@ -83,7 +93,7 @@ const callGeminiDirectWithFallback = async (
       }
 
       lastError = new Error(errorMessage);
-      emitApiError({ source: "gemini", message: errorMessage, isQuota });
+      emitApiError({ source: "gemini", message: errorMessage, isQuota, kind });
       throw lastError;
     } catch (err: any) {
       if (err?.name === "AbortError") throw err;
@@ -94,9 +104,6 @@ const callGeminiDirectWithFallback = async (
     }
   }
 
-  if (lastError) {
-    emitApiError({ source: "gemini", message: lastError.message, isQuota: false });
-  }
   throw lastError || new Error("All Gemini model attempts failed");
 };
 
@@ -583,8 +590,14 @@ export const suggestSights = async (
   const isFood = type === "food";
   const prompt = isFood
     ? `
-    You are a professional culinary travel expert, food critic, and local guide. I need exactly 6 highly rated, iconic restaurants, authentic local eateries, famous food stalls, street markets, or specialty cafes near latitude ${lat}, longitude ${lng}.
+    You are a professional culinary travel expert, food critic, and local guide. I need 8 to 10 highly rated, iconic restaurants, authentic local eateries, famous food stalls, street markets, or specialty cafes near latitude ${lat}, longitude ${lng}.
     DO NOT recommend any of these places: ${rejectedNames.join(", ") || "None"}.
+    
+    CRITICAL OPERATIONAL REQUIREMENT:
+    - ONLY suggest places that are currently OPEN and fully OPERATIONAL as of today.
+    - Absolutely DO NOT suggest any places that have permanently closed, ceased operations, temporarily closed, shut down, gone out of business, or relocated.
+    - If a well-known establishment is no longer in business, skip it entirely and provide a current, active, open alternative.
+
     Focus on places celebrated for distinct must-try dishes, beloved local classics, or exceptional dining experiences.
     
     For each place, provide:
@@ -623,8 +636,13 @@ export const suggestSights = async (
     ]
   `
     : `
-    You are a professional travel planner. I need exactly 6 highly recommended tourist attractions near latitude ${lat}, longitude ${lng}.
+    You are a professional travel planner. I need 8 to 10 highly recommended tourist attractions near latitude ${lat}, longitude ${lng}.
     DO NOT recommend any of these places: ${rejectedNames.join(", ") || "None"}.
+    
+    CRITICAL OPERATIONAL REQUIREMENT:
+    - ONLY suggest attractions and sights that are currently OPEN, accessible, and fully OPERATIONAL as of today.
+    - Absolutely DO NOT suggest any places, attractions, theme parks, markets, or museums that have permanently closed, ceased operations, temporarily closed, shut down, or gone out of business.
+    - If a well-known spot has closed or relocated, skip it entirely and recommend an active, open alternative.
     
     For each place, provide:
     - 3-7 comma-separated, punchy phrases highlighting the core vibe and what it's famous for in "description".
@@ -682,6 +700,6 @@ export const suggestSights = async (
     );
   } catch (error) {
     console.error("Gemini Suggestion Error:", error);
-    return [];
+    throw error;
   }
 };

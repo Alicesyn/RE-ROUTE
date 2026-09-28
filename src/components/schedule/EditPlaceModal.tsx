@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus, Compass, FileText } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus, Compass, FileText, AlertTriangle } from "lucide-react";
 import { format, parseISO, isValid, addDays, differenceInCalendarDays } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
 import { formatDayIndexLabel, mergeOverlappingRanges, MAX_DAY_RANGES, formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { ALL_CATEGORIES, getCategoryEmoji, getCategoryLabel, getDefaultDuration } from "../../utils/categoryUtils";
+import { isPlaceClosed, isPermanentlyClosed } from "../../utils/statusUtils";
 import { PlaceCategory, ReservationInfo, ReservationRequirement, DayRangeConstraint, TimeRangeConstraint, TabelogInfo } from "../../types";
 import { summarizePlace, fetchTabelogInfo } from "../../services/aiService";
 import {
@@ -159,7 +160,27 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       ? format(addDays(tripStartDateObj, assignedDayIndex), "yyyy-MM-dd")
       : "";
 
-  const handleReservationDateChange = (dateStr: string) => {
+  const handleDaySelect = (dayVal: string) => {
+    if (dayVal === "") {
+      setAssignedDayIndex(null);
+      setPinnedToDay(false);
+    } else {
+      const idx = parseInt(dayVal, 10);
+      setAssignedDayIndex(idx);
+      setPinnedToDay(true); // Auto pin when explicitly assigning to a day
+      if (hasDayRange) {
+        if (dayRangeMode === "allow") {
+          if (!dayRangeRows.some((r) => idx >= r.startDay && idx <= r.endDay)) {
+            setDayRangeRows((prev) => [...prev, { startDay: idx, endDay: idx }]);
+          }
+        } else if (dayRangeMode === "exclude") {
+          setDayRangeRows((prev) => prev.filter((r) => !(r.startDay === idx && r.endDay === idx)));
+        }
+      }
+    }
+  };
+
+  const handleDayDateChange = (dateStr: string) => {
     if (!dateStr) {
       setAssignedDayIndex(null);
       setPinnedToDay(false);
@@ -171,11 +192,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         if (isValid(parsed)) {
           const diff = differenceInCalendarDays(parsed, tripStartDateObj);
           if (diff >= 0 && diff < days) {
-            setAssignedDayIndex(diff);
-            setPinnedToDay(true); // Auto pin!
-            if (hasDayRange && !dayRangeRows.some((r) => diff >= r.startDay && diff <= r.endDay)) {
-              setDayRangeRows((prev) => [...prev, { startDay: diff, endDay: diff }]);
-            }
+            handleDaySelect(diff.toString());
           }
         }
       } catch {
@@ -184,19 +201,8 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
     }
   };
 
-  const handleReservationDaySelect = (dayVal: string) => {
-    if (dayVal === "") {
-      setAssignedDayIndex(null);
-      setPinnedToDay(false);
-    } else {
-      const idx = parseInt(dayVal, 10);
-      setAssignedDayIndex(idx);
-      setPinnedToDay(true); // Auto pin!
-      if (hasDayRange && !dayRangeRows.some((r) => idx >= r.startDay && idx <= r.endDay)) {
-        setDayRangeRows((prev) => [...prev, { startDay: idx, endDay: idx }]);
-      }
-    }
-  };
+  const handleReservationDateChange = handleDayDateChange;
+  const handleReservationDaySelect = handleDaySelect;
 
   // Opening hours helper functions
   const updateDayEntry = (dayIndex: number, updates: Partial<DayHoursEntry>) => {
@@ -421,6 +427,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       customTime: trimmedCustomTime || undefined,
       dayIndex: targetDayIndex,
       pinnedToDay: isDayOutOfRange || targetDayIndex === null ? false : pinnedToDay,
+      orderInDay: targetDayIndex === null ? null : (dayChanged ? undefined : place.orderInDay),
       isStarred,
       dismissedDuplicate,
       allowedDayRanges: finalAllowedDayRanges,
@@ -448,8 +455,13 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
 
     if (dayChanged && targetDayIndex !== null) {
       toast.success(
-        `Assigned and pinned "${place.name}" to ${formatDayIndexLabel(targetDayIndex, startDate, dayTitles)}.`,
-        "Reservation Scheduled"
+        `Assigned "${place.name}" to ${formatDayIndexLabel(targetDayIndex, startDate, dayTitles)}${pinnedToDay ? " (pinned)" : ""}.`,
+        "Schedule Updated"
+      );
+    } else if (dayChanged && targetDayIndex === null) {
+      toast.info(
+        `Moved "${place.name}" to unassigned places.`,
+        "Schedule Updated"
       );
     } else if (isDayOutOfRange) {
       toast.info(
@@ -657,6 +669,18 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
           </div>
         </div>
 
+        {isPlaceClosed(place) && (
+          <div className="bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900/60 px-5 py-3 flex items-center gap-3 shrink-0">
+            <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+            <div className="text-xs text-rose-800 dark:text-rose-300">
+              <span className="font-bold">
+                {isPermanentlyClosed(place) ? "Permanently Closed" : "Temporarily Closed"}:
+              </span>{" "}
+              This location is marked as {isPermanentlyClosed(place) ? "permanently" : "temporarily"} closed on Google Maps. Consider excluding or removing it from your itinerary.
+            </div>
+          </div>
+        )}
+
         <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider flex items-center justify-between">
@@ -712,6 +736,110 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                 placeholder="e.g. Free, ¥1,000, $15 - $25"
                 className="w-full text-sm font-medium bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
+            </div>
+          </div>
+
+          {/* Schedule & Day Assignment Section */}
+          <div className="p-3.5 rounded-xl bg-gradient-to-r from-blue-50/70 to-indigo-50/40 dark:from-blue-950/30 dark:to-indigo-950/20 border border-blue-200/80 dark:border-blue-900/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-blue-950 dark:text-blue-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Assigned Day & Schedule</span>
+              </label>
+              <div className="flex items-center gap-2">
+                {assignedDayIndex !== null ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 border border-blue-300 dark:border-blue-700">
+                    {pinnedToDay && <Pin className="w-2.5 h-2.5 fill-current text-blue-600 dark:text-blue-400" />}
+                    {formatDayIndexLabel(assignedDayIndex, startDate, dayTitles)}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 border border-surface-200 dark:border-surface-700">
+                    Unassigned (Places to Visit)
+                  </span>
+                )}
+                {assignedDayIndex !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssignedDayIndex(null);
+                      setPinnedToDay(false);
+                    }}
+                    className="text-[11px] font-bold text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer"
+                    title="Move to unassigned pool"
+                  >
+                    Unassign
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className={`grid grid-cols-1 ${isTripDateValid ? "sm:grid-cols-2" : ""} gap-2.5`}>
+              {/* Day Selector dropdown */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider">
+                  Trip Day
+                </label>
+                <select
+                  value={assignedDayIndex !== null ? assignedDayIndex : ""}
+                  onChange={(e) => handleDaySelect(e.target.value)}
+                  className="w-full text-xs font-semibold bg-white dark:bg-surface-900 border border-blue-200 dark:border-blue-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">Unassigned (Places to Visit)</option>
+                  {Array.from({ length: days }, (_, i) => (
+                    <option key={i} value={i}>
+                      {formatDayIndexLabel(i, startDate, dayTitles)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Calendar Date picker (if trip dates are configured) */}
+              {isTripDateValid && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider">
+                    Calendar Date
+                  </label>
+                  <input
+                    type="date"
+                    min={minReservationDateStr}
+                    max={maxReservationDateStr}
+                    value={currentReservationDateStr}
+                    onChange={(e) => handleDayDateChange(e.target.value)}
+                    className="w-full text-xs font-semibold bg-white dark:bg-surface-900 border border-blue-200 dark:border-blue-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    title="Pick calendar date to assign to trip day"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Pin to Day Toggle */}
+            <div className="pt-2 border-t border-blue-200/60 dark:border-blue-900/40 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
+                  <Pin className={`w-3 h-3 ${pinnedToDay ? "fill-current text-blue-600 dark:text-blue-400" : "text-surface-400"}`} />
+                  {assignedDayIndex !== null
+                    ? `Pin to ${formatDayIndexLabel(assignedDayIndex, startDate, dayTitles)}`
+                    : "Pin to Day"}
+                </span>
+                <span className="text-[10px] text-blue-700/70 dark:text-blue-400">
+                  {assignedDayIndex !== null
+                    ? pinnedToDay
+                      ? "✓ Pinned — route optimizer will keep this place locked on this day"
+                      : "Assigned, but unpinned (optimizer can redistribute across days if needed)"
+                    : "Assign to a day above to lock or pin this place to that day."}
+                </span>
+              </div>
+              <label className={`relative inline-flex items-center ml-3 shrink-0 ${assignedDayIndex === null ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
+                <input
+                  type="checkbox"
+                  checked={pinnedToDay}
+                  disabled={assignedDayIndex === null}
+                  onChange={(e) => setPinnedToDay(e.target.checked)}
+                  className="sr-only peer"
+                  aria-label="Pin place to day"
+                />
+                <div className="w-8 h-4.5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all dark:bg-surface-700 peer-checked:bg-blue-600"></div>
+              </label>
             </div>
           </div>
 
