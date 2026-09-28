@@ -1889,7 +1889,7 @@ export const useRouteStore = create<RouteState>()(
           if (!trip || (!Array.isArray(trip.places) && typeof trip.days !== "number" && !trip.title)) {
             return {
               success: false,
-              error: "Invalid file format. Please upload a valid RE-ROUTE trip JSON file.",
+              error: "Invalid file format. Please upload a valid RE:ROUTE trip JSON file.",
             };
           }
 
@@ -2001,8 +2001,8 @@ export const useRouteStore = create<RouteState>()(
             cloudTrips: regularTrips,
             quickSave: quickSaveTrip
               ? (!get().quickSave || (quickSaveTrip.updatedAt || quickSaveTrip.savedAt) >= (get().quickSave?.updatedAt || get().quickSave?.savedAt || 0)
-                  ? { ...quickSaveTrip, isQuickSave: true }
-                  : get().quickSave)
+                ? { ...quickSaveTrip, isQuickSave: true }
+                : get().quickSave)
               : get().quickSave,
           });
         }

@@ -460,8 +460,8 @@ export const DailySchedule: React.FC = React.memo(() => {
                   isAllDaysLocked
                     ? "All days are locked"
                     : exemptDays.length > 0
-                    ? `Clear unlocked days and return places to unassigned pool (${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} preserved)`
-                    : "Clear optimized schedule and return places to unassigned pool"
+                      ? `Clear unlocked days and return places to unassigned pool (${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} preserved)`
+                      : "Clear optimized schedule and return places to unassigned pool"
                 }
                 aria-label={exemptDays.length > 0 ? "Clear all except for locked days" : "Clear schedule"}
               >
@@ -500,11 +500,10 @@ export const DailySchedule: React.FC = React.memo(() => {
                 disabled={!canScrollJumpLeft}
                 aria-label="Scroll left in jump list"
                 title="Scroll left"
-                className={`p-1.5 rounded-lg border transition-all shrink-0 ${
-                  !canScrollJumpLeft
+                className={`p-1.5 rounded-lg border transition-all shrink-0 ${!canScrollJumpLeft
                     ? "opacity-30 cursor-not-allowed border-surface-200/50 dark:border-surface-700/50 text-surface-300 dark:text-surface-600"
                     : "bg-white dark:bg-surface-700 border-surface-200 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600 shadow-2xs cursor-pointer"
-                }`}
+                  }`}
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
@@ -557,11 +556,10 @@ export const DailySchedule: React.FC = React.memo(() => {
                 disabled={!canScrollJumpRight}
                 aria-label="Scroll right in jump list"
                 title="Scroll right"
-                className={`p-1.5 rounded-lg border transition-all shrink-0 ${
-                  !canScrollJumpRight
+                className={`p-1.5 rounded-lg border transition-all shrink-0 ${!canScrollJumpRight
                     ? "opacity-30 cursor-not-allowed border-surface-200/50 dark:border-surface-700/50 text-surface-300 dark:text-surface-600"
                     : "bg-white dark:bg-surface-700 border-surface-200 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600 shadow-2xs cursor-pointer"
-                }`}
+                  }`}
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -599,11 +597,11 @@ export const DailySchedule: React.FC = React.memo(() => {
               <p className="mt-1.5 text-[11px] sm:text-xs text-amber-900/80 dark:text-amber-300/80 leading-relaxed pl-1">
                 {hasEkispertTransit ? (
                   <>
-                    Because Google Maps developer APIs cannot distribute Japanese transit data due to regional licensing, RE-ROUTE uses the <strong>Ekispert Web Service</strong> to identify nearest train stations, calculate walking access, platform wait buffers, rail speeds, and megastation transfers. Hover over any transit pill to view the walking and train ride breakdown, or click <strong>Timetable ↗</strong> to inspect live departures.{" "}
+                    Because Google Maps developer APIs cannot distribute Japanese transit data due to regional licensing, RE:ROUTE uses the <strong>Ekispert Web Service</strong> to identify nearest train stations, calculate walking access, platform wait buffers, rail speeds, and megastation transfers. Hover over any transit pill to view the walking and train ride breakdown, or click <strong>Timetable ↗</strong> to inspect live departures.{" "}
                   </>
                 ) : (
                   <>
-                    Google Maps developer APIs do not provide public transit routes in Japan due to domestic licensing restrictions. RE-ROUTE automatically estimates realistic station-to-station transit with walking access buffers. Hover over any transit pill to inspect the breakdown.{" "}
+                    Google Maps developer APIs do not provide public transit routes in Japan due to domestic licensing restrictions. RE:ROUTE automatically estimates realistic station-to-station transit with walking access buffers. Hover over any transit pill to inspect the breakdown.{" "}
                   </>
                 )}
                 <button
@@ -822,12 +820,11 @@ export const DailySchedule: React.FC = React.memo(() => {
                 className={`flex-shrink-0 w-80 md:w-96 snap-start ${i >= 3 && !isExpanded ? "content-auto-day" : ""}`}
               >
                 <div
-                  className={`bg-white dark:bg-surface-800 rounded-2xl border ${
-                    isDayExempt
+                  className={`bg-white dark:bg-surface-800 rounded-2xl border ${isDayExempt
                       ? "border-amber-300/90 dark:border-amber-700/80 ring-1 ring-amber-400/20"
                       : "border-surface-100 dark:border-surface-700"
-                  } shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[780px]"
-                  }`}
+                    } shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[780px]"
+                    }`}
                 >
                   <div className="p-4 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">
                     <div className="flex items-center justify-between mb-2">
@@ -1095,11 +1092,10 @@ export const DailySchedule: React.FC = React.memo(() => {
                               toast.success(`Day ${i + 1} is now exempt from Optimize Route!`, "Day Exempted");
                             }
                           }}
-                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                            isDayExempt
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${isDayExempt
                               ? "bg-amber-100 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-200/70 shadow-2xs"
                               : "bg-white dark:bg-surface-700 border-surface-200 dark:border-surface-600 text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-600"
-                          }`}
+                            }`}
                           title={
                             isDayExempt
                               ? `Day ${i + 1} is exempt from Optimize Route. Click to include in optimization.`
@@ -1207,218 +1203,218 @@ export const DailySchedule: React.FC = React.memo(() => {
                             (() => {
                               let lastMealDepartureTime: number | null = null;
 
-                            return itemScheduleList.map((item) => {
-                              const {
-                                itemId,
-                                isFirst,
-                                isLast,
-                                preWaitMin,
-                                preWaitType,
-                                preWaitStartTime,
-                                startTime,
-                                stopArrivalTime,
-                                segmentData,
-                                customBuf,
-                                stop,
-                              } = item;
+                              return itemScheduleList.map((item) => {
+                                const {
+                                  itemId,
+                                  isFirst,
+                                  isLast,
+                                  preWaitMin,
+                                  preWaitType,
+                                  preWaitStartTime,
+                                  startTime,
+                                  stopArrivalTime,
+                                  segmentData,
+                                  customBuf,
+                                  stop,
+                                } = item;
 
-                              let element = null;
-                              let preBufferPill = null;
+                                let element = null;
+                                let preBufferPill = null;
 
-                              if (preWaitMin > 0 && stop) {
-                                const isRes = preWaitType === "reservation";
-                                const openTimeFormatted = formatTime(stopArrivalTime);
-                                preBufferPill = (
-                                  <BufferPill
-                                    key={isRes ? `buffer-${stop.id}` : `wait-buffer-${stop.id}`}
-                                    minutes={preWaitMin}
-                                    startTime={preWaitStartTime}
-                                    label={
-                                      isRes
-                                        ? `Buffer: ${preWaitMin} min free time before reservation`
-                                        : `Buffer: ${preWaitMin} min wait until opening (${openTimeFormatted})`
-                                    }
-                                    isReservation={isRes}
-                                    showLine={!isFirst}
-                                    type={isRes ? "reservation" : "wait"}
-                                    stopName={stop.name}
-                                    reservationTime={stop.customTime}
-                                    onSaveReservationTime={
-                                      isRes
-                                        ? async (newTime) => {
-                                          updatePlace(stop.id, { customTime: newTime });
-                                          toast.success(`Updated ${stop.name} reservation to ${formatTimeString(newTime)}`);
-                                          try {
-                                            await useRouteStore.getState().optimizeDay(i);
-                                          } catch (e) {
-                                            console.error("Failed to re-optimize day after setting custom time", e);
+                                if (preWaitMin > 0 && stop) {
+                                  const isRes = preWaitType === "reservation";
+                                  const openTimeFormatted = formatTime(stopArrivalTime);
+                                  preBufferPill = (
+                                    <BufferPill
+                                      key={isRes ? `buffer-${stop.id}` : `wait-buffer-${stop.id}`}
+                                      minutes={preWaitMin}
+                                      startTime={preWaitStartTime}
+                                      label={
+                                        isRes
+                                          ? `Buffer: ${preWaitMin} min free time before reservation`
+                                          : `Buffer: ${preWaitMin} min wait until opening (${openTimeFormatted})`
+                                      }
+                                      isReservation={isRes}
+                                      showLine={!isFirst}
+                                      type={isRes ? "reservation" : "wait"}
+                                      stopName={stop.name}
+                                      reservationTime={stop.customTime}
+                                      onSaveReservationTime={
+                                        isRes
+                                          ? async (newTime) => {
+                                            updatePlace(stop.id, { customTime: newTime });
+                                            toast.success(`Updated ${stop.name} reservation to ${formatTimeString(newTime)}`);
+                                            try {
+                                              await useRouteStore.getState().optimizeDay(i);
+                                            } catch (e) {
+                                              console.error("Failed to re-optimize day after setting custom time", e);
+                                            }
                                           }
-                                        }
-                                        : undefined
-                                    }
-                                  />
-                                );
-                              }
+                                          : undefined
+                                      }
+                                    />
+                                  );
+                                }
 
-                              if (itemId === "arrival" && arrivalFlight) {
-                                const arrMin = parseTimeToMinutes(arrivalFlight.time);
-                                const arrBuffer = arrivalFlight.buffer ?? 30;
-                                element = (
-                                  <SortableAnchor
-                                    key="arrival"
-                                    id="arrival"
-                                    type="arrival"
-                                    name={
-                                      arrivalFlight.location
-                                        ? arrivalFlight.location.name
-                                        : "Flight Arrival"
+                                if (itemId === "arrival" && arrivalFlight) {
+                                  const arrMin = parseTimeToMinutes(arrivalFlight.time);
+                                  const arrBuffer = arrivalFlight.buffer ?? 30;
+                                  element = (
+                                    <SortableAnchor
+                                      key="arrival"
+                                      id="arrival"
+                                      type="arrival"
+                                      name={
+                                        arrivalFlight.location
+                                          ? arrivalFlight.location.name
+                                          : "Flight Arrival"
+                                      }
+                                      time={arrivalFlight.time}
+                                      buffer={arrBuffer}
+                                      bufferStartTime={arrMin}
+                                      isFirst={isFirst}
+                                      isLast={isLast}
+                                      onUpdateBuffer={(newBuffer) => {
+                                        setArrivalFlight({ ...arrivalFlight, buffer: newBuffer });
+                                        toast.success(`Arrival buffer updated to ${newBuffer}m.`);
+                                      }}
+                                    />
+                                  );
+                                } else if (
+                                  itemId === "departure" &&
+                                  departureFlight
+                                ) {
+                                  const depMin = parseTimeToMinutes(departureFlight.time);
+                                  const depBuffer = departureFlight.buffer ?? 90;
+                                  const depBufferStart = depMin - depBuffer;
+                                  element = (
+                                    <SortableAnchor
+                                      key="departure"
+                                      id="departure"
+                                      type="departure"
+                                      name={
+                                        departureFlight.location
+                                          ? departureFlight.location.name
+                                          : "Flight Departure"
+                                      }
+                                      time={departureFlight.time}
+                                      buffer={depBuffer}
+                                      bufferStartTime={depBufferStart}
+                                      isFirst={isFirst}
+                                      isLast={isLast}
+                                      onUpdateBuffer={(newBuffer) => {
+                                        setDepartureFlight({ ...departureFlight, buffer: newBuffer });
+                                        toast.success(`Departure buffer updated to ${newBuffer}m.`);
+                                      }}
+                                    />
+                                  );
+                                } else if (
+                                  itemId === "start-hotel" &&
+                                  route.startHotel
+                                ) {
+                                  element = (
+                                    <SortableAnchor
+                                      key="start-hotel"
+                                      id="start-hotel"
+                                      name={route.startHotel.name}
+                                      type="start-hotel"
+                                      calculatedTime={startTime}
+                                      isFirst={isFirst}
+                                      isLast={isLast}
+                                    />
+                                  );
+                                } else if (
+                                  itemId === "end-hotel" &&
+                                  route.endHotel &&
+                                  !isLastDay
+                                ) {
+                                  element = (
+                                    <SortableAnchor
+                                      key="end-hotel"
+                                      id="end-hotel"
+                                      name={route.endHotel.name}
+                                      type="end-hotel"
+                                      calculatedTime={startTime}
+                                      isFirst={isFirst}
+                                      isLast={isLast}
+                                    />
+                                  );
+                                } else if (itemId.startsWith("custom-buffer-") && customBuf) {
+                                  element = (
+                                    <SortableCustomBuffer
+                                      key={customBuf.id}
+                                      buffer={customBuf}
+                                      startTime={startTime}
+                                      isFirst={isFirst}
+                                      isLast={isLast}
+                                      onUpdate={(updates) => updateCustomBuffer(customBuf.id, updates)}
+                                      onDelete={() => {
+                                        deleteCustomBuffer(customBuf.id);
+                                        toast.success("Buffer removed");
+                                      }}
+                                    />
+                                  );
+                                } else if (stop) {
+                                  let mealGapAlert: { gap: number; minGap: number } | null = null;
+                                  const minSpacing = categoryConfigs?.[stop.category]?.minTimeBetween ?? (stop.category === "restaurant" ? 180 : 0);
+                                  if (minSpacing > 0 && stop.category === "restaurant") {
+                                    if (lastMealDepartureTime !== null) {
+                                      const gap = stopArrivalTime - lastMealDepartureTime;
+                                      if (gap < minSpacing) {
+                                        mealGapAlert = { gap, minGap: minSpacing };
+                                      }
                                     }
-                                    time={arrivalFlight.time}
-                                    buffer={arrBuffer}
-                                    bufferStartTime={arrMin}
-                                    isFirst={isFirst}
-                                    isLast={isLast}
-                                    onUpdateBuffer={(newBuffer) => {
-                                      setArrivalFlight({ ...arrivalFlight, buffer: newBuffer });
-                                      toast.success(`Arrival buffer updated to ${newBuffer}m.`);
-                                    }}
-                                  />
-                                );
-                              } else if (
-                                itemId === "departure" &&
-                                departureFlight
-                              ) {
-                                const depMin = parseTimeToMinutes(departureFlight.time);
-                                const depBuffer = departureFlight.buffer ?? 90;
-                                const depBufferStart = depMin - depBuffer;
-                                element = (
-                                  <SortableAnchor
-                                    key="departure"
-                                    id="departure"
-                                    type="departure"
-                                    name={
-                                      departureFlight.location
-                                        ? departureFlight.location.name
-                                        : "Flight Departure"
-                                    }
-                                    time={departureFlight.time}
-                                    buffer={depBuffer}
-                                    bufferStartTime={depBufferStart}
-                                    isFirst={isFirst}
-                                    isLast={isLast}
-                                    onUpdateBuffer={(newBuffer) => {
-                                      setDepartureFlight({ ...departureFlight, buffer: newBuffer });
-                                      toast.success(`Departure buffer updated to ${newBuffer}m.`);
-                                    }}
-                                  />
-                                );
-                              } else if (
-                                itemId === "start-hotel" &&
-                                route.startHotel
-                              ) {
-                                element = (
-                                  <SortableAnchor
-                                    key="start-hotel"
-                                    id="start-hotel"
-                                    name={route.startHotel.name}
-                                    type="start-hotel"
-                                    calculatedTime={startTime}
-                                    isFirst={isFirst}
-                                    isLast={isLast}
-                                  />
-                                );
-                              } else if (
-                                itemId === "end-hotel" &&
-                                route.endHotel &&
-                                !isLastDay
-                              ) {
-                                element = (
-                                  <SortableAnchor
-                                    key="end-hotel"
-                                    id="end-hotel"
-                                    name={route.endHotel.name}
-                                    type="end-hotel"
-                                    calculatedTime={startTime}
-                                    isFirst={isFirst}
-                                    isLast={isLast}
-                                  />
-                                );
-                              } else if (itemId.startsWith("custom-buffer-") && customBuf) {
-                                element = (
-                                  <SortableCustomBuffer
-                                    key={customBuf.id}
-                                    buffer={customBuf}
-                                    startTime={startTime}
-                                    isFirst={isFirst}
-                                    isLast={isLast}
-                                    onUpdate={(updates) => updateCustomBuffer(customBuf.id, updates)}
-                                    onDelete={() => {
-                                      deleteCustomBuffer(customBuf.id);
-                                      toast.success("Buffer removed");
-                                    }}
-                                  />
-                                );
-                              } else if (stop) {
-                                let mealGapAlert: { gap: number; minGap: number } | null = null;
-                                const minSpacing = categoryConfigs?.[stop.category]?.minTimeBetween ?? (stop.category === "restaurant" ? 180 : 0);
-                                if (minSpacing > 0 && stop.category === "restaurant") {
-                                  if (lastMealDepartureTime !== null) {
-                                    const gap = stopArrivalTime - lastMealDepartureTime;
-                                    if (gap < minSpacing) {
-                                      mealGapAlert = { gap, minGap: minSpacing };
-                                    }
+                                  }
+
+                                  element = (
+                                    <SortableStop
+                                      key={stop.id}
+                                      stop={stop}
+                                      stopArrivalTime={stopArrivalTime}
+                                      isFirst={isFirst}
+                                      isLast={isLast}
+                                      unassignPlace={unassignPlace}
+                                      updatePlace={updatePlace}
+                                      dayIndex={i}
+                                      dateMode={dateMode}
+                                      currentDate={currentDate}
+                                      onEdit={handleEditPlace}
+                                      mealGapAlert={mealGapAlert}
+                                    />
+                                  );
+                                  if (stop.category === "restaurant") {
+                                    lastMealDepartureTime = stopArrivalTime + (stop.estimatedDuration || 60);
                                   }
                                 }
 
-                                element = (
-                                  <SortableStop
-                                    key={stop.id}
-                                    stop={stop}
-                                    stopArrivalTime={stopArrivalTime}
-                                    isFirst={isFirst}
-                                    isLast={isLast}
-                                    unassignPlace={unassignPlace}
-                                    updatePlace={updatePlace}
-                                    dayIndex={i}
-                                    dateMode={dateMode}
-                                    currentDate={currentDate}
-                                    onEdit={handleEditPlace}
-                                    mealGapAlert={mealGapAlert}
-                                  />
-                                );
-                                if (stop.category === "restaurant") {
-                                  lastMealDepartureTime = stopArrivalTime + (stop.estimatedDuration || 60);
+                                if (!element) return null;
+
+                                let segmentElement = null;
+                                if (segmentData) {
+                                  segmentElement = (
+                                    <div
+                                      className="mt-[-4px]"
+                                      key={`seg-${itemId}-${segmentData.segIdx}`}
+                                    >
+                                      <SegmentPill
+                                        segment={segmentData.seg}
+                                        dayIndex={i}
+                                        segmentIndex={segmentData.segIdx}
+                                      />
+                                    </div>
+                                  );
                                 }
-                              }
 
-                              if (!element) return null;
-
-                              let segmentElement = null;
-                              if (segmentData) {
-                                segmentElement = (
-                                  <div
-                                    className="mt-[-4px]"
-                                    key={`seg-${itemId}-${segmentData.segIdx}`}
-                                  >
-                                    <SegmentPill
-                                      segment={segmentData.seg}
-                                      dayIndex={i}
-                                      segmentIndex={segmentData.segIdx}
-                                    />
-                                  </div>
+                                return (
+                                  <React.Fragment key={`group-${itemId}`}>
+                                    {preBufferPill}
+                                    {element}
+                                    {segmentElement}
+                                  </React.Fragment>
                                 );
-                              }
-
-                              return (
-                                <React.Fragment key={`group-${itemId}`}>
-                                  {preBufferPill}
-                                  {element}
-                                  {segmentElement}
-                                </React.Fragment>
-                              );
-                            });
-                          })()
-                        )}
+                              });
+                            })()
+                          )}
                         </div>
                       </SortableContext>
                     </DndContext>

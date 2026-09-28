@@ -5,9 +5,9 @@ description: >-
   serverless functions in api/, API rate limits, budget quotas, BYOK keys, or environment sensing (local vs Vercel).
 ---
 
-# RE-ROUTE API Governance & External Services
+# RE:ROUTE API Governance & External Services
 
-This skill outlines the strict rules and patterns for integrating, securing, and caching external APIs in RE-ROUTE.
+This skill outlines the strict rules and patterns for integrating, securing, and caching external APIs in RE:ROUTE.
 
 ## External Services & Endpoints
 

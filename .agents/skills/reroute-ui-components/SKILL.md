@@ -2,12 +2,12 @@
 name: reroute-ui-components
 description: >-
   Use this skill whenever developing, styling, or debugging UI components, Leaflet maps (MapView.tsx),
-  dnd-kit drag-and-drop sortables, tabs, modals, or theme styles (dark/light) in RE-ROUTE.
+  dnd-kit drag-and-drop sortables, tabs, modals, or theme styles (dark/light) in RE:ROUTE.
 ---
 
-# RE-ROUTE UI Components & Design System
+# RE:ROUTE UI Components & Design System
 
-This skill guides creating and styling user interfaces, interactive maps, and drag-and-drop elements across RE-ROUTE.
+This skill guides creating and styling user interfaces, interactive maps, and drag-and-drop elements across RE:ROUTE.
 
 ## Design Philosophy & Tokens
 
@@ -62,7 +62,7 @@ This skill guides creating and styling user interfaces, interactive maps, and dr
 
 ### 5. Component Modularity & Code Hygiene
 
-- **Keep Components Under ~300 Lines**: Massive monolithic components (>500 lines) are an anti-pattern in RE-ROUTE. When a component grows beyond ~300 lines or manages multiple distinct concerns, decompose it into focused, single-responsibility subcomponents.
+- **Keep Components Under ~300 Lines**: Massive monolithic components (>500 lines) are an anti-pattern in RE:ROUTE. When a component grows beyond ~300 lines or manages multiple distinct concerns, decompose it into focused, single-responsibility subcomponents.
 - **Decomposition Pattern**:
   - Extract toolbars, filter tabs, alert banners, action menus, and empty states into dedicated sibling files (e.g., `PlaceFilterTabs.tsx`, `DuplicatePlacesBanner.tsx`, `PlaceListToolbar.tsx`, `PlaceMassEditBar.tsx`, `PlaceListEmptyState.tsx`).
   - Keep the parent container focused on state coordination, store subscriptions, drag-and-drop orchestration, and high-level layout.

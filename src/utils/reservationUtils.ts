@@ -234,10 +234,10 @@ export function generateBookingChecklist(
   dayTitles?: Record<number, string>
 ): string {
   if (enrichedPlaces.length === 0) {
-    return "# RE-ROUTE Booking Checklist\n\nNo reservations currently scheduled.";
+    return "# RE:ROUTE Booking Checklist\n\nNo reservations currently scheduled.";
   }
 
-  const lines: string[] = ["# RE-ROUTE Booking & Reservation Checklist\n"];
+  const lines: string[] = ["# RE:ROUTE Booking & Reservation Checklist\n"];
 
   if (startDateISO) {
     try {
@@ -268,8 +268,8 @@ export function generateBookingChecklist(
       const targetText = targetBookingDate
         ? `Book around: ${format(targetBookingDate, "MMM d, yyyy")} (${countdownLabel})`
         : place.reservation?.advanceTime
-        ? `Timing: ${place.reservation.advanceTime}`
-        : "Book when ready";
+          ? `Timing: ${place.reservation.advanceTime}`
+          : "Book when ready";
 
       lines.push(`- [ ] **${place.name}** [${place.reservation?.requirement || "custom time"}]`);
       lines.push(`  - Visit: ${dayLabel} — ${visitText}`);

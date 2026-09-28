@@ -2,16 +2,16 @@
 name: reroute-routing-engine
 description: >-
   Use this skill whenever working on route optimization, the Traveling Salesperson Problem (TSP) solver,
-  multi-day clustering, time budget calculations, flight deadline constraints, or distance/time estimation in RE-ROUTE.
+  multi-day clustering, time budget calculations, flight deadline constraints, or distance/time estimation in RE:ROUTE.
 ---
 
-# RE-ROUTE Routing & Itinerary Engine
+# RE:ROUTE Routing & Itinerary Engine
 
-This skill guides development and debugging of the core routing algorithms, itinerary scheduling, and multi-day clustering in RE-ROUTE.
+This skill guides development and debugging of the core routing algorithms, itinerary scheduling, and multi-day clustering in RE:ROUTE.
 
 ## Core Architectural Components
 
-- **`src/services/tspSolver.ts`**: The algorithmic heart of RE-ROUTE:
+- **`src/services/tspSolver.ts`**: The algorithmic heart of RE:ROUTE:
   - `solveTSP`: Multi-day optimizer. Clusters places across days, enforces strict/soft time budgets, handles arrival/departure flight anchors, and calls `solveSingleDay`.
   - `clusterPlaces`: Distributes unassigned places across days based on geographic proximity to day anchors (hotels or airport flights) while respecting daily available minutes and category limits.
   - `solveSingleDay`: Solves TSP for a single day using 2-opt heuristic when unconstrained, or preserves user's `manualSequence` when manually reordered.

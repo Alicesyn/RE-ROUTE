@@ -2,12 +2,12 @@
 name: reroute-state-architecture
 description: >-
   Use this skill whenever modifying the Zustand store (useRouteStore.ts), data types (src/types/index.ts),
-  IndexedDB persistence, PTV (Places To Visit) lifecycle, trip saving/loading, or JSON export/import in RE-ROUTE.
+  IndexedDB persistence, PTV (Places To Visit) lifecycle, trip saving/loading, or JSON export/import in RE:ROUTE.
 ---
 
-# RE-ROUTE State & Data Architecture
+# RE:ROUTE State & Data Architecture
 
-This skill guides modifications to RE-ROUTE's central state store, data types, and persistence layer.
+This skill guides modifications to RE:ROUTE's central state store, data types, and persistence layer.
 
 ## Core State Files
 

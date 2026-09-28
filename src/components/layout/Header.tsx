@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useRouteStore } from "../../store/useRouteStore";
 import { isLocalDev } from "../../utils/envUtils";
 import {
-  Map,
   Download,
   Save,
   Upload,
@@ -306,16 +305,38 @@ export const Header: React.FC = React.memo(() => {
 
   return (
     <header className="bg-white dark:bg-surface-800 border-b border-gray-200 dark:border-surface-700 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between sticky top-0 z-50 transition-colors safe-pt gap-2 sm:gap-4">
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        <div className="bg-primary-500 p-1.5 sm:p-2 rounded-lg shrink-0">
-          <Map className="text-white w-4 h-4 sm:w-6 h-6" />
-        </div>
+      <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
+        {/* RE:ROUTE Brand Logo */}
+        <button
+          type="button"
+          onClick={() => setIsAboutOpen(true)}
+          className="flex items-center shrink-0 focus:outline-none rounded-lg hover:opacity-85 transition-opacity cursor-pointer py-0.5"
+          title="About RE:ROUTE (Click for details & algorithms)"
+          aria-label="RE:ROUTE Home"
+        >
+          <img
+            src="/logo.png"
+            alt="RE:ROUTE"
+            className="h-6 sm:h-7.5 w-auto object-contain dark:hidden"
+          />
+          <img
+            src="/logo-dark.png"
+            alt="RE:ROUTE"
+            className="h-6 sm:h-7.5 w-auto object-contain hidden dark:block"
+          />
+        </button>
+
+        {/* Subtle Divider between Brand Logo and Trip Title */}
+        <div className="h-5 sm:h-6 w-px bg-surface-200 dark:bg-surface-700 shrink-0 hidden sm:block" />
+
+        {/* Editable Trip Title */}
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="text-base sm:text-2xl font-bold text-surface-900 dark:text-white tracking-tight bg-transparent border-none outline-none focus:ring-0 focus:border-b focus:border-primary-500 transition-all p-0 w-28 sm:w-64 truncate"
+          className="text-sm sm:text-xl font-bold text-surface-900 dark:text-white tracking-tight bg-transparent border-none outline-none focus:ring-0 focus:border-b focus:border-primary-500 transition-all p-0 w-24 sm:w-60 truncate"
           placeholder="Trip Title..."
+          title="Trip Title (Click to edit)"
         />
       </div>
 
@@ -328,11 +349,10 @@ export const Header: React.FC = React.memo(() => {
               onChange={(e) =>
                 setAppMode(e.target.value as "real" | "mock" | "dropdown-mock")
               }
-              className={`appearance-none flex items-center gap-1.5 pl-3 pr-8 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all border cursor-pointer outline-none focus:ring-2 focus:ring-primary-500 shadow-2xs ${
-                appMode === "real"
+              className={`appearance-none flex items-center gap-1.5 pl-3 pr-8 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all border cursor-pointer outline-none focus:ring-2 focus:ring-primary-500 shadow-2xs ${appMode === "real"
                   ? "bg-emerald-50 hover:bg-emerald-100/80 dark:bg-emerald-950/70 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-600/70"
                   : "bg-amber-100 hover:bg-amber-200/80 dark:bg-amber-950/70 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-600/70"
-              }`}
+                }`}
             >
               <option value="real" className="bg-white dark:bg-surface-800 text-surface-900 dark:text-white py-1">
                 🌐 Real Mode
@@ -346,11 +366,10 @@ export const Header: React.FC = React.memo(() => {
             </select>
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
               <ChevronDown
-                className={`w-3.5 h-3.5 transition-colors ${
-                  appMode === "real"
+                className={`w-3.5 h-3.5 transition-colors ${appMode === "real"
                     ? "text-emerald-600 dark:text-emerald-300"
                     : "text-amber-700 dark:text-amber-300"
-                }`}
+                  }`}
               />
             </div>
           </div>
@@ -359,15 +378,14 @@ export const Header: React.FC = React.memo(() => {
         {/* API Budget & Usage Button */}
         <button
           onClick={() => setIsApiBudgetOpen(true)}
-          className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all border outline-none focus:ring-2 focus:ring-primary-500 shadow-2xs ${
-            hasCustomKey
+          className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all border outline-none focus:ring-2 focus:ring-primary-500 shadow-2xs ${hasCustomKey
               ? "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800/60 hover:bg-purple-100"
               : maxPercent >= 90
                 ? "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800/60 hover:bg-red-100 animate-pulse"
                 : maxPercent >= 70
                   ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800/60 hover:bg-amber-100"
                   : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-700"
-          }`}
+            }`}
           title="Open Analytics, Visitor Geolocation & API Monitor / BYOK"
         >
           {hasCustomKey ? (
@@ -378,13 +396,12 @@ export const Header: React.FC = React.memo(() => {
           ) : (
             <>
               <span
-                className={`w-2 h-2 rounded-full ${
-                  maxPercent >= 90
+                className={`w-2 h-2 rounded-full ${maxPercent >= 90
                     ? "bg-red-500"
                     : maxPercent >= 70
                       ? "bg-amber-500"
                       : "bg-emerald-500"
-                }`}
+                  }`}
               />
               <Activity className="w-3.5 h-3.5 text-surface-400 dark:text-surface-500" />
               <span className="hidden sm:inline">Analytics & API</span>
@@ -452,13 +469,12 @@ export const Header: React.FC = React.memo(() => {
                     <Cloud className="w-3.5 h-3.5 text-primary-500" />
                     Cloud Sync
                   </span>
-                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
-                    syncStatus === "syncing"
+                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${syncStatus === "syncing"
                       ? "bg-primary-100 dark:bg-primary-950/60 text-primary-600"
                       : syncStatus === "error"
-                      ? "bg-red-100 dark:bg-red-950/60 text-red-600"
-                      : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600"
-                  }`}>
+                        ? "bg-red-100 dark:bg-red-950/60 text-red-600"
+                        : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600"
+                    }`}>
                     {syncStatus === "syncing" ? "Syncing..." : syncStatus === "error" ? "Error" : "Synced"}
                   </span>
                 </div>
@@ -591,7 +607,7 @@ export const Header: React.FC = React.memo(() => {
             window.location.hash = "about";
           }}
           className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-colors border outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-700"
-          title="About RE-ROUTE, Algorithms, Documentation & Open Source"
+          title="About RE:ROUTE, Algorithms, Documentation & Open Source"
         >
           <HelpCircle className="w-4 h-4 text-surface-400 dark:text-surface-500" />
           <span className="hidden sm:inline">About</span>
@@ -620,22 +636,20 @@ export const Header: React.FC = React.memo(() => {
         {/* Reservations & Booking Hub Button */}
         <button
           onClick={() => setIsReservationsOpen(true)}
-          className={`flex items-center gap-1.5 font-semibold text-xs sm:text-sm transition-all px-2.5 py-1.5 rounded-lg border ${
-            pendingReservationsCount > 0
+          className={`flex items-center gap-1.5 font-semibold text-xs sm:text-sm transition-all px-2.5 py-1.5 rounded-lg border ${pendingReservationsCount > 0
               ? "bg-indigo-50 hover:bg-indigo-100/90 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-2xs"
               : "text-surface-600 dark:text-surface-300 hover:text-indigo-600 dark:hover:text-indigo-400 border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700"
-          }`}
+            }`}
           title="Open Reservations & Booking Hub"
         >
           <Ticket className={`w-4 h-4 ${pendingReservationsCount > 0 ? "text-indigo-600 dark:text-indigo-400" : ""}`} />
           <span className="hidden sm:inline">Reservations</span>
           {reservationPlaces.length > 0 && (
             <span
-              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                pendingReservationsCount > 0
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${pendingReservationsCount > 0
                   ? "bg-amber-500 text-white"
                   : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-              }`}
+                }`}
             >
               {pendingReservationsCount > 0 ? pendingReservationsCount : "✓"}
             </span>
@@ -931,7 +945,7 @@ export const Header: React.FC = React.memo(() => {
                 className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2.5 transition-colors cursor-pointer"
               >
                 <HelpCircle className="w-4 h-4 text-surface-400" />
-                <span>About RE-ROUTE</span>
+                <span>About RE:ROUTE</span>
               </button>
 
               <div className="my-1 border-t border-surface-100 dark:border-surface-700" />

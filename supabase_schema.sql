@@ -1,5 +1,5 @@
 -- ==============================================================================
--- RE-ROUTE: Multi-Device Cloud Sync Database Schema for Supabase
+-- RE:ROUTE: Multi-Device Cloud Sync Database Schema for Supabase
 -- ==============================================================================
 -- Run this script in your Supabase Dashboard -> SQL Editor
 -- This sets up the 'trips' table with strict Row Level Security (RLS) so users

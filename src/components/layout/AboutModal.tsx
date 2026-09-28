@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
   X,
-  Map,
   Compass,
   Clock,
   Route,
@@ -88,13 +87,23 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
           {/* Header */}
           <div className="flex items-center justify-between px-5 sm:px-8 py-4 border-b border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/90 backdrop-blur-md shrink-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-tr from-primary-600 to-indigo-500 rounded-xl shadow-md text-white">
-                <Map className="w-5 h-5 sm:w-6 h-6" />
+              <div className="shrink-0 py-1">
+                <img
+                  src="/logo.png"
+                  alt="RE:ROUTE"
+                  className="h-8 w-auto object-contain dark:hidden"
+                />
+                <img
+                  src="/logo-dark.png"
+                  alt="RE:ROUTE"
+                  className="h-8 w-auto object-contain hidden dark:block"
+                />
               </div>
+              <div className="h-6 w-px bg-surface-200 dark:bg-surface-700 shrink-0 hidden sm:block" />
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-extrabold text-surface-900 dark:text-white tracking-tight">
-                    About RE-ROUTE
+                  <h2 className="text-base sm:text-lg font-bold text-surface-900 dark:text-white tracking-tight">
+                    About RE:ROUTE
                   </h2>
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 px-2 py-0.5 rounded-full border border-primary-200 dark:border-primary-700/60">
                     Open Source
@@ -131,11 +140,10 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabType)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border ${
-                    isActive
-                      ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 border-surface-200 dark:border-surface-600 shadow-sm"
-                      : "text-surface-600 dark:text-surface-400 border-transparent hover:border-surface-200 dark:hover:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-white"
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border ${isActive
+                    ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 border-surface-200 dark:border-surface-600 shadow-sm"
+                    : "text-surface-600 dark:text-surface-400 border-transparent hover:border-surface-200 dark:hover:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-white"
+                    }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? "text-primary-600 dark:text-primary-400" : ""}`} />
                   <span>{tab.label}</span>
@@ -152,10 +160,10 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                 <div className="bg-gradient-to-r from-primary-500/10 via-indigo-500/10 to-purple-500/10 border border-primary-200/80 dark:border-primary-800/60 rounded-2xl p-5 sm:p-6">
                   <h3 className="text-base sm:text-lg font-bold text-surface-900 dark:text-white mb-2 flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-primary-500" />
-                    What is RE-ROUTE?
+                    What is RE:ROUTE?
                   </h3>
                   <p className="text-surface-700 dark:text-surface-300 text-sm leading-relaxed">
-                    <strong>RE-ROUTE</strong> is an intelligent travel itinerary planning application designed to solve the real-world chaos of trip planning. Instead of guessing how to group sights or wasting hours zigzagging across a city, RE-ROUTE balances geographic proximity, time constraints, hotel bases, and daily opening hours to create the most enjoyable, stress-free schedule possible.
+                    <strong>RE:ROUTE</strong> is an intelligent travel itinerary planning application designed to solve the real-world chaos of trip planning. Instead of guessing how to group sights or wasting hours zigzagging across a city, RE:ROUTE balances geographic proximity, time constraints, hotel bases, and daily opening hours to create the most enjoyable, stress-free schedule possible.
                   </p>
                 </div>
 
@@ -238,7 +246,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                     {
                       step: "3",
                       title: "Set Your Stay & Lodging",
-                      desc: "Choose where you are staying each night. RE-ROUTE supports multi-city itineraries: you can assign different hotels to different ranges of days, and the optimizer will anchor routes to the correct hotel each morning and night.",
+                      desc: "Choose where you are staying each night. RE:ROUTE supports multi-city itineraries: you can assign different hotels to different ranges of days, and the optimizer will anchor routes to the correct hotel each morning and night.",
                     },
                     {
                       step: "4",
@@ -273,7 +281,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                     The Math Behind the Optimization
                   </h3>
                   <p className="text-xs text-surface-500 dark:text-surface-400">
-                    How RE-ROUTE calculates distance matrices, clusters multi-day trips, and solves the Traveling Salesperson Problem.
+                    How RE:ROUTE calculates distance matrices, clusters multi-day trips, and solves the Traveling Salesperson Problem.
                   </p>
                 </div>
 
@@ -284,7 +292,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                     1. Time-Budget-Aware Clustering
                   </h4>
                   <p className="text-xs text-surface-600 dark:text-surface-400">
-                    Before ordering a single day's stops, RE-ROUTE must decide <em>which day</em> each place belongs to. The engine:
+                    Before ordering a single day's stops, RE:ROUTE must decide <em>which day</em> each place belongs to. The engine:
                   </p>
                   <ul className="list-disc list-inside text-xs space-y-1 text-surface-600 dark:text-surface-400 pl-2">
                     <li>Locks any <strong>pinned places</strong> to their designated days first.</li>
@@ -440,7 +448,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                     Important API &amp; Algorithmic Limitations
                   </div>
                   <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
-                    RE-ROUTE is engineered to provide the smartest possible itineraries. However, travelers should be aware of fundamental API restrictions, regional transit constraints, and algorithmic boundaries when planning trips:
+                    RE:ROUTE is engineered to provide the smartest possible itineraries. However, travelers should be aware of fundamental API restrictions, regional transit constraints, and algorithmic boundaries when planning trips:
                   </p>
                 </div>
 
@@ -460,10 +468,10 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                       While the consumer Google Maps mobile app shows public transit directions in Japan, <strong>Google Maps Platform developer APIs (Directions API, Routes API, Distance Matrix API) strictly do not support public transit routing in Japan</strong>. Calling these APIs with <code className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1 py-0.5 rounded font-mono text-[11px]">mode=transit</code> returns <code className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1 py-0.5 rounded font-mono text-[11px]">ZERO_RESULTS</code>. This is due to exclusive commercial licensing terms between Japanese rail operators (JR Group, Tokyo Metro, private railways), mapping partner Zenrin, and Google that forbid redistributing transit data programmatically to third-party developers.
                     </p>
                     <div className="p-3 bg-surface-100 dark:bg-surface-900/80 rounded-xl border border-surface-200 dark:border-surface-750 text-[11px] text-surface-600 dark:text-surface-400 space-y-2">
-                      <p className="font-bold text-surface-900 dark:text-white">How RE-ROUTE bridges this gap &amp; what to keep in mind:</p>
+                      <p className="font-bold text-surface-900 dark:text-white">How RE:ROUTE bridges this gap &amp; what to keep in mind:</p>
                       <ul className="list-disc list-inside space-y-1 pl-1">
-                        <li><strong>Domestic Japanese Transit Integration:</strong> RE-ROUTE incorporates the <strong>Ekispert Web Service</strong> (Val Laboratory), the leading domestic Japanese railway routing engine, for official train timetables and transfers.</li>
-                        <li><strong>Station-to-Station vs. Door-to-Door:</strong> Japanese transit APIs calculate routes strictly between designated train/subway stations rather than exact street addresses. RE-ROUTE geocodes your sights to their nearest transit stations and bridges the first and last miles with pedestrian walking paths.</li>
+                        <li><strong>Domestic Japanese Transit Integration:</strong> RE:ROUTE incorporates the <strong>Ekispert Web Service</strong> (Val Laboratory), the leading domestic Japanese railway routing engine, for official train timetables and transfers.</li>
+                        <li><strong>Station-to-Station vs. Door-to-Door:</strong> Japanese transit APIs calculate routes strictly between designated train/subway stations rather than exact street addresses. RE:ROUTE geocodes your sights to their nearest transit stations and bridges the first and last miles with pedestrian walking paths.</li>
                         <li><strong>The Megastation Labyrinth ("Dungeon Stations"):</strong> No navigation API in the world can accurately measure human walking times through massive multi-level Japanese hubs. Shinjuku Station has over 200 exits and serves ~3.5 million passengers daily; transferring between the Keiyo Line (Disney) and the Yamanote Line at Tokyo Station requires navigating nearly 600 meters of underground passages (12–15+ minutes of continuous walking alone). Always allow extra transfer padding in Tokyo, Osaka-Umeda, and Nagoya!</li>
                         <li><strong>Ticket Tiers &amp; Seat Reservations:</strong> Japanese rail separates base fare (IC card / Suica / Pasmo) from Limited Express surcharges (<em>Tokkyū-ken</em>) and Shinkansen reserved seats (<em>Shitei-seki</em>). Routing APIs show transit duration on the tracks, but cannot account for ticket line waits at <em>Midori-no-Madoguchi</em> ticket counters or Shinkansen oversized luggage reservation rules.</li>
                       </ul>
@@ -520,7 +528,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                       5. API Quotas, Caching &amp; Bring-Your-Own-Key (BYOK)
                     </h4>
                     <p className="text-xs text-surface-600 dark:text-surface-400 leading-relaxed">
-                      To keep RE-ROUTE 100% free and open, shared public cloud proxy tokens have daily rate limits on Google Maps and Gemini AI queries. If daily limits are reached, the app continues to operate seamlessly in Mock Mode, or you can plug in your own free personal API keys via the <strong>BYOK (Bring Your Own Key)</strong> panel in the API Budget monitor for unlimited personal usage.
+                      To keep RE:ROUTE 100% free and open, shared public cloud proxy tokens have daily rate limits on Google Maps and Gemini AI queries. If daily limits are reached, the app continues to operate seamlessly in Mock Mode, or you can plug in your own free personal API keys via the <strong>BYOK (Bring Your Own Key)</strong> panel in the API Budget monitor for unlimited personal usage.
                     </p>
                     <ul className="text-xs text-surface-600 dark:text-surface-400 leading-relaxed space-y-1.5 list-none pl-0">
                       <li className="flex items-start gap-2">
@@ -572,7 +580,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
                       100% Free & Open Source
                     </h3>
                     <p className="text-xs text-surface-500 dark:text-surface-400 max-w-lg mx-auto mt-1 leading-relaxed">
-                      RE-ROUTE is created by <strong>Alicesyn</strong> and licensed under the permissive <strong>MIT License</strong>. We believe trip planning tools should belong to the traveler, without tracking or paywalls.
+                      RE:ROUTE is created by <strong>Alicesyn</strong> and licensed under the permissive <strong>MIT License</strong>. We believe trip planning tools should belong to the traveler, without tracking or paywalls.
                     </p>
                   </div>
 
@@ -626,13 +634,13 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, initial
           </div>
 
           {/* Footer */}
-          <div className="px-5 sm:px-8 py-3.5 border-t border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/90 flex items-center justify-between shrink-0 safe-pb">
+          <div className="px-6 sm:px-8 py-4 sm:py-5 border-t border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900/90 flex items-center justify-between gap-4 shrink-0">
             <div className="text-[11px] text-surface-500 dark:text-surface-400 hidden sm:block">
-              RE-ROUTE • MIT License • <a href="https://github.com/Alicesyn/RE-ROUTE" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary-500">GitHub Repository</a>
+              RE:ROUTE • MIT License • <a href="https://github.com/Alicesyn/RE-ROUTE" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary-500">GitHub Repository</a>
             </div>
             <button
               onClick={onClose}
-              className="w-full sm:w-auto px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold text-xs rounded-xl transition-colors shadow-sm"
+              className="w-full sm:w-auto px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold text-xs sm:text-sm rounded-xl transition-colors shadow-sm"
             >
               Got it, close
             </button>

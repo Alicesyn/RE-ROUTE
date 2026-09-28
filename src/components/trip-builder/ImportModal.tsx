@@ -49,9 +49,9 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -130,7 +130,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       }
 
       if (!trip || (!Array.isArray(trip.places) && typeof trip.days !== "number" && !trip.title)) {
-        setJsonError("Invalid file format. Please upload a valid RE-ROUTE trip JSON file.");
+        setJsonError("Invalid file format. Please upload a valid RE:ROUTE trip JSON file.");
         setParsedTripPreview(null);
         return;
       }
@@ -426,7 +426,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 });
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         }
       });
 
@@ -493,11 +493,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             <div className="flex border-b border-surface-200 dark:border-surface-700 bg-surface-100/50 dark:bg-surface-900/50 px-6 pt-3 gap-2">
               <button
                 onClick={() => setActiveTab("json")}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-bold transition-all border-t border-x ${
-                  activeTab === "json"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-bold transition-all border-t border-x ${activeTab === "json"
                     ? "bg-white dark:bg-surface-800 text-primary-600 dark:text-primary-400 border-surface-200 dark:border-surface-700 shadow-sm"
                     : "border-transparent text-surface-500 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-200"
-                }`}
+                  }`}
               >
                 <FileJson className="w-4 h-4" />
                 <span>Entire Trip File (.json)</span>
@@ -508,11 +507,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
               <button
                 onClick={() => setActiveTab("text")}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-bold transition-all border-t border-x ${
-                  activeTab === "text"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-bold transition-all border-t border-x ${activeTab === "text"
                     ? "bg-white dark:bg-surface-800 text-primary-600 dark:text-primary-400 border-surface-200 dark:border-surface-700 shadow-sm"
                     : "border-transparent text-surface-500 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-200"
-                }`}
+                  }`}
               >
                 <FileText className="w-4 h-4" />
                 <span>Places List (Text Search)</span>
@@ -549,7 +547,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   ) : (
                     <>
                       <p className="text-sm text-surface-600 dark:text-surface-300">
-                        Upload or drop a trip JSON file exported from RE-ROUTE on any computer.
+                        Upload or drop a trip JSON file exported from RE:ROUTE on any computer.
                         This will restore your complete itinerary, stays, and optimized routes.
                       </p>
 
@@ -562,11 +560,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                         onDragLeave={() => setIsDragOver(false)}
                         onDrop={handleFileDrop}
                         onClick={() => !isReadingFile && fileInputRef.current?.click()}
-                        className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
-                          isDragOver
+                        className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${isDragOver
                             ? "border-primary-500 bg-primary-50/50 dark:bg-primary-950/30"
                             : "border-surface-200 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-900/40 hover:bg-surface-100/50 dark:hover:bg-surface-900/70"
-                        } ${isReadingFile ? "pointer-events-none opacity-80" : ""}`}
+                          } ${isReadingFile ? "pointer-events-none opacity-80" : ""}`}
                       >
                         <input
                           ref={fileInputRef}
@@ -586,7 +583,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                           {isReadingFile ? "Reading & analyzing trip file..." : "Click to browse or drag & drop a .json trip file"}
                         </p>
                         <p className="text-xs text-surface-400 dark:text-surface-500 mt-1">
-                          {isReadingFile ? "Parsing itinerary structure and places..." : "Compatible with all RE-ROUTE JSON export formats"}
+                          {isReadingFile ? "Parsing itinerary structure and places..." : "Compatible with all RE:ROUTE JSON export formats"}
                         </p>
                       </div>
 
@@ -782,13 +779,12 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                         {results.map((res, i) => (
                           <div
                             key={i}
-                            className={`flex items-start gap-4 p-3 rounded-xl border transition-all ${
-                              res.match
+                            className={`flex items-start gap-4 p-3 rounded-xl border transition-all ${res.match
                                 ? res.selected
                                   ? "bg-primary-50/50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-800"
                                   : "bg-white dark:bg-surface-800 border-surface-100 dark:border-surface-700 opacity-60"
                                 : "bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30"
-                            }`}
+                              }`}
                           >
                             <button
                               disabled={!res.match}

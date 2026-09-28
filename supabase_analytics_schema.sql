@@ -1,5 +1,5 @@
 -- ==============================================================================
--- RE-ROUTE: Visitor Analytics & Telemetry Schema for Supabase (Optional)
+-- RE:ROUTE: Visitor Analytics & Telemetry Schema for Supabase (Optional)
 -- ==============================================================================
 -- Run this script in your Supabase Dashboard -> SQL Editor if you wish to retain
 -- long-term relational telemetry records alongside Redis real-time counters.

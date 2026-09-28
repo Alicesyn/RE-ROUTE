@@ -1,5 +1,5 @@
 /**
- * RE-ROUTE Client Analytics & Telemetry Service
+ * RE:ROUTE Client Analytics & Telemetry Service
  * 
  * Captures privacy-preserving visitor metadata (geo cues, device, referrer),
  * tracks high-level user engagement (optimizations, exports, destination cities),
@@ -77,7 +77,7 @@ export const getClientDeviceInfo = (): ClientDeviceInfo => {
   }
 
   const ua = navigator.userAgent;
-  
+
   // Device category
   let deviceType: "desktop" | "mobile" | "tablet" = "desktop";
   if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
@@ -109,7 +109,7 @@ export const getClientDeviceInfo = (): ClientDeviceInfo => {
   let timezone = "UTC";
   try {
     timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {}
+  } catch { }
 
   const language = navigator.language || "en";
 
@@ -221,7 +221,7 @@ const getLocalAnalyticsStore = (): LocalAnalyticsStore => {
       }
       return parsed;
     }
-  } catch {}
+  } catch { }
 
   return {
     totalVisitors: 1,
@@ -240,7 +240,7 @@ const getLocalAnalyticsStore = (): LocalAnalyticsStore => {
 const saveLocalAnalyticsStore = (store: LocalAnalyticsStore) => {
   try {
     localStorage.setItem(STORAGE_KEY_ANALYTICS_LOCAL, JSON.stringify(store));
-  } catch {}
+  } catch { }
 };
 
 class AnalyticsService {
@@ -251,7 +251,7 @@ class AnalyticsService {
     if (typeof window !== "undefined") {
       try {
         this.optOut = localStorage.getItem(STORAGE_KEY_OPT_OUT) === "true";
-      } catch {}
+      } catch { }
     }
   }
 
@@ -263,7 +263,7 @@ class AnalyticsService {
     this.optOut = optOut;
     try {
       localStorage.setItem(STORAGE_KEY_OPT_OUT, String(optOut));
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -371,8 +371,8 @@ class AnalyticsService {
         headers: { "Content-Type": "application/json" },
         body,
         keepalive: true,
-      }).catch(() => {});
-    } catch {}
+      }).catch(() => { });
+    } catch { }
   }
 
   /**
@@ -432,7 +432,7 @@ class AnalyticsService {
           return { ...data.summary, isLiveCloud: true };
         }
       }
-    } catch {}
+    } catch { }
 
     // Fallback if cloud request fails
     return this.getAnalyticsSummaryFallback();

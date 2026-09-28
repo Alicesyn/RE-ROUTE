@@ -479,8 +479,8 @@ export async function exportTripToExcel(
   const timeFormat = options.timeFormat || "12h";
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "RE-ROUTE Intelligent Travel Planner";
-  workbook.lastModifiedBy = "RE-ROUTE";
+  workbook.creator = "RE:ROUTE Intelligent Travel Planner";
+  workbook.lastModifiedBy = "RE:ROUTE";
   workbook.created = new Date();
   workbook.modified = new Date();
 
@@ -507,7 +507,7 @@ export async function exportTripToExcel(
   overviewSheet.addRow([]);
   const titleRow = overviewSheet.addRow([
     "",
-    `RE-ROUTE ITINERARY: ${trip.title.toUpperCase()}`,
+    `RE:ROUTE ITINERARY: ${trip.title.toUpperCase()}`,
   ]);
   overviewSheet.mergeCells("B2:F2");
   titleRow.getCell(2).font = {
@@ -1373,8 +1373,8 @@ export async function exportReservationsChecklistToExcel(
     options.enrichedPlaces && options.enrichedPlaces.length > 0
       ? options.enrichedPlaces
       : trip.places
-          .filter((p) => !p.isDisabled && isReservationRelevant(p))
-          .map((p) => enrichReservationPlace(p, trip.startDate));
+        .filter((p) => !p.isDisabled && isReservationRelevant(p))
+        .map((p) => enrichReservationPlace(p, trip.startDate));
 
   // Filter specifically for required / recommended or booked / active voucher places
   const reservationItems = allEnriched.filter(
@@ -1489,8 +1489,8 @@ export async function exportReservationsChecklistToExcel(
 
   // 4. Initialize Workbook
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "RE-ROUTE Trip Planner";
-  workbook.lastModifiedBy = "RE-ROUTE Trip Planner";
+  workbook.creator = "RE:ROUTE Trip Planner";
+  workbook.lastModifiedBy = "RE:ROUTE Trip Planner";
   workbook.created = new Date();
   workbook.modified = new Date();
 
@@ -1523,7 +1523,7 @@ export async function exportReservationsChecklistToExcel(
 
   // Row 2: Title Block (Cols A-M)
   const titleRow = checklistSheet.addRow([
-    "RE-ROUTE  •  RESERVATIONS & BOOKING CHECKLIST",
+    "RE:ROUTE  •  RESERVATIONS & BOOKING CHECKLIST",
   ]);
   checklistSheet.mergeCells("A2:M2");
   const titleCell = checklistSheet.getCell("A2");
@@ -1922,9 +1922,9 @@ export async function exportReservationsChecklistToExcel(
       ? "✅ Booked & Confirmed"
       : targetBookingDate
         ? {
-            formula: `IF(ISBLANK(I${rowNum}),"TBD",IF(I${rowNum}="-","TBD",IF(I${rowNum}-TODAY()<0,IF(TODAY()-I${rowNum}=1,"Opened yesterday (Book now)","Opened " & TEXT(TODAY()-I${rowNum},"0") & " days ago (Book now)"),IF(I${rowNum}-TODAY()=0,"Opens TODAY!",IF(I${rowNum}-TODAY()=1,"Opens TOMORROW!","Opens in " & TEXT(I${rowNum}-TODAY(),"0") & " days")))))`,
-            result: countdownLabel,
-          }
+          formula: `IF(ISBLANK(I${rowNum}),"TBD",IF(I${rowNum}="-","TBD",IF(I${rowNum}-TODAY()<0,IF(TODAY()-I${rowNum}=1,"Opened yesterday (Book now)","Opened " & TEXT(TODAY()-I${rowNum},"0") & " days ago (Book now)"),IF(I${rowNum}-TODAY()=0,"Opens TODAY!",IF(I${rowNum}-TODAY()=1,"Opens TOMORROW!","Opens in " & TEXT(I${rowNum}-TODAY(),"0") & " days")))))`,
+          result: countdownLabel,
+        }
         : "TBD / Flexible";
 
     // Populate Row Cells (13 columns matching requested order)
@@ -2087,7 +2087,7 @@ export async function exportReservationsChecklistToExcel(
 
     voucherSheet.addRow([]);
     const vTitleRow = voucherSheet.addRow([
-      "RE-ROUTE  •  CONFIRMED BOOKINGS & VOUCHERS",
+      "RE:ROUTE  •  CONFIRMED BOOKINGS & VOUCHERS",
     ]);
     voucherSheet.mergeCells("A2:I2");
     const vTitleCell = voucherSheet.getCell("A2");
