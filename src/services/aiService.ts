@@ -541,6 +541,7 @@ export const suggestSights = async (
   lat: number,
   lng: number,
   rejectedNames: string[],
+  type: "sights" | "food" = "sights",
   _retries = 3
 ): Promise<SuggestedSight[]> => {
   const customKey = apiUsageService.getCustomGeminiKey();
@@ -553,7 +554,7 @@ export const suggestSights = async (
       const proxyRes = await fetch("/api/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lng, rejectedNames }),
+        body: JSON.stringify({ lat, lng, rejectedNames, type }),
       });
 
       if (proxyRes.ok) {
@@ -579,7 +580,49 @@ export const suggestSights = async (
     return [];
   }
 
-  const prompt = `
+  const isFood = type === "food";
+  const prompt = isFood
+    ? `
+    You are a professional culinary travel expert, food critic, and local guide. I need exactly 6 highly rated, iconic restaurants, authentic local eateries, famous food stalls, street markets, or specialty cafes near latitude ${lat}, longitude ${lng}.
+    DO NOT recommend any of these places: ${rejectedNames.join(", ") || "None"}.
+    Focus on places celebrated for distinct must-try dishes, beloved local classics, or exceptional dining experiences.
+    
+    For each place, provide:
+    - 3-7 comma-separated, punchy phrases highlighting the core food vibe, specialties, and dining atmosphere in "description".
+    - Categorize into one of: restaurant, coffee_shop, nightlife, shopping.
+    - Estimated dining/visit duration in minutes in "estimatedDuration" (typically 45-90 mins).
+    - Typical cost per person in local currency (e.g. "¥1,000 - ¥2,500", "$15 - $35 / person") in "priceEstimate".
+    - CRITICAL HIGHLIGHT GUIDELINES in "highlight": { "label": "Must-Try" | "Must-Order", "text": "Exact signature dish name, specialty cut of meat, noodle broth, dessert, or drink this venue is famous for" }.
+    - RESERVATION GUIDELINES in "reservation":
+      {
+        "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
+        "advanceTime": <string with concrete timing, e.g. "Walk-ins only; line forms 15m before opening", "Walk-ins only; peak wait 30m at dinner", "Reserve 1 month ahead via official site", "No reservation needed">,
+        "notes": <string or null>
+      }
+
+    Return ONLY a JSON array of objects with this exact structure:
+    [
+      {
+        "name": "Exact Place Name",
+        "description": "Short punchy description highlighting food vibe and famous dishes.",
+        "category": "restaurant" | "coffee_shop" | "nightlife" | "shopping",
+        "lat": number,
+        "lng": number,
+        "estimatedDuration": number,
+        "priceEstimate": "string",
+        "highlight": {
+          "label": "Must-Try" | "Must-Order",
+          "text": "Exact dish name"
+        },
+        "reservation": {
+          "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
+          "advanceTime": "string",
+          "notes": "string or null"
+        }
+      }
+    ]
+  `
+    : `
     You are a professional travel planner. I need exactly 6 highly recommended tourist attractions near latitude ${lat}, longitude ${lng}.
     DO NOT recommend any of these places: ${rejectedNames.join(", ") || "None"}.
     
@@ -602,7 +645,7 @@ export const suggestSights = async (
     - RESERVATION GUIDELINES in "reservation":
       {
         "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
-        "advanceTime": <string with concrete timing. For walk_ins_only ALWAYS include queue timing if applicable, e.g. "Walk-ins only; arrive 15–20 min before opening to queue", "Walk-ins only; no queue needed", "Walk-ins only; peak wait 30 min at dinner hour". For reservations: "Reserve 1 month in advance", "Opens 30 days prior at midnight". For no reservation: "No reservation needed">,
+        "advanceTime": <string with concrete timing, e.g. "Reserve 1 month in advance", "Opens 30 days prior at midnight", "Walk-ins only; line forms 15m before opening", "No reservation needed">,
         "notes": <string or null>
       }
 

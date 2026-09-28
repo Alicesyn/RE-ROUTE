@@ -729,9 +729,21 @@ function App() {
   };
 
   const handleClearOptimizedSchedule = () => {
-    if (window.confirm("Are you sure you want to clear the optimized schedule? Unpinned places will return to the unassigned pool; restrictions, pins, and reservations will be preserved.")) {
+    const isExemptActive = exemptDays.length > 0;
+    const confirmMsg = isExemptActive
+      ? `Are you sure you want to clear all except for locked days? Places on unlocked days will return to the unassigned pool; ${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} will be preserved.`
+      : "Are you sure you want to clear the optimized schedule? All places will return to the unassigned pool.";
+
+    if (window.confirm(confirmMsg)) {
       useRouteStore.getState().clearOptimizedSchedule();
-      toast.info("Schedule cleared. Restrictions, pins, and reservations preserved.", "Schedule Cleared");
+      if (isExemptActive) {
+        toast.info(
+          `Schedule cleared (${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} preserved). Places from unlocked days returned to pool.`,
+          "Schedule Cleared"
+        );
+      } else {
+        toast.info("Schedule cleared. All places returned to unassigned pool.", "Schedule Cleared");
+      }
     }
   };
 
@@ -1051,12 +1063,20 @@ function App() {
               <button
                 type="button"
                 onClick={handleClearOptimizedSchedule}
-                disabled={isOptimizing}
-                className="flex items-center justify-center gap-2 py-4 px-5 text-base font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800/60 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer disabled:opacity-50"
-                title="Clear optimized schedule and unassign all places back to pool"
+                disabled={isOptimizing || (exemptDays.length >= optimizedRoutes.length && optimizedRoutes.length > 0)}
+                className="flex items-center justify-center gap-2 py-4 px-5 text-base font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800/60 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  exemptDays.length >= optimizedRoutes.length && optimizedRoutes.length > 0
+                    ? "All days are locked"
+                    : exemptDays.length > 0
+                    ? `Clear unlocked days and return places to unassigned pool (${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} preserved)`
+                    : "Clear optimized schedule and unassign all places back to pool"
+                }
               >
                 <Trash2 className="w-5 h-5" />
-                <span className="hidden sm:inline">Clear Schedule</span>
+                <span className="hidden sm:inline">
+                  {exemptDays.length > 0 ? "Clear Unlocked Days" : "Clear Schedule"}
+                </span>
               </button>
             )}
           </div>

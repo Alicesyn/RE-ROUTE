@@ -33,7 +33,8 @@ export const isAreaPlace = (place: {
   isArea?: boolean;
   areaNote?: string;
 }): boolean => {
-  if (place.isArea || Boolean(place.areaNote)) return true;
+  if (place.isArea !== undefined) return place.isArea;
+  if (Boolean(place.areaNote)) return true;
   if (!place.category || !HOUR_SENSITIVE_CATEGORIES.has(place.category)) return false;
   if (place.openingHours && place.openingHours.length > 0 && !place.areaNote) return false;
   const types: string[] = place.types || [];
@@ -50,6 +51,7 @@ export const shouldDeriveAreaOpeningHours = (place: {
   isArea?: boolean;
   areaNote?: string;
 }): boolean => {
+  if (place.isArea === false) return false;
   if (place.areaNote) return false;
   if (!place.category || !HOUR_SENSITIVE_CATEGORIES.has(place.category)) return false;
   if (place.openingHours && place.openingHours.length > 0) return false;

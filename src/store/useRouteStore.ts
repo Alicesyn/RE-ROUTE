@@ -952,13 +952,15 @@ export const useRouteStore = create<RouteState>()(
         })),
 
       clearOptimizedSchedule: () =>
-        set((state) => ({
-          places: state.places.map((p) => {
-            const isExempt = p.dayIndex !== null && state.exemptDays.includes(p.dayIndex);
-            const isPinned = Boolean(p.pinnedToDay && p.dayIndex !== null);
-            const hasReservationOrLock = p.dayIndex !== null && isReservationRelevant(p);
+        set((state) => {
+          const hasExemptDays = state.exemptDays.length > 0;
 
-            if (isPinned || hasReservationOrLock || isExempt) {
+          // Clear places: places on locked (exempt) days are completely preserved.
+          // Places on unlocked days return to the unassigned pool.
+          const newPlaces = state.places.map((p) => {
+            const isExempt = p.dayIndex !== null && state.exemptDays.includes(p.dayIndex);
+
+            if (isExempt) {
               return {
                 ...p,
                 pinnedToDay: true,
@@ -973,10 +975,39 @@ export const useRouteStore = create<RouteState>()(
               pinnedToDay: false,
               unfeasibleReason: undefined,
             };
-          }),
-          optimizedRoutes: [],
-          customBuffers: [],
-        })),
+          });
+
+          // Custom buffers: preserve custom buffers on locked days, remove custom buffers on unlocked days
+          const newCustomBuffers = hasExemptDays
+            ? state.customBuffers.filter((b) => state.exemptDays.includes(b.dayIndex))
+            : [];
+
+          // Optimized routes:
+          // If no days are locked, reset optimizedRoutes to []
+          // If some days are locked, preserve those locked DayRoutes and clear unlocked DayRoutes
+          let newOptimizedRoutes: DayRoute[] = [];
+          if (hasExemptDays && state.optimizedRoutes.length > 0) {
+            newOptimizedRoutes = state.optimizedRoutes.map((r) => {
+              if (state.exemptDays.includes(r.day)) {
+                return r; // Locked day route preserved intact
+              }
+              return {
+                ...r,
+                stops: [],
+                segments: [],
+                totalDistance: 0,
+                totalTime: 0,
+                manualSequence: undefined,
+              };
+            });
+          }
+
+          return {
+            places: newPlaces,
+            customBuffers: newCustomBuffers,
+            optimizedRoutes: newOptimizedRoutes,
+          };
+        }),
 
       addMissingPlace: (name) =>
         set((state) => ({

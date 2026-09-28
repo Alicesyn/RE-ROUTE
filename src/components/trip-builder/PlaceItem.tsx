@@ -13,6 +13,7 @@ import {
   getSpecificMockDescription,
   getSpecificMockReservation,
 } from "../../utils/mockAiUtils";
+import { isAreaPlace } from "../../utils/areaOpeningHoursUtils";
 import { PlaceItemHeader } from "./place-item/PlaceItemHeader";
 import { PlaceItemBadges } from "./place-item/PlaceItemBadges";
 import { PlaceHighlightEditor } from "./place-item/PlaceHighlightEditor";
@@ -262,6 +263,17 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
             onRestoreDuplicate={() => {
               updatePlace(place.id, { dismissedDuplicate: false });
               toast.info(`Restored duplicate check for "${place.name}".`, "Duplicate Flag Restored");
+            }}
+            onToggleArea={() => {
+              const currentIsArea = isAreaPlace(place);
+              const nextIsArea = !currentIsArea;
+              updatePlace(place.id, { isArea: nextIsArea });
+              toast.info(
+                nextIsArea
+                  ? `Marked "${place.name}" as an Area location.`
+                  : `Unmarked "${place.name}" as an Area location.`,
+                "Area Status Updated"
+              );
             }}
           />
 

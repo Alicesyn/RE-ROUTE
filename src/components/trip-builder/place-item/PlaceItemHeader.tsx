@@ -22,6 +22,7 @@ export interface PlaceItemHeaderProps {
   onRemovePlace: () => void;
   onDismissDuplicate: () => void;
   onRestoreDuplicate: () => void;
+  onToggleArea?: () => void;
 }
 
 export const PlaceItemHeader: React.FC<PlaceItemHeaderProps> = ({
@@ -34,6 +35,7 @@ export const PlaceItemHeader: React.FC<PlaceItemHeaderProps> = ({
   onRemovePlace,
   onDismissDuplicate,
   onRestoreDuplicate,
+  onToggleArea,
 }) => {
   return (
     <div className="flex items-start justify-between gap-2">
@@ -62,9 +64,23 @@ export const PlaceItemHeader: React.FC<PlaceItemHeaderProps> = ({
             {isAreaPlace(place) && (
               <span
                 className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 ml-1.5 align-middle shrink-0"
-                title="Area / District location (shopping street or neighborhood)"
+                title="Area / District location (shopping street or neighborhood). Click ✕ to unmark as Area."
               >
-                Area
+                <span>Area</span>
+                {onToggleArea && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleArea();
+                    }}
+                    className="hover:bg-indigo-200/80 dark:hover:bg-indigo-800/80 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-200 rounded p-0.5 ml-0.5 transition-colors cursor-pointer"
+                    title="Unmark as area"
+                    aria-label="Unmark as area"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
               </span>
             )}
             {isDuplicate && (

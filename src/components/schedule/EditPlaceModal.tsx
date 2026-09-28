@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus, Compass, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
@@ -19,6 +19,15 @@ import {
   getSpecificMockDescription,
   getSpecificMockReservation,
 } from "../../utils/mockAiUtils";
+import { isAreaPlace, deriveAreaOpeningHours } from "../../utils/areaOpeningHoursUtils";
+import {
+  WEEKDAYS,
+  DayHoursEntry,
+  parseOpeningHoursArrayToEntries,
+  formatDayHoursEntriesToArray,
+  formatDayHoursEntriesToRawText,
+  parseRawTextToDayHoursEntries,
+} from "../../utils/openingHoursInputUtils";
 
 interface Props {
   placeId: string;
@@ -59,6 +68,17 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [prependTabelogToDesc, setPrependTabelogToDesc] = useState(true);
   const [isFetchingTabelog, setIsFetchingTabelog] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
+  // Area manually toggle & notes
+  const [isArea, setIsArea] = useState(false);
+  const [areaNoteVal, setAreaNoteVal] = useState("");
+  const [isDerivingAreaHours, setIsDerivingAreaHours] = useState(false);
+
+  // Opening Hours visual & raw input
+  const [hasOpeningHours, setHasOpeningHours] = useState(false);
+  const [hoursEntries, setHoursEntries] = useState<DayHoursEntry[]>(() => parseOpeningHoursArrayToEntries(undefined));
+  const [isRawHoursMode, setIsRawHoursMode] = useState(false);
+  const [rawHoursText, setRawHoursText] = useState("");
 
   useEffect(() => {
     if (place) {
@@ -104,10 +124,112 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setTabelogUrl(place.tabelog?.url || "");
       setTabelogAward(place.tabelog?.award || "");
       setPrependTabelogToDesc(true);
+
+      // Area initialization
+      setIsArea(isAreaPlace(place));
+      setAreaNoteVal(place.areaNote || "");
+
+      // Opening hours initialization
+      const existingHours = place.openingHours && place.openingHours.length > 0 ? place.openingHours : undefined;
+      setHasOpeningHours(Boolean(existingHours));
+      const parsedEntries = parseOpeningHoursArrayToEntries(existingHours);
+      setHoursEntries(parsedEntries);
+      setRawHoursText(formatDayHoursEntriesToRawText(parsedEntries));
+      setIsRawHoursMode(false);
     }
   }, [place, days]);
 
   if (!place) return null;
+
+  // Opening hours helper functions
+  const updateDayEntry = (dayIndex: number, updates: Partial<DayHoursEntry>) => {
+    setHoursEntries((prev) => {
+      const next = prev.map((entry, idx) => (idx === dayIndex ? { ...entry, ...updates } : entry));
+      setRawHoursText(formatDayHoursEntriesToRawText(next));
+      return next;
+    });
+  };
+
+  const copyDayToAll = (fromIndex: number) => {
+    const src = hoursEntries[fromIndex];
+    if (!src) return;
+    setHoursEntries((prev) => {
+      const next = prev.map((entry) => ({
+        ...entry,
+        mode: src.mode,
+        openTime: src.openTime,
+        closeTime: src.closeTime,
+        hasSplitShift: src.hasSplitShift,
+        openTime2: src.openTime2,
+        closeTime2: src.closeTime2,
+      }));
+      setRawHoursText(formatDayHoursEntriesToRawText(next));
+      return next;
+    });
+    toast.success(`Copied ${WEEKDAYS[fromIndex]} hours to all days`, "Hours Updated");
+  };
+
+  const applyPresetHours = (type: "24hours" | "retail" | "dining" | "clear") => {
+    setHasOpeningHours(true);
+    setHoursEntries((prev) => {
+      let next: DayHoursEntry[];
+      if (type === "24hours") {
+        next = prev.map((e) => ({ ...e, mode: "24hours" }));
+      } else if (type === "retail") {
+        next = prev.map((e) => ({ ...e, mode: "open", openTime: "10:00", closeTime: "20:00", hasSplitShift: false }));
+      } else if (type === "dining") {
+        next = prev.map((e) => ({ ...e, mode: "open", openTime: "11:00", closeTime: "22:00", hasSplitShift: false }));
+      } else {
+        // clear
+        setHasOpeningHours(false);
+        next = parseOpeningHoursArrayToEntries(undefined);
+      }
+      setRawHoursText(formatDayHoursEntriesToRawText(next));
+      return next;
+    });
+  };
+
+  const handleToggleRawMode = () => {
+    if (!isRawHoursMode) {
+      setRawHoursText(formatDayHoursEntriesToRawText(hoursEntries));
+      setIsRawHoursMode(true);
+    } else {
+      const parsed = parseRawTextToDayHoursEntries(rawHoursText);
+      setHoursEntries(parsed);
+      setIsRawHoursMode(false);
+    }
+  };
+
+  const handleAutoDeriveAreaHours = async () => {
+    setIsDerivingAreaHours(true);
+    try {
+      const result = await deriveAreaOpeningHours(
+        {
+          ...place,
+          isArea: true,
+          areaNote: areaNoteVal.trim() || place.areaNote,
+        },
+        appMode
+      );
+      if (result && result.hours && result.hours.length > 0) {
+        setHasOpeningHours(true);
+        const parsed = parseOpeningHoursArrayToEntries(result.hours);
+        setHoursEntries(parsed);
+        setRawHoursText(formatDayHoursEntriesToRawText(parsed));
+        if (result.areaNote && !areaNoteVal.trim()) {
+          setAreaNoteVal(result.areaNote);
+        }
+        toast.success(`Derived hours for ${place.name}`, "Area Hours Detected");
+      } else {
+        toast.info("Could not automatically determine area hours. You can enter them manually.", "Notice");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to derive area hours", "Error");
+    } finally {
+      setIsDerivingAreaHours(false);
+    }
+  };
 
   const handleSave = () => {
     const parsedDuration = parseInt(durationVal);
@@ -168,13 +290,30 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       finalAllowedTimeRange?.startTime !== place.allowedTimeRange?.startTime ||
       finalAllowedTimeRange?.endTime !== place.allowedTimeRange?.endTime;
 
+    // Final opening hours
+    let finalOpeningHours: string[] | undefined = undefined;
+    if (hasOpeningHours) {
+      if (isRawHoursMode) {
+        const parsed = parseRawTextToDayHoursEntries(rawHoursText);
+        finalOpeningHours = formatDayHoursEntriesToArray(parsed);
+      } else {
+        finalOpeningHours = formatDayHoursEntriesToArray(hoursEntries);
+      }
+      if (finalOpeningHours.length === 0) {
+        finalOpeningHours = undefined;
+      }
+    }
+
+    const hoursChanged = JSON.stringify(finalOpeningHours || []) !== JSON.stringify(place.openingHours || []);
+
     const shouldReoptimize =
       place.dayIndex !== null &&
       place.dayIndex !== undefined &&
       (((trimmedCustomTime || undefined) !== place.customTime ||
         finalDuration !== place.estimatedDuration ||
         pinnedToDay !== place.pinnedToDay ||
-        timeRangeChanged) ||
+        timeRangeChanged ||
+        hoursChanged) ||
         isDayOutOfRange);
 
     const parsedRating = parseFloat(tabelogRating);
@@ -215,6 +354,9 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       dismissedDuplicate,
       allowedDayRanges: finalAllowedDayRanges,
       allowedTimeRange: finalAllowedTimeRange,
+      isArea,
+      areaNote: isArea ? (areaNoteVal.trim() || place.areaNote || undefined) : undefined,
+      openingHours: finalOpeningHours,
       ...(isDayOutOfRange ? { dayIndex: null, orderInDay: null, pinnedToDay: false } : {}),
     });
     onClose();
@@ -1170,6 +1312,291 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Area / District Location Configuration */}
+          <div className="bg-surface-50 dark:bg-surface-800/60 rounded-xl p-3 sm:p-4 border border-surface-200 dark:border-surface-700/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <Compass className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-surface-900 dark:text-white block">
+                    Area / District Location
+                  </span>
+                  <span className="text-[11px] text-surface-500 dark:text-surface-400">
+                    Treat as a general neighborhood or street rather than a single store
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsArea(!isArea)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                  isArea ? "bg-indigo-600" : "bg-surface-300 dark:bg-surface-600"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    isArea ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {isArea && (
+              <div className="space-y-3 pt-2 border-t border-surface-200 dark:border-surface-700">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block">
+                    Area Type or Description
+                  </label>
+                  <input
+                    type="text"
+                    value={areaNoteVal}
+                    onChange={(e) => setAreaNoteVal(e.target.value)}
+                    placeholder="e.g. Shopping district, Pedestrian street, Public park..."
+                    className="w-full text-xs bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2 bg-indigo-50/70 dark:bg-indigo-950/30 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+                  <span className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                    Auto-detect recommended operating hours based on this area's type:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAutoDeriveAreaHours}
+                    disabled={isDerivingAreaHours}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:text-indigo-200 bg-white dark:bg-indigo-900/50 hover:bg-indigo-100 dark:hover:bg-indigo-800/60 rounded-md border border-indigo-200 dark:border-indigo-700 transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {isDerivingAreaHours ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                    )}
+                    Detect Hours
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Operating Hours Configuration */}
+          <div className="bg-surface-50 dark:bg-surface-800/60 rounded-xl p-3 sm:p-4 border border-surface-200 dark:border-surface-700/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-surface-900 dark:text-white block">
+                    Operating / Opening Hours
+                  </span>
+                  <span className="text-[11px] text-surface-500 dark:text-surface-400">
+                    Schedule optimizer will respect opening times and avoid closed hours
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (hasOpeningHours) {
+                    setHasOpeningHours(false);
+                  } else {
+                    setHasOpeningHours(true);
+                  }
+                }}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                  hasOpeningHours ? "bg-emerald-600" : "bg-surface-300 dark:bg-surface-600"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    hasOpeningHours ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {hasOpeningHours && (
+              <div className="space-y-3 pt-2 border-t border-surface-200 dark:border-surface-700">
+                {/* Presets and Raw Mode Toggle */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-surface-400">Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => applyPresetHours("24hours")}
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
+                    >
+                      Open 24 Hours
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPresetHours("retail")}
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
+                    >
+                      Retail (10 AM – 8 PM)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyPresetHours("dining")}
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-200/70 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-200 transition-colors cursor-pointer"
+                    >
+                      Dining (11 AM – 10 PM)
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleRawMode}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white bg-surface-200/50 hover:bg-surface-200 dark:bg-surface-700/60 dark:hover:bg-surface-700 transition-colors cursor-pointer ml-auto"
+                    title={isRawHoursMode ? "Switch to visual weekly table" : "Paste or edit raw text"}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    {isRawHoursMode ? "Visual Editor" : "Raw / Paste Text"}
+                  </button>
+                </div>
+
+                {/* Raw Textarea Mode */}
+                {isRawHoursMode ? (
+                  <div className="space-y-1.5">
+                    <textarea
+                      value={rawHoursText}
+                      onChange={(e) => setRawHoursText(e.target.value)}
+                      rows={7}
+                      placeholder={`Monday: 10:00 AM – 8:00 PM\nTuesday: 10:00 AM – 8:00 PM\nWednesday: Closed\nThursday: 10:00 AM – 8:00 PM\nFriday: 10:00 AM – 9:00 PM\nSaturday: Open 24 hours\nSunday: 10:00 AM – 8:00 PM`}
+                      className="w-full text-xs font-mono bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-surface-400">
+                      <span>Enter one day per line (e.g. <code>Monday: 10:00 AM – 8:00 PM</code>, <code>Open 24 hours</code>, or <code>Closed</code>)</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const parsed = parseRawTextToDayHoursEntries(rawHoursText);
+                          setHoursEntries(parsed);
+                          setIsRawHoursMode(false);
+                          toast.info("Applied text to visual editor", "Hours Synced");
+                        }}
+                        className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+                      >
+                        Apply & Switch to Visual
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Visual Weekly Table Mode */
+                  <div className="space-y-2 border border-surface-200/80 dark:border-surface-700/80 rounded-lg p-2.5 bg-white/60 dark:bg-surface-900/40">
+                    {hoursEntries.map((dayEntry, index) => (
+                      <div
+                        key={dayEntry.day}
+                        className="flex flex-col sm:flex-row sm:items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-surface-100/70 dark:hover:bg-surface-800/40 transition-colors text-xs border-b border-surface-100 dark:border-surface-800 last:border-0"
+                      >
+                        {/* Day Name */}
+                        <div className="w-24 font-bold text-surface-700 dark:text-surface-200 shrink-0 flex items-center justify-between sm:justify-start gap-1">
+                          <span>{dayEntry.day}</span>
+                        </div>
+
+                        {/* Mode Select */}
+                        <select
+                          value={dayEntry.mode}
+                          onChange={(e) => updateDayEntry(index, { mode: e.target.value as DayHoursEntry["mode"] })}
+                          className="text-xs bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-md px-2 py-1 text-surface-800 dark:text-surface-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 shrink-0"
+                        >
+                          <option value="open">Specific Hours</option>
+                          <option value="24hours">Open 24 Hours</option>
+                          <option value="closed">Closed</option>
+                        </select>
+
+                        {/* Custom Times */}
+                        {dayEntry.mode === "open" && (
+                          <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                            <input
+                              type="time"
+                              value={dayEntry.openTime}
+                              onChange={(e) => updateDayEntry(index, { openTime: e.target.value })}
+                              className="text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded px-1.5 py-0.5"
+                              style={{ colorScheme: "dark light" }}
+                            />
+                            <span className="text-surface-400 text-[11px]">to</span>
+                            <input
+                              type="time"
+                              value={dayEntry.closeTime}
+                              onChange={(e) => updateDayEntry(index, { closeTime: e.target.value })}
+                              className="text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded px-1.5 py-0.5"
+                              style={{ colorScheme: "dark light" }}
+                            />
+
+                            {/* Split Shift Toggle */}
+                            {!dayEntry.hasSplitShift ? (
+                              <button
+                                type="button"
+                                onClick={() => updateDayEntry(index, { hasSplitShift: true, openTime2: "17:00", closeTime2: "22:00" })}
+                                className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline px-1 py-0.5 cursor-pointer"
+                                title="Add lunch/dinner or break interval"
+                              >
+                                + Split shift
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1 bg-surface-100 dark:bg-surface-800 px-1.5 py-0.5 rounded border border-surface-200 dark:border-surface-700">
+                                <span className="text-[10px] text-surface-400">&</span>
+                                <input
+                                  type="time"
+                                  value={dayEntry.openTime2 || "17:00"}
+                                  onChange={(e) => updateDayEntry(index, { openTime2: e.target.value })}
+                                  className="text-xs font-semibold bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded px-1.5 py-0.5"
+                                  style={{ colorScheme: "dark light" }}
+                                />
+                                <span className="text-surface-400 text-[10px]">to</span>
+                                <input
+                                  type="time"
+                                  value={dayEntry.closeTime2 || "22:00"}
+                                  onChange={(e) => updateDayEntry(index, { closeTime2: e.target.value })}
+                                  className="text-xs font-semibold bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded px-1.5 py-0.5"
+                                  style={{ colorScheme: "dark light" }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => updateDayEntry(index, { hasSplitShift: false })}
+                                  className="text-red-500 hover:text-red-700 dark:hover:text-red-300 ml-0.5 p-0.5 cursor-pointer"
+                                  title="Remove split shift"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {dayEntry.mode === "24hours" && (
+                          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex-1">
+                            Accessible all day & night (Open 24 hours)
+                          </div>
+                        )}
+
+                        {dayEntry.mode === "closed" && (
+                          <div className="text-[11px] text-red-500 dark:text-red-400 font-semibold flex-1">
+                            Closed all day
+                          </div>
+                        )}
+
+                        {/* Copy to All Button */}
+                        <button
+                          type="button"
+                          onClick={() => copyDayToAll(index)}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-surface-500 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 px-2 py-1 rounded transition-colors ml-auto shrink-0 cursor-pointer"
+                          title={`Copy ${dayEntry.day}'s hours to all other days`}
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span className="hidden sm:inline">Copy to all</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

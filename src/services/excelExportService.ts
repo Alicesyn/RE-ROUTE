@@ -13,8 +13,8 @@ import {
   enrichReservationPlace,
   EnrichedReservationPlace,
   isReservationRelevant,
+  getVisitDate,
 } from "../utils/reservationUtils";
-import { formatDayIndexLabel } from "../utils/dayRangeUtils";
 import { hasNonLatinScript } from "../utils/textUtils";
 import { isJapanRestaurant, getTabelogSearchUrl } from "../utils/tabelogUtils";
 
@@ -1514,7 +1514,7 @@ export async function exportReservationsChecklistToExcel(
     { key: "targetDate", width: 20 },    // 9: Target Booking Date
     { key: "countdown", width: 28 },     // 10: Countdown / Urgency
     { key: "advanceNotice", width: 30 }, // 11: Booking Window / Notice
-    { key: "reservedTime", width: 18 },  // 12: Reserved Time
+    { key: "reservedTime", width: 28 },  // 12: Reserved Time (Actual Date + Time)
     { key: "address", width: 36 },       // 13: Address (at end)
   ];
 
@@ -1825,10 +1825,17 @@ export async function exportReservationsChecklistToExcel(
           ? COLORS.AMBER_LIGHT
           : baseBg;
 
-    // Reserved Time (Combines Scheduled Day & Visit Time)
+    // Reserved Time (Combines Actual Date & Visit Time)
     let reservedTimeText = "TBD";
-    const dayLabel =
-      place.dayIndex !== null && place.dayIndex !== undefined
+    const visitDate =
+      item.visitDate ||
+      (place.dayIndex !== null && place.dayIndex !== undefined && trip.startDate
+        ? getVisitDate(place, trip.startDate)
+        : null);
+
+    const dateLabel = visitDate
+      ? format(visitDate, "EEE, MMM d, yyyy")
+      : place.dayIndex !== null && place.dayIndex !== undefined
         ? `Day ${place.dayIndex + 1}`
         : null;
 
@@ -1840,10 +1847,10 @@ export async function exportReservationsChecklistToExcel(
       timeLabel = `~${formatMinutesToDisplay(sched.startTime, timeFormat)}`;
     }
 
-    if (dayLabel && timeLabel) {
-      reservedTimeText = `${dayLabel} • ${timeLabel}`;
-    } else if (dayLabel) {
-      reservedTimeText = dayLabel;
+    if (dateLabel && timeLabel) {
+      reservedTimeText = `${dateLabel} • ${timeLabel}`;
+    } else if (dateLabel) {
+      reservedTimeText = dateLabel;
     } else if (timeLabel) {
       reservedTimeText = timeLabel;
     }
@@ -2147,9 +2154,16 @@ export async function exportReservationsChecklistToExcel(
       const isEven = idx % 2 === 0;
       const baseBg = isEven ? COLORS.SLATE_ZEBRA : COLORS.WHITE;
 
-      const dayText =
-        place.dayIndex !== null && place.dayIndex !== undefined
-          ? formatDayIndexLabel(place.dayIndex, trip.startDate, trip.dayTitles)
+      const vVisitDate =
+        item.visitDate ||
+        (place.dayIndex !== null && place.dayIndex !== undefined && trip.startDate
+          ? getVisitDate(place, trip.startDate)
+          : null);
+
+      const dayText = vVisitDate
+        ? format(vVisitDate, "EEE, MMM d, yyyy")
+        : place.dayIndex !== null && place.dayIndex !== undefined
+          ? `Day ${place.dayIndex + 1}`
           : "Unassigned";
 
       let timeText = "Flexible / TBD";

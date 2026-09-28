@@ -592,6 +592,275 @@ const getGenericSights = (lat: number, lng: number) => [
   },
 ];
 
+export type RecommendationType = "sights" | "food";
+
+// Curated top food & dining spots for Kyoto (restaurants, specialty cafes & food markets)
+const KYOTO_FOOD = [
+  {
+    id: "rec_kyoto_food_inoichi",
+    name: "Menya Inoichi",
+    address: "417 Ebisunocho, Shimogyo Ward, Kyoto",
+    lat: 35.0019,
+    lng: 135.7678,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 60,
+    description: "Michelin Bib Gourmand ramen shop famous for its delicate, crystal-clear dashi broth and shaved tororo kombu.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/ramen,dashi",
+    priceEstimate: "¥1,300 - ¥1,800",
+    highlight: { label: "Must-Try", text: "Special White Soy Sauce (Shiro Shoyu) Ramen with A5 Wagyu slices" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Queue 20-30 min before opening at lunch or dinner" },
+  },
+  {
+    id: "rec_kyoto_food_chaochao",
+    name: "Chao Chao Gyoza Shijo-Kawaramachi",
+    address: "312-1 Inaricho, Shimogyo Ward, Kyoto",
+    lat: 35.0033,
+    lng: 135.7709,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 50,
+    description: "Lively, award-winning casual gyoza specialty bar serving crispy pan-fried gyoza with golden lattice wings.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/gyoza,japanese",
+    priceEstimate: "¥1,000 - ¥2,000",
+    highlight: { label: "Must-Try", text: "Signature Chao Chao Gyoza wings & shrimp gyoza with cold draft beer" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; casual fast turnaround" },
+  },
+  {
+    id: "rec_kyoto_food_katsukura",
+    name: "Katsukura Tonkatsu Sanjo",
+    address: "16 Sanjodori Kawaramachi Higashiiru, Nakagyo Ward, Kyoto",
+    lat: 35.0090,
+    lng: 135.7705,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 60,
+    description: "Kyoto's legendary tonkatsu institution serving premium Sangenton pork with freshly ground sesame sauce.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/tonkatsu,pork",
+    priceEstimate: "¥1,800 - ¥2,800",
+    highlight: { label: "Must-Try", text: "Kurobuta Hirekatsu (pork tenderloin cutlet) with unlimited barley rice and shredded cabbage" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in; wait times 15-25 min during peak dinner" },
+  },
+  {
+    id: "rec_kyoto_food_kichikichi",
+    name: "Kichi Kichi Omurice",
+    address: "185-4 Zaimokucho, Nakagyo Ward, Kyoto",
+    lat: 35.0076,
+    lng: 135.7712,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 60,
+    description: "World-famous cozy eatery where Chef Motokichi slices molten fluffy omelets over chicken fried rice with theatrical flair.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/omurice,egg",
+    priceEstimate: "¥2,700 - ¥3,500",
+    highlight: { label: "Must-Try", text: "Signature Fluffy Demi-Glace Omurice sliced open live at the counter" },
+    reservation: { requirement: "required" as const, advanceTime: "Online booking opens every Sunday for the coming week" },
+  },
+  {
+    id: "rec_kyoto_food_arabica",
+    name: "% Arabica Kyoto Higashiyama",
+    address: "87-5 Hoshinocho, Higashiyama Ward, Kyoto",
+    lat: 34.9984,
+    lng: 135.7797,
+    category: "coffee_shop" as PlaceCategory,
+    estimatedDuration: 30,
+    description: "Minimalist world-renowned specialty espresso bar situated on the scenic cobblestone approach to Yasaka Pagoda.",
+    types: ["cafe", "coffee_shop"],
+    photoUrl: "https://loremflickr.com/800/600/latte,coffee",
+    priceEstimate: "¥550 - ¥750",
+    highlight: { label: "Must-Order", text: "Kyoto Latte with condensed milk and single-origin pour-over" },
+    reservation: { requirement: "not_needed" as const, advanceTime: "Walk-in takeaway; lines move steadily" },
+  },
+  {
+    id: "rec_kyoto_food_tsujiri",
+    name: "Gion Tsujiri Honten & Saryo Tsujiri",
+    address: "573-3 Gionmachi Minamigawa, Higashiyama Ward, Kyoto",
+    lat: 35.0036,
+    lng: 135.7758,
+    category: "coffee_shop" as PlaceCategory,
+    estimatedDuration: 45,
+    description: "Historic 1860 teahouse legendary for premium Uji matcha sweets, elaborate green tea parfaits, and roasted hojicha.",
+    types: ["cafe", "food"],
+    photoUrl: "https://loremflickr.com/800/600/matcha,parfait",
+    priceEstimate: "¥1,200 - ¥1,800",
+    highlight: { label: "Must-Order", text: "Tsujiri Tokusen Matcha Parfait layered with chiffon cake, warabimochi, and matcha soft serve" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; popular afternoons 2 PM - 5 PM" },
+  },
+];
+
+// Curated top food & dining spots for Tokyo (ramen, beef cutlets, markets, yakitori)
+const TOKYO_FOOD = [
+  {
+    id: "rec_tokyo_food_rokurinsha",
+    name: "Rokurinsha (Tokyo Station)",
+    address: "1-9-1 Marunouchi, Chiyoda City, Tokyo (Tokyo Ramen Street B1)",
+    lat: 35.6812,
+    lng: 139.7671,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 50,
+    description: "Pioneering dipping noodle titan serving ultra-rich tonkotsu-seafood broth with thick, chewy handmade noodles.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/tsukemen,ramen",
+    priceEstimate: "¥1,050 - ¥1,400",
+    highlight: { label: "Must-Try", text: "Tokusei Tsukemen with seasoned ajitama egg and pork chashu, finished with soup-wari" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Ticket vending machine; queue averages 15-30 mins" },
+  },
+  {
+    id: "rec_tokyo_food_motomura",
+    name: "Gyukatsu Motomura Shibuya",
+    address: "3-18-10 Shibuya, Shibuya City, Tokyo",
+    lat: 35.6578,
+    lng: 139.7032,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 60,
+    description: "Beloved deep-fried beef cutlet eatery where diners sear rare Wagyu cutlets on individual sizzling stone grills.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/gyukatsu,beef",
+    priceEstimate: "¥1,900 - ¥2,600",
+    highlight: { label: "Must-Try", text: "Gyukatsu set with grated mountain yam (tororo) and wasabi soy sauce" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Arrive 20-30 min before opening to avoid lengthy queues" },
+  },
+  {
+    id: "rec_tokyo_food_hikiniku",
+    name: "Hikiniku to Come Shibuya",
+    address: "2-28-1 Dogenzaka, Shibuya City, Tokyo",
+    lat: 35.6593,
+    lng: 139.6967,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 50,
+    description: "Famous theater-style counter serving 100% freshly ground Japanese beef patties grilled over charcoal onto rice.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/hamburg,patty",
+    priceEstimate: "¥1,800",
+    highlight: { label: "Must-Try", text: "Charcoal-grilled hamburg steak set with unlimited hagama rice and fresh raw egg" },
+    reservation: { requirement: "required" as const, advanceTime: "Numbered ticket distribution begins at 9:00 AM daily, or book weekly on TableCheck" },
+  },
+  {
+    id: "rec_tokyo_food_afuri",
+    name: "AFURI Harajuku",
+    address: "3-63-1 Sendagaya, Shibuya City, Tokyo",
+    lat: 35.6713,
+    lng: 139.7042,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 45,
+    description: "Modern, hip ramen joint renowned for light golden dashi broth scented with aromatic Japanese yuzu citrus.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/ramen,citrus",
+    priceEstimate: "¥1,200 - ¥1,600",
+    highlight: { label: "Must-Try", text: "Yuzu Shio Ramen with charcoal-grilled chashu and bamboo shoots" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Self-service ticket kiosk; steady turnover" },
+  },
+  {
+    id: "rec_tokyo_food_fuunji",
+    name: "Fuunji Shinjuku",
+    address: "2-14-3 Yoyogi, Shibuya City, Tokyo",
+    lat: 35.6865,
+    lng: 139.6975,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 45,
+    description: "Legendary counter noodle shop famous for its velvety chicken and fish powder tsukemen dipping broth.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/noodles,ramen",
+    priceEstimate: "¥1,000 - ¥1,300",
+    highlight: { label: "Must-Try", text: "Special Tsukemen (Tokusei) with mountain of bonito fish powder" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Line forms around the block; fast 15-20 min line turnover" },
+  },
+  {
+    id: "rec_tokyo_food_omoidiyokocho",
+    name: "Omoide Yokocho (Memory Lane)",
+    address: "1-2 Nishi-Shinjuku, Shinjuku City, Tokyo",
+    lat: 35.6934,
+    lng: 139.6997,
+    category: "nightlife" as PlaceCategory,
+    estimatedDuration: 75,
+    description: "Atmospheric post-war lantern-lit alleyway packed with intimate yakitori stalls, cold beer, and charcoal grills.",
+    types: ["restaurant", "bar", "food"],
+    photoUrl: "https://loremflickr.com/800/600/yakitori,alley",
+    priceEstimate: "¥2,000 - ¥3,500",
+    highlight: { label: "Must-Try", text: "Charcoal-grilled chicken yakitori skewers, tsukune meatballs, and highballs" },
+    reservation: { requirement: "not_needed" as const, advanceTime: "Walk into any stall with empty stools after 5:00 PM" },
+  },
+];
+
+// Generates fallback mock dining recommendations for other areas
+const getGenericFood = (lat: number, lng: number) => [
+  {
+    id: "rec_gen_food_1",
+    name: "Artisan Bakery & Specialty Espresso",
+    address: "Central Market Boulevard",
+    lat: lat + 0.003,
+    lng: lng + 0.004,
+    category: "coffee_shop" as PlaceCategory,
+    estimatedDuration: 45,
+    description: "Charming neighborhood bakery crafting naturally leavened sourdough, flaky pastries, and single-origin pour-overs.",
+    types: ["cafe", "bakery", "food"],
+    photoUrl: "https://loremflickr.com/800/600/bakery,pastry",
+    priceEstimate: "$8 - $16",
+    highlight: { label: "Must-Order", text: "Warm almond croissant & house cardamom vanilla latte" },
+    reservation: { requirement: "not_needed" as const, advanceTime: "Walk-in daily" },
+  },
+  {
+    id: "rec_gen_food_2",
+    name: "Heritage Trattoria & Pasta Bar",
+    address: "Old Town Corner",
+    lat: lat - 0.004,
+    lng: lng + 0.005,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 75,
+    description: "Intimate rustic dining spot hand-rolling fresh pasta daily with regional heirloom recipes and natural wines.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/pasta,italian",
+    priceEstimate: "$25 - $45 / person",
+    highlight: { label: "Must-Try", text: "Handmade Cacio e Pepe tossed in aged pecorino wheel & wood-fired focaccia" },
+    reservation: { requirement: "recommended" as const, advanceTime: "Reserve 3-7 days in advance for dinner tables" },
+  },
+  {
+    id: "rec_gen_food_3",
+    name: "Harbor Seafood & Oyster House",
+    address: "Waterfront Pier Esplanade",
+    lat: lat + 0.006,
+    lng: lng - 0.003,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 75,
+    description: "Vibrant coastal eatery serving fresh daily catches, cold shellfish platters, and grilled whole fish.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/seafood,oysters",
+    priceEstimate: "$30 - $60 / person",
+    highlight: { label: "Must-Try", text: "Fresh local oyster sampler with mignonette and crispy beer-battered fish & chips" },
+    reservation: { requirement: "recommended" as const, advanceTime: "Recommended for patio sunset seating" },
+  },
+  {
+    id: "rec_gen_food_4",
+    name: "Classic Craft Ramen & Gyoza",
+    address: "Lantern Arcade",
+    lat: lat - 0.005,
+    lng: lng - 0.004,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 45,
+    description: "Atmospheric noodle shop simmering pork and chicken bones for 16 hours for deeply comforting noodle bowls.",
+    types: ["restaurant", "food"],
+    photoUrl: "https://loremflickr.com/800/600/ramen,noodles",
+    priceEstimate: "$14 - $20",
+    highlight: { label: "Must-Try", text: "Rich Tonkotsu Black Garlic ramen with soft-boiled nitamago and crispy pan-fried gyoza" },
+    reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; 10-15m wait during dinner rush" },
+  },
+  {
+    id: "rec_gen_food_5",
+    name: "Farm-to-Table Brunch Kitchen",
+    address: "Greenway Walk",
+    lat: lat + 0.002,
+    lng: lng - 0.006,
+    category: "restaurant" as PlaceCategory,
+    estimatedDuration: 60,
+    description: "Bright sunlit cafe featuring locally sourced organic produce, signature breakfast skillets, and fresh juices.",
+    types: ["restaurant", "cafe", "food"],
+    photoUrl: "https://loremflickr.com/800/600/brunch,food",
+    priceEstimate: "$18 - $28",
+    highlight: { label: "Must-Order", text: "Smoked salmon eggs benedict on toasted brioche and ricotta lemon pancakes" },
+    reservation: { requirement: "recommended" as const, advanceTime: "Walk-ins welcome, reservation recommended on weekends" },
+  },
+];
+
 /**
  * Calculates the center point of hotels & places in the itinerary.
  * Returns null if no context is present.
@@ -647,7 +916,8 @@ export async function getSuggestedPlaces(
   rejectedNames: string[] = [],
   customAnchor?: { lat: number; lng: number; label: string } | null,
   flights: (Place | null)[] = [],
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  type: RecommendationType = "sights"
 ): Promise<(Place & { nearestHotel?: { name: string; distanceM: number } })[]> {
   // Existing place names to filter duplicates
   const existingNames = new Set(places.map((p) => p.name.toLowerCase()));
@@ -683,8 +953,10 @@ export async function getSuggestedPlaces(
   const seenSuggestionNames = new Set<string>();
 
   for (const anchor of anchors) {
-    const cacheKeyV4 = `re_route_suggestions_v4_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const cacheKeyV3 = `re_route_suggestions_v3_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const cacheKeyV4 = `re_route_suggestions_v4_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const cacheKeyV3 = `re_route_suggestions_v3_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const legacyKeyV4 = `re_route_suggestions_v4_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const legacyKeyV3 = `re_route_suggestions_v3_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     let candidateSights: any[] = [];
 
     if (forceRefresh) {
@@ -699,12 +971,18 @@ export async function getSuggestedPlaces(
     }
 
     if (appMode === "real" && !forceRefresh) {
-      // Check persistent localStorage first, then sessionStorage (try v4, then fallback to v3)
+      // Check persistent localStorage first, then sessionStorage
       const cachedData =
         localStorage.getItem(cacheKeyV4) ||
         sessionStorage.getItem(cacheKeyV4) ||
         localStorage.getItem(cacheKeyV3) ||
-        sessionStorage.getItem(cacheKeyV3);
+        sessionStorage.getItem(cacheKeyV3) ||
+        (type === "sights"
+          ? localStorage.getItem(legacyKeyV4) ||
+            sessionStorage.getItem(legacyKeyV4) ||
+            localStorage.getItem(legacyKeyV3) ||
+            sessionStorage.getItem(legacyKeyV3)
+          : null);
 
       if (cachedData) {
         try {
@@ -719,11 +997,16 @@ export async function getSuggestedPlaces(
 
     if (appMode === "real" && candidateSights.length === 0) {
       try {
-        const aiSuggestions = await suggestSights(anchor.lat, anchor.lng, [
-          ...Array.from(existingNames),
-          ...rejectedNames,
-          ...Array.from(seenSuggestionNames),
-        ]);
+        const aiSuggestions = await suggestSights(
+          anchor.lat,
+          anchor.lng,
+          [
+            ...Array.from(existingNames),
+            ...rejectedNames,
+            ...Array.from(seenSuggestionNames),
+          ],
+          type
+        );
 
         const enrichedSuggestions = await Promise.all(
           aiSuggestions.map(async (suggestion, idx) => {
@@ -803,7 +1086,18 @@ export async function getSuggestedPlaces(
     if (candidateSights.length === 0) {
       const isKyoto = Math.abs(anchor.lat - 35.01) < 0.3 && Math.abs(anchor.lng - 135.76) < 0.3;
       const isTokyo = Math.abs(anchor.lat - 35.68) < 0.4 && Math.abs(anchor.lng - 139.76) < 0.4;
-      const pool = isKyoto ? KYOTO_SIGHTS : isTokyo ? TOKYO_SIGHTS : getGenericSights(anchor.lat, anchor.lng);
+      const pool =
+        type === "food"
+          ? isKyoto
+            ? KYOTO_FOOD
+            : isTokyo
+              ? TOKYO_FOOD
+              : getGenericFood(anchor.lat, anchor.lng)
+          : isKyoto
+            ? KYOTO_SIGHTS
+            : isTokyo
+              ? TOKYO_SIGHTS
+              : getGenericSights(anchor.lat, anchor.lng);
 
       const rejectedSet = new Set(rejectedNames.map((n) => n.toLowerCase()));
       const available = pool.filter(
@@ -880,7 +1174,8 @@ export function getCachedSuggestions(
   places: Place[],
   hotels: Hotel[],
   customAnchor?: { lat: number; lng: number; label: string } | null,
-  flights: (Place | null)[] = []
+  flights: (Place | null)[] = [],
+  type: RecommendationType = "sights"
 ): (Place & { nearestHotel?: { name: string; distanceM: number } })[] | null {
   let anchors: { lat: number; lng: number; label: string }[] = [];
 
@@ -900,8 +1195,6 @@ export function getCachedSuggestions(
 
   if (anchors.length === 0) return null;
 
-
-
   const isDuplicate = (name: string, lat: number, lng: number) => {
     return places.some((p) => isDuplicatePlace(p, { name, lat, lng }));
   };
@@ -910,13 +1203,21 @@ export function getCachedSuggestions(
   const seenSuggestionNames = new Set<string>();
 
   for (const anchor of anchors) {
-    const cacheKeyV4 = `re_route_suggestions_v4_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const cacheKeyV3 = `re_route_suggestions_v3_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const cacheKeyV4 = `re_route_suggestions_v4_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const cacheKeyV3 = `re_route_suggestions_v3_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const legacyKeyV4 = `re_route_suggestions_v4_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const legacyKeyV3 = `re_route_suggestions_v3_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cachedData =
       localStorage.getItem(cacheKeyV4) ||
       sessionStorage.getItem(cacheKeyV4) ||
       localStorage.getItem(cacheKeyV3) ||
-      sessionStorage.getItem(cacheKeyV3);
+      sessionStorage.getItem(cacheKeyV3) ||
+      (type === "sights"
+        ? localStorage.getItem(legacyKeyV4) ||
+          sessionStorage.getItem(legacyKeyV4) ||
+          localStorage.getItem(legacyKeyV3) ||
+          sessionStorage.getItem(legacyKeyV3)
+        : null);
     if (!cachedData) return null; // not cached yet
 
     try {

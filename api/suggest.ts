@@ -64,7 +64,7 @@ export default async function handler(req: Request) {
 
   try {
     const body = await req.json();
-    const { lat, lng, rejectedNames = [] } = body;
+    const { lat, lng, rejectedNames = [], type = "sights" } = body;
 
     if (lat === undefined || lng === undefined) {
       return new Response(
@@ -73,7 +73,49 @@ export default async function handler(req: Request) {
       );
     }
 
-    const prompt = `
+    const isFood = type === "food";
+    const prompt = isFood
+      ? `
+      You are a professional culinary travel expert, food critic, and local guide. I need exactly 6 highly rated, iconic restaurants, authentic local eateries, famous food stalls, street markets, or specialty cafes near latitude ${lat}, longitude ${lng}.
+      DO NOT recommend any of these places: ${(rejectedNames || []).join(", ") || "None"}.
+      Focus on places celebrated for distinct must-try dishes, beloved local classics, or exceptional dining experiences.
+      
+      For each place, provide:
+      - 3-7 comma-separated, punchy phrases highlighting the core food vibe, specialties, and dining atmosphere in "description".
+      - Categorize into one of: restaurant, coffee_shop, nightlife, shopping.
+      - Estimated dining/visit duration in minutes in "estimatedDuration" (typically 45-90 mins).
+      - Typical cost per person in local currency (e.g. "¥1,000 - ¥2,500", "$15 - $35 / person") in "priceEstimate".
+      - CRITICAL HIGHLIGHT GUIDELINES in "highlight": { "label": "Must-Try" | "Must-Order", "text": "Exact signature dish name, specialty cut of meat, noodle broth, dessert, or drink this venue is famous for" }.
+      - RESERVATION GUIDELINES in "reservation":
+        {
+          "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
+          "advanceTime": <string with concrete timing, e.g. "Walk-ins only; line forms 15m before opening", "Walk-ins only; peak wait 30m at dinner", "Reserve 1 month ahead via official site", "No reservation needed">,
+          "notes": <string or null>
+        }
+
+      Return ONLY a JSON array of objects with this exact structure:
+      [
+        {
+          "name": "Exact Place Name",
+          "description": "Short punchy description highlighting food vibe and famous dishes.",
+          "category": "restaurant" | "coffee_shop" | "nightlife" | "shopping",
+          "lat": number,
+          "lng": number,
+          "estimatedDuration": number,
+          "priceEstimate": "string",
+          "highlight": {
+            "label": "Must-Try" | "Must-Order",
+            "text": "Exact dish name"
+          },
+          "reservation": {
+            "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
+            "advanceTime": "string",
+            "notes": "string or null"
+          }
+        }
+      ]
+    `
+      : `
       You are a professional travel planner. I need exactly 6 highly recommended tourist attractions near latitude ${lat}, longitude ${lng}.
       DO NOT recommend any of these places: ${(rejectedNames || []).join(", ") || "None"}.
       

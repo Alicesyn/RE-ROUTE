@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouteStore } from "../../store/useRouteStore";
-import { getSuggestedPlaces, getCachedSuggestions } from "../../services/recommendationService";
+import {
+  getSuggestedPlaces,
+  getCachedSuggestions,
+  RecommendationType,
+} from "../../services/recommendationService";
 import { searchPlaces } from "../../services/mapsService";
 import { Place } from "../../types";
 import { getCategoryEmoji, getCategoryLabel, getActivePhotoUrl } from "../../utils/categoryUtils";
@@ -17,6 +21,7 @@ import {
   Compass,
   Loader2,
   RefreshCw,
+  Utensils,
 } from "lucide-react";
 import { PlaceHighlightBadge } from "../common/PlaceHighlightBadge";
 import { ReservationBadge } from "../common/ReservationBadge";
@@ -48,6 +53,7 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
   const distanceUnit = useRouteStore((s) => s.distanceUnit);
 
   const [suggestions, setSuggestions] = useState<Place[]>([]);
+  const [recType, setRecType] = useState<RecommendationType>("sights");
   const [loading, setLoading] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [dismissedNames, setDismissedNames] = useState<string[]>([]);
@@ -87,9 +93,11 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
     }
 
     const flights = [arrivalFlight?.location || null, departureFlight?.location || null];
-    const cached = getCachedSuggestions(places, hotels, customAnchor, flights);
+    const cached = getCachedSuggestions(places, hotels, customAnchor, flights, recType);
     if (cached && cached.length > 0) {
       setSuggestions(cached);
+    } else {
+      setSuggestions([]);
     }
   }, [
     places.length,
@@ -99,16 +107,20 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
     customAnchor?.lat,
     customAnchor?.lng,
     hasAnyAnchor,
+    recType,
   ]);
 
   // Explicit user-triggered fetch function (NEVER run automatically in a background effect)
   const handleFetchSuggestions = useCallback(
     async (
       overrideAnchor?: { lat: number; lng: number; label: string },
-      forceRefresh = false
+      forceRefresh = false,
+      overrideType?: RecommendationType
     ) => {
       const anchorToUse = overrideAnchor !== undefined ? overrideAnchor : customAnchor;
       if (!hasTripContext && !anchorToUse) return;
+
+      const typeToUse = overrideType || recType;
 
       setLoading(true);
       try {
@@ -124,16 +136,23 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
           allRejected,
           anchorToUse,
           flights,
-          forceRefresh
+          forceRefresh,
+          typeToUse
         );
         if (fetched && fetched.length > 0) {
           setSuggestions(fetched);
           scrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
           if (forceRefresh) {
-            toast.success(`Found ${fetched.length} new suggested sights!`, "Suggestions Refreshed");
+            toast.success(
+              `Found ${fetched.length} new ${typeToUse === "food" ? "food spots" : "suggested sights"}!`,
+              "Suggestions Refreshed"
+            );
           }
         } else if (forceRefresh) {
-          toast.info("No additional suggestions found for this area.", "Suggestions Refreshed");
+          toast.info(
+            `No additional ${typeToUse === "food" ? "food spots" : "suggestions"} found for this area.`,
+            "Suggestions Refreshed"
+          );
         }
       } catch (err) {
         console.error("Failed to fetch suggestions on user request:", err);
@@ -144,8 +163,24 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
         setLoading(false);
       }
     },
-    [places, hotels, appMode, dismissedNames, customAnchor, arrivalFlight, departureFlight, hasTripContext, suggestions]
+    [places, hotels, appMode, dismissedNames, customAnchor, arrivalFlight, departureFlight, hasTripContext, suggestions, recType]
   );
+
+  const handleSelectType = (newType: RecommendationType) => {
+    if (newType === recType) return;
+    setRecType(newType);
+
+    const flights = [arrivalFlight?.location || null, departureFlight?.location || null];
+    const cached = getCachedSuggestions(places, hotels, customAnchor, flights, newType);
+    if (cached && cached.length > 0) {
+      setSuggestions(cached);
+    } else if (suggestions.length > 0) {
+      // If user had suggestions open, seamlessly fetch suggestions for the newly selected category
+      handleFetchSuggestions(undefined, false, newType);
+    } else {
+      setSuggestions([]);
+    }
+  };
 
   // Search logic for custom destination input
   useEffect(() => {
@@ -256,7 +291,11 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
     return (
       <div className="mt-8 border-t border-surface-100 dark:border-surface-700/50 pt-6">
         <div className="flex items-center gap-2 mb-4 animate-pulse">
-          <Sparkles className="w-5 h-5 text-purple-400" />
+          {recType === "food" ? (
+            <Utensils className="w-5 h-5 text-amber-500" />
+          ) : (
+            <Sparkles className="w-5 h-5 text-purple-400" />
+          )}
           <div className="h-6 w-48 bg-surface-200 dark:bg-surface-700 rounded-md"></div>
         </div>
         <div className="flex gap-4 overflow-hidden py-2">
@@ -283,37 +322,93 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
   if (suggestions.length === 0) {
     return (
       <div className="mt-8 border-t border-surface-100 dark:border-surface-700/50 pt-6">
-        <div className="bg-gradient-to-br from-purple-50/50 via-white to-surface-50 dark:from-purple-950/20 dark:via-surface-800 dark:to-surface-850 border border-purple-100 dark:border-purple-900/30 rounded-2xl p-5 shadow-sm">
+        <div
+          className={`border rounded-2xl p-5 shadow-sm bg-gradient-to-br ${
+            recType === "food"
+              ? "from-amber-50/50 via-white to-surface-50 dark:from-amber-950/20 dark:via-surface-800 dark:to-surface-850 border-amber-200/60 dark:border-amber-900/40"
+              : "from-purple-50/50 via-white to-surface-50 dark:from-purple-950/20 dark:via-surface-800 dark:to-surface-850 border-purple-100 dark:border-purple-900/30"
+          }`}
+        >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
-                <Compass className="w-5 h-5" />
+              <div
+                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                  recType === "food"
+                    ? "bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400"
+                    : "bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400"
+                }`}
+              >
+                {recType === "food" ? <Utensils className="w-5 h-5" /> : <Compass className="w-5 h-5" />}
               </div>
               <div>
                 <h3 className="text-sm font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
-                  Suggested Sights
-                  <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 border border-purple-200/50 dark:border-purple-800/40 px-2 py-0.5 rounded-full">
+                  {recType === "food" ? "Suggested Food & Dining" : "Suggested Sights"}
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                      recType === "food"
+                        ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200/50 dark:border-amber-800/40"
+                        : "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 border-purple-200/50 dark:border-purple-800/40"
+                    }`}
+                  >
                     On Demand
                   </span>
                 </h3>
                 <p className="text-xs text-surface-500 dark:text-surface-400">
                   {hasTripContext
-                    ? "Discover curated sights and top tourist attractions near your itinerary:"
+                    ? recType === "food"
+                      ? "Discover iconic restaurants, local street food, and must-try dishes near your itinerary:"
+                      : "Discover curated sights and top tourist attractions near your itinerary:"
+                    : recType === "food"
+                    ? "Add a hotel or place above, or explore culinary spots around any destination:"
                     : "Add a hotel or place above, or explore suggestions around any destination:"}
                 </p>
               </div>
             </div>
 
-            {/* If itinerary context exists, show explicit "Suggest Sights" action button */}
-            {hasTripContext && (
-              <button
-                onClick={() => handleFetchSuggestions()}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all shrink-0 self-start sm:self-auto active:scale-95"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Suggest Nearby Sights</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto flex-wrap">
+              {/* Type selector toggle (Sights vs Food) */}
+              <div className="inline-flex p-0.5 rounded-lg bg-surface-200/70 dark:bg-surface-900/70 border border-surface-200 dark:border-surface-700">
+                <button
+                  type="button"
+                  onClick={() => handleSelectType("sights")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                    recType === "sights"
+                      ? "bg-white dark:bg-surface-800 text-purple-700 dark:text-purple-300 shadow-sm font-bold"
+                      : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
+                  }`}
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>Sights</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectType("food")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                    recType === "food"
+                      ? "bg-white dark:bg-surface-800 text-amber-600 dark:text-amber-400 shadow-sm font-bold"
+                      : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
+                  }`}
+                >
+                  <Utensils className="w-3.5 h-3.5" />
+                  <span>Food & Dining</span>
+                </button>
+              </div>
+
+              {/* If itinerary context exists, show explicit "Suggest" action button */}
+              {hasTripContext && (
+                <button
+                  onClick={() => handleFetchSuggestions()}
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all active:scale-95 ${
+                    recType === "food"
+                      ? "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-amber-500/20"
+                      : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/20"
+                  }`}
+                >
+                  {recType === "food" ? <Utensils className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                  <span>{recType === "food" ? "Suggest Nearby Food" : "Suggest Nearby Sights"}</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Optional Location Search Input */}
@@ -385,7 +480,11 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                     label: city.name,
                   })
                 }
-                className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 bg-white dark:bg-surface-900 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/40 px-2.5 py-1 rounded-lg transition-all"
+                className={`text-[11px] font-semibold bg-white dark:bg-surface-900 border px-2.5 py-1 rounded-lg transition-all ${
+                  recType === "food"
+                    ? "text-amber-600 dark:text-amber-400 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-amber-200/60 dark:border-amber-800/40"
+                    : "text-purple-600 dark:text-purple-400 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/40 border-purple-200/60 dark:border-purple-800/40"
+                }`}
               >
                 {city.name.split(",")[0]}
               </button>
@@ -401,14 +500,52 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
     <div className="mt-8 border-t border-surface-100 dark:border-surface-700/50 pt-6 relative group/section">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <Sparkles className="w-5 h-5 text-purple-500 animate-pulse" />
+          {recType === "food" ? (
+            <Utensils className="w-5 h-5 text-amber-500 animate-pulse" />
+          ) : (
+            <Sparkles className="w-5 h-5 text-purple-500 animate-pulse" />
+          )}
           <h3 className="text-sm font-black text-surface-900 dark:text-white uppercase tracking-wider">
-            Suggested Sights
+            {recType === "food" ? "Suggested Food & Dining" : "Suggested Sights"}
           </h3>
+
+          {/* Sights / Food Type Toggle */}
+          <div className="inline-flex p-0.5 rounded-lg bg-surface-100 dark:bg-surface-800 border border-surface-200/60 dark:border-surface-700/60 ml-1">
+            <button
+              type="button"
+              onClick={() => handleSelectType("sights")}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-semibold rounded-md transition-all ${
+                recType === "sights"
+                  ? "bg-white dark:bg-surface-700 text-purple-700 dark:text-purple-300 shadow-sm font-bold"
+                  : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
+              }`}
+            >
+              <Compass className="w-3 h-3" />
+              <span>Sights</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectType("food")}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-semibold rounded-md transition-all ${
+                recType === "food"
+                  ? "bg-white dark:bg-surface-700 text-amber-600 dark:text-amber-400 shadow-sm font-bold"
+                  : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
+              }`}
+            >
+              <Utensils className="w-3 h-3" />
+              <span>Food & Dining</span>
+            </button>
+          </div>
 
           {/* Anchor Context Tag */}
           {customAnchor ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-950/50 px-2.5 py-0.5 rounded-full">
+            <span
+              className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                recType === "food"
+                  ? "text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-950/50"
+                  : "text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-950/50"
+              }`}
+            >
               <MapPin className="w-3 h-3" />
               Near {customAnchor.label}
               <button
@@ -420,7 +557,13 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
               </button>
             </span>
           ) : (
-            <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 px-2 py-0.5 rounded-full uppercase tracking-tight">
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tight ${
+                recType === "food"
+                  ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30"
+                  : "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30"
+              }`}
+            >
               Near Your Itinerary
             </span>
           )}
@@ -429,17 +572,33 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
           <button
             onClick={() => handleFetchSuggestions(undefined, true)}
             disabled={loading}
-            className="text-[11px] font-semibold text-surface-500 hover:text-purple-600 dark:text-surface-400 dark:hover:text-purple-300 flex items-center gap-1 transition-colors ml-1 disabled:opacity-50"
-            title="Refresh suggestions with new places"
+            className={`text-[11px] font-semibold flex items-center gap-1 transition-colors ml-1 disabled:opacity-50 ${
+              recType === "food"
+                ? "text-surface-500 hover:text-amber-600 dark:text-surface-400 dark:hover:text-amber-300"
+                : "text-surface-500 hover:text-purple-600 dark:text-surface-400 dark:hover:text-purple-300"
+            }`}
+            title={`Refresh suggestions with new ${recType === "food" ? "food spots" : "sights"}`}
           >
-            <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin text-purple-600 dark:text-purple-400" : ""}`} />
+            <RefreshCw
+              className={`w-3 h-3 ${
+                loading
+                  ? recType === "food"
+                    ? "animate-spin text-amber-600 dark:text-amber-400"
+                    : "animate-spin text-purple-600 dark:text-purple-400"
+                  : ""
+              }`}
+            />
             <span>{loading ? "Refreshing..." : "Refresh"}</span>
           </button>
 
           {/* Toggle Search Another Area */}
           <button
             onClick={() => setShowLocationSearch(!showLocationSearch)}
-            className="text-[11px] font-semibold text-surface-500 hover:text-purple-600 dark:text-surface-400 dark:hover:text-purple-300 flex items-center gap-1 transition-colors ml-1"
+            className={`text-[11px] font-semibold flex items-center gap-1 transition-colors ml-1 ${
+              recType === "food"
+                ? "text-surface-500 hover:text-amber-600 dark:text-surface-400 dark:hover:text-amber-300"
+                : "text-surface-500 hover:text-purple-600 dark:text-surface-400 dark:hover:text-purple-300"
+            }`}
           >
             <Search className="w-3 h-3" />
             {showLocationSearch ? "Close search" : "Explore other area"}
@@ -511,24 +670,40 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
       <div className="relative min-h-[160px] flex items-center justify-center">
         {loading && suggestions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 gap-2 text-surface-400">
-            <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+            <Loader2
+              className={`w-6 h-6 animate-spin ${
+                recType === "food" ? "text-amber-500" : "text-purple-500"
+              }`}
+            />
             <span className="text-xs font-semibold text-surface-600 dark:text-surface-300">
-              Discovering fresh sights for your itinerary...
+              {recType === "food"
+                ? "Discovering delicious food spots for your itinerary..."
+                : "Discovering fresh sights for your itinerary..."}
             </span>
           </div>
         ) : suggestions.length === 0 ? (
           <div className="w-full py-8 px-4 text-center border border-dashed border-surface-200 dark:border-surface-700 rounded-xl bg-surface-50/50 dark:bg-surface-800/30">
-            <Compass className="w-7 h-7 text-purple-400 mx-auto mb-2 opacity-60" />
+            {recType === "food" ? (
+              <Utensils className="w-7 h-7 text-amber-500 mx-auto mb-2 opacity-60" />
+            ) : (
+              <Compass className="w-7 h-7 text-purple-400 mx-auto mb-2 opacity-60" />
+            )}
             <p className="text-xs font-semibold text-surface-600 dark:text-surface-300">
-              No suggested sights loaded yet. Click Refresh to explore ideas!
+              {recType === "food"
+                ? "No suggested food spots loaded yet. Click Refresh to explore ideas!"
+                : "No suggested sights loaded yet. Click Refresh to explore ideas!"}
             </p>
             <button
               onClick={() => handleFetchSuggestions(undefined, true)}
               disabled={loading}
-              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50"
+              className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${
+                recType === "food"
+                  ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20"
+                  : "bg-purple-600 hover:bg-purple-700 shadow-purple-500/20"
+              }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              Explore Suggestions
+              {recType === "food" ? <Utensils className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+              <span>{recType === "food" ? "Explore Food Spots" : "Explore Suggestions"}</span>
             </button>
           </div>
         ) : (
@@ -664,9 +839,17 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                       </p>
                       <div className="absolute -inset-x-2.5 -top-2.5 bottom-auto z-40 hidden group-hover/desc:block animate-in fade-in zoom-in-95 duration-150">
                         <div className="p-3 rounded-xl bg-surface-900/95 dark:bg-surface-800/98 text-white shadow-2xl border border-surface-700/80 backdrop-blur-md">
-                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">
-                            <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
-                            <span>About this sight</span>
+                          <div
+                            className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                              recType === "food" ? "text-amber-400" : "text-purple-400"
+                            }`}
+                          >
+                            {recType === "food" ? (
+                              <Utensils className="w-3 h-3 text-amber-400 shrink-0" />
+                            ) : (
+                              <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
+                            )}
+                            <span>{recType === "food" ? "About this food spot" : "About this sight"}</span>
                           </div>
                           <p className="text-[11px] leading-relaxed text-surface-100 select-text font-normal">
                             {place.description}
@@ -702,7 +885,11 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:underline transition-colors"
+                    className={`inline-flex items-center gap-1 text-xs font-bold hover:underline transition-colors ${
+                      recType === "food"
+                        ? "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+                        : "text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+                    }`}
                     title="View on Google Maps"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -714,6 +901,8 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                     className={`inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm ${
                       isAdded
                         ? "bg-emerald-500 text-white shadow-emerald-200 dark:shadow-none pointer-events-none scale-95"
+                        : recType === "food"
+                        ? "bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 dark:text-amber-300 border border-amber-200/40 dark:border-amber-900/30 hover:scale-105 active:scale-95"
                         : "bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:hover:bg-purple-900/40 dark:text-purple-400 border border-purple-200/40 dark:border-purple-900/30 hover:scale-105 active:scale-95"
                     }`}
                   >

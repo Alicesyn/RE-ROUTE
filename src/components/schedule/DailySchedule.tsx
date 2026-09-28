@@ -278,7 +278,14 @@ export const DailySchedule: React.FC = React.memo(() => {
   const handleClearSchedule = () => {
     clearOptimizedSchedule();
     setShowClearConfirm(false);
-    toast.info("Schedule cleared. Restrictions, pins, and reservations preserved.", "Schedule Cleared");
+    if (exemptDays.length > 0) {
+      toast.info(
+        `Schedule cleared (${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} preserved). Places from unlocked days returned to pool.`,
+        "Schedule Cleared"
+      );
+    } else {
+      toast.info("Schedule cleared. All places returned to unassigned pool.", "Schedule Cleared");
+    }
   };
 
   const sensors = useSensors(
@@ -298,7 +305,7 @@ export const DailySchedule: React.FC = React.memo(() => {
     }),
   );
 
-  if (optimizedRoutes.length === 0) return null;
+  const isAllDaysLocked = optimizedRoutes.length > 0 && exemptDays.length >= optimizedRoutes.length;
 
   // Calculate day total in minutes
   const [startH, startM] = dayStartTime.split(":").map(Number);
@@ -366,6 +373,8 @@ export const DailySchedule: React.FC = React.memo(() => {
     }
   };
 
+  if (optimizedRoutes.length === 0) return null;
+
   return (
     <>
       <div className="schedule-container">
@@ -423,7 +432,9 @@ export const DailySchedule: React.FC = React.memo(() => {
 
             {showClearConfirm ? (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/80 rounded-lg animate-in fade-in zoom-in-95 duration-150">
-                <span className="text-xs font-semibold text-red-700 dark:text-red-300">Clear all days?</span>
+                <span className="text-xs font-semibold text-red-700 dark:text-red-300">
+                  {exemptDays.length > 0 ? "Clear all except for locked days?" : "Clear all days?"}
+                </span>
                 <button
                   type="button"
                   onClick={handleClearSchedule}
@@ -443,11 +454,19 @@ export const DailySchedule: React.FC = React.memo(() => {
               <button
                 type="button"
                 onClick={() => setShowClearConfirm(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100/90 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800/60 transition-all shadow-2xs cursor-pointer"
-                title="Clear optimized schedule and return places to unassigned pool"
+                disabled={isAllDaysLocked}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100/90 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800/60 transition-all shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  isAllDaysLocked
+                    ? "All days are locked"
+                    : exemptDays.length > 0
+                    ? `Clear unlocked days and return places to unassigned pool (${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} preserved)`
+                    : "Clear optimized schedule and return places to unassigned pool"
+                }
+                aria-label={exemptDays.length > 0 ? "Clear all except for locked days" : "Clear schedule"}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear Schedule</span>
+                <span>{exemptDays.length > 0 ? "Clear Unlocked Days" : "Clear Schedule"}</span>
               </button>
             )}
           </div>
@@ -1180,8 +1199,13 @@ export const DailySchedule: React.FC = React.memo(() => {
                         strategy={verticalListSortingStrategy}
                       >
                         <div className="flex flex-col relative">
-                          {(() => {
-                            let lastMealDepartureTime: number | null = null;
+                          {itemScheduleList.length === 0 ? (
+                            <div className="py-12 text-center text-xs text-surface-400 dark:text-surface-500 italic">
+                              No places scheduled
+                            </div>
+                          ) : (
+                            (() => {
+                              let lastMealDepartureTime: number | null = null;
 
                             return itemScheduleList.map((item) => {
                               const {
@@ -1393,7 +1417,8 @@ export const DailySchedule: React.FC = React.memo(() => {
                                 </React.Fragment>
                               );
                             });
-                          })()}
+                          })()
+                        )}
                         </div>
                       </SortableContext>
                     </DndContext>

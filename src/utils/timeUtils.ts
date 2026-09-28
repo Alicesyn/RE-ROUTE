@@ -61,6 +61,10 @@ export const parseOpeningHoursString = (
           startPeriod = "PM"; // e.g. 12:00 - 2:30 PM -> 12:00 PM (noon)
         } else if (cH === 12) {
           startPeriod = "AM"; // e.g. 10:00 - 12:00 PM -> 10:00 AM to 12:00 PM
+        } else if (oH === cH) {
+          startPeriod = "AM"; // e.g. 10:00 - 10:00 PM -> 10:00 AM to 10:00 PM (never 10 PM to 10 PM)
+        } else if (oH >= 7 && oH <= 11 && cH >= 7 && cH <= 11) {
+          startPeriod = "AM"; // e.g. 9:00 - 10:00 PM, 10:00 - 11:00 PM -> morning to night
         } else {
           // e.g. 1:00 - 7:00 PM -> start is PM. But 9:00 - 5:00 PM -> start is AM.
           startPeriod = oH <= cH ? "PM" : "AM";
