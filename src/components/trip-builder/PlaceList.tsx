@@ -487,6 +487,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           id: p.id,
           updates: {
             allowedDayRanges: ranges && ranges.length > 0 ? ranges.map((r) => ({ ...r })) : undefined,
+            dayRangeMode: ranges && ranges.length > 0 ? p.dayRangeMode : undefined,
             ...(isOutOfRange ? { dayIndex: null, orderInDay: null, pinnedToDay: false } : {}),
           },
         };

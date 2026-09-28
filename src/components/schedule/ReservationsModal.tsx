@@ -734,7 +734,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
           </div>
 
           {/* Footer Bar */}
-          <div className="flex flex-wrap items-center justify-between px-5 py-3 border-t border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-800/70 text-xs text-surface-500 dark:text-surface-400 gap-2 safe-pb">
+          <div className="flex flex-wrap items-center justify-between px-5 sm:px-6 py-4 sm:py-5 pb-5 sm:pb-6 border-t border-surface-200 dark:border-surface-700 bg-surface-50/90 dark:bg-surface-800/90 text-xs text-surface-500 dark:text-surface-400 gap-3 shrink-0">
             <span className="flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>Target booking opening dates automatically compute from your trip schedule.</span>
@@ -743,7 +743,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 rounded-lg bg-surface-200 hover:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-800 dark:text-white font-semibold transition-colors"
+              className="px-5 py-2 rounded-xl bg-surface-200 hover:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600 text-surface-800 dark:text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               Done
             </button>

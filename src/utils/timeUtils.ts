@@ -240,6 +240,7 @@ export const checkTimeConflict = (
 
   // 1. Check user-defined preferred time window constraint (allowedTimeRange)
   if (allowedTimeRange && allowedTimeRange.startTime && allowedTimeRange.endTime) {
+    const isExclude = allowedTimeRange.mode === "exclude";
     const rangeStart = parseTimeToMinutes(allowedTimeRange.startTime);
     let rangeEnd = parseTimeToMinutes(allowedTimeRange.endTime);
     // If rangeEnd is 0 (e.g. "00:00" / 12:00 AM) or wraps past midnight (rangeEnd < rangeStart),
@@ -251,17 +252,29 @@ export const checkTimeConflict = (
     }
     const depTime = arrivalTimeMinutes + durationMinutes;
 
-    if (arrivalTimeMinutes < rangeStart) {
-      const wait = rangeStart - arrivalTimeMinutes;
-      waitMinutes = Math.max(waitMinutes, wait);
-      effectiveStartTime = Math.max(effectiveStartTime, rangeStart);
-      if (wait > 30) {
+    if (isExclude) {
+      // Exclude / NOT mode: conflict if the visit overlaps the forbidden window
+      if (arrivalTimeMinutes < rangeEnd && depTime > rangeStart) {
         hasConflict = true;
-        reason = `Outside preferred hours (opens at ${formatMinutesTo12h(rangeStart)})`;
+        reason = `Within excluded hours (NOT ${formatMinutesTo12h(rangeStart)} – ${formatMinutesTo12h(rangeEnd)})`;
+        if (arrivalTimeMinutes >= rangeStart && arrivalTimeMinutes < rangeEnd) {
+          effectiveStartTime = Math.max(effectiveStartTime, rangeEnd);
+        }
       }
-    } else if (depTime > rangeEnd || arrivalTimeMinutes >= rangeEnd) {
-      hasConflict = true;
-      reason = `Outside preferred hours (closes at ${formatMinutesTo12h(rangeEnd)})`;
+    } else {
+      // Allow mode (default): visit must fall entirely within [rangeStart, rangeEnd]
+      if (arrivalTimeMinutes < rangeStart) {
+        const wait = rangeStart - arrivalTimeMinutes;
+        waitMinutes = Math.max(waitMinutes, wait);
+        effectiveStartTime = Math.max(effectiveStartTime, rangeStart);
+        if (wait > 30) {
+          hasConflict = true;
+          reason = `Outside preferred hours (opens at ${formatMinutesTo12h(rangeStart)})`;
+        }
+      } else if (depTime > rangeEnd || arrivalTimeMinutes >= rangeEnd) {
+        hasConflict = true;
+        reason = `Outside preferred hours (closes at ${formatMinutesTo12h(rangeEnd)})`;
+      }
     }
   }
 

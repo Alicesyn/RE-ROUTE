@@ -348,7 +348,7 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
             <ReservationBadge reservation={place.reservation} compact />
           )}
 
-          {/* Allowed Day Range Badge or Add Day Range chip */}
+          {/* Allowed / Excluded Day Range Badge or Add Day Range chip */}
           {place.allowedDayRanges && place.allowedDayRanges.length > 0 ? (
             <button
               type="button"
@@ -356,11 +356,15 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
                 e.stopPropagation();
                 onEdit?.(place.id);
               }}
-              className="flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 shadow-2xs whitespace-nowrap hover:bg-indigo-100 dark:hover:bg-indigo-900/60 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-pointer"
-              title={`Allowed schedule range: ${formatMultiRangeBadge(place.allowedDayRanges, startDate, dayTitles).fullLabel} (Click to edit)`}
+              className={`flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border shadow-2xs whitespace-nowrap transition-colors cursor-pointer ${
+                place.dayRangeMode === "exclude"
+                  ? "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/80 hover:bg-rose-100 dark:hover:bg-rose-900/60 hover:border-rose-300 dark:hover:border-rose-700"
+                  : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 hover:border-indigo-300 dark:hover:border-indigo-700"
+              }`}
+              title={`${place.dayRangeMode === "exclude" ? "Excluded schedule dates (NOT)" : "Allowed schedule range"}: ${formatMultiRangeBadge(place.allowedDayRanges, startDate, dayTitles, place.dayRangeMode).fullLabel} (Click to edit)`}
             >
-              <CalendarDays className="w-3 h-3 text-indigo-500 shrink-0" />
-              <span>{formatMultiRangeBadge(place.allowedDayRanges, startDate, dayTitles).fullLabel}</span>
+              <CalendarDays className={`w-3 h-3 shrink-0 ${place.dayRangeMode === "exclude" ? "text-rose-500" : "text-indigo-500"}`} />
+              <span>{formatMultiRangeBadge(place.allowedDayRanges, startDate, dayTitles, place.dayRangeMode).fullLabel}</span>
             </button>
           ) : (
             <button
@@ -377,7 +381,7 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
             </button>
           )}
 
-          {/* Allowed Time Window Badge */}
+          {/* Allowed / Excluded Time Window Badge */}
           {place.allowedTimeRange && place.allowedTimeRange.startTime && place.allowedTimeRange.endTime && (
             <button
               type="button"
@@ -385,11 +389,15 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
                 e.stopPropagation();
                 onEdit?.(place.id);
               }}
-              className="flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/80 shadow-2xs whitespace-nowrap hover:bg-teal-100 dark:hover:bg-teal-900/60 hover:border-teal-300 dark:hover:border-teal-700 transition-colors cursor-pointer"
-              title={`Allowed schedule time window: ${formatTimeLabel(place.allowedTimeRange.startTime)} – ${formatTimeLabel(place.allowedTimeRange.endTime)} (Click to edit)`}
+              className={`flex items-center gap-1 text-xs font-semibold rounded-md px-1.5 py-0.5 border shadow-2xs whitespace-nowrap transition-colors cursor-pointer ${
+                place.allowedTimeRange.mode === "exclude"
+                  ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/80 hover:bg-amber-100 dark:hover:bg-amber-900/60 hover:border-amber-300 dark:hover:border-amber-700"
+                  : "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/80 hover:bg-teal-100 dark:hover:bg-teal-900/60 hover:border-teal-300 dark:hover:border-teal-700"
+              }`}
+              title={`${place.allowedTimeRange.mode === "exclude" ? "Excluded schedule time window (NOT)" : "Allowed schedule time window"}: ${place.allowedTimeRange.mode === "exclude" ? "NOT " : ""}${formatTimeLabel(place.allowedTimeRange.startTime)} – ${formatTimeLabel(place.allowedTimeRange.endTime)} (Click to edit)`}
             >
-              <Clock className="w-3 h-3 text-teal-600 dark:text-teal-400 shrink-0" />
-              <span>{formatTimeLabel(place.allowedTimeRange.startTime)} – {formatTimeLabel(place.allowedTimeRange.endTime)}</span>
+              <Clock className={`w-3 h-3 shrink-0 ${place.allowedTimeRange.mode === "exclude" ? "text-amber-600 dark:text-amber-400" : "text-teal-600 dark:text-teal-400"}`} />
+              <span>{place.allowedTimeRange.mode === "exclude" ? "NOT " : ""}{formatTimeLabel(place.allowedTimeRange.startTime)} – {formatTimeLabel(place.allowedTimeRange.endTime)}</span>
             </button>
           )}
         </div>

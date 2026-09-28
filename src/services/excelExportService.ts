@@ -101,9 +101,13 @@ const COLORS = {
 // Font family default
 const FONT_FAMILY = "Segoe UI";
 
-interface ExportOptions {
+export interface ExportOptions {
   distanceUnit?: "metric" | "imperial";
   timeFormat?: "12h" | "24h";
+}
+
+export interface ExportReservationsOptions extends ExportOptions {
+  enrichedPlaces?: EnrichedReservationPlace[];
 }
 
 const parseTimeToMinutes = (timeStr: string): number => {
@@ -1162,23 +1166,9 @@ export async function exportTripToExcel(
   );
 
   // -------------------------------------------------------------------------
-  // SHEETS 3..N: 📍 DAY 1, DAY 2... (Individual Daily Pages)
+  // RESERVATIONS & BOOKING HUB PAGES
   // -------------------------------------------------------------------------
-  trip.optimizedRoutes.forEach((route, dayIdx) => {
-    const customTitle = route.title || trip.dayTitles?.[dayIdx];
-    let tabName = customTitle ? `📍 ${customTitle.slice(0, 22)}` : `📍 Day ${dayIdx + 1}`;
-    if (!customTitle && trip.dateMode === "fixed" && trip.startDate) {
-      const d = addDays(parseISO(trip.startDate), dayIdx);
-      tabName = `📍 Day ${dayIdx + 1} (${format(d, "MMM d")})`;
-    }
-
-    const daySheet = workbook.addWorksheet(tabName, {
-      properties: { tabColor: { argb: COLORS.BLUE_ACCENT } },
-      views: [{ state: "frozen", ySplit: 2, showGridLines: true }],
-    });
-
-    buildScheduleTable(daySheet, [{ route, dayIdx }]);
-  });
+  appendReservationsWorksheets(workbook, trip, options);
 
   // -------------------------------------------------------------------------
   // FINAL SHEET: 📋 PLACES CATALOG (Master Directory)
@@ -1333,6 +1323,25 @@ export async function exportTripToExcel(
   };
 
   // -------------------------------------------------------------------------
+  // INDIVIDUAL DAILY PAGES (📍 Day 1, Day 2...)
+  // -------------------------------------------------------------------------
+  trip.optimizedRoutes.forEach((route, dayIdx) => {
+    const customTitle = route.title || trip.dayTitles?.[dayIdx];
+    let tabName = customTitle ? `📍 ${customTitle.slice(0, 22)}` : `📍 Day ${dayIdx + 1}`;
+    if (!customTitle && trip.dateMode === "fixed" && trip.startDate) {
+      const d = addDays(parseISO(trip.startDate), dayIdx);
+      tabName = `📍 Day ${dayIdx + 1} (${format(d, "MMM d")})`;
+    }
+
+    const daySheet = workbook.addWorksheet(tabName, {
+      properties: { tabColor: { argb: COLORS.BLUE_ACCENT } },
+      views: [{ state: "frozen", ySplit: 2, showGridLines: true }],
+    });
+
+    buildScheduleTable(daySheet, [{ route, dayIdx }]);
+  });
+
+  // -------------------------------------------------------------------------
   // DOWNLOAD WORKBOOK IN BROWSER
   // -------------------------------------------------------------------------
   const buffer = await workbook.xlsx.writeBuffer();
@@ -1358,14 +1367,11 @@ export async function exportTripToExcel(
 // RESERVATIONS & BOOKING CHECKLIST EXCEL EXPORT
 // ---------------------------------------------------------------------------
 
-export interface ExportReservationsOptions extends ExportOptions {
-  enrichedPlaces?: EnrichedReservationPlace[];
-}
-
-export async function exportReservationsChecklistToExcel(
+export function appendReservationsWorksheets(
+  workbook: ExcelJS.Workbook,
   trip: ItinerarySnapshot,
   options: ExportReservationsOptions = {}
-): Promise<number> {
+): number {
   const timeFormat = options.timeFormat || "12h";
 
   // 1. Gather all reservation places
@@ -1487,12 +1493,6 @@ export async function exportReservationsChecklistToExcel(
   const readinessPct =
     totalCount > 0 ? Math.round((bookedCount / totalCount) * 100) : 0;
 
-  // 4. Initialize Workbook
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "RE:ROUTE Trip Planner";
-  workbook.lastModifiedBy = "RE:ROUTE Trip Planner";
-  workbook.created = new Date();
-  workbook.modified = new Date();
 
   // -------------------------------------------------------------------------
   // SHEET 1: Reservations Checklist
@@ -2268,6 +2268,24 @@ export async function exportReservationsChecklistToExcel(
     };
   }
 
+  return reservationItems.length;
+}
+
+export async function exportReservationsChecklistToExcel(
+  trip: ItinerarySnapshot,
+  options: ExportReservationsOptions = {}
+): Promise<number> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "RE:ROUTE Trip Planner";
+  workbook.lastModifiedBy = "RE:ROUTE Trip Planner";
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const count = appendReservationsWorksheets(workbook, trip, options);
+  if (count === 0) {
+    return 0;
+  }
+
   // -------------------------------------------------------------------------
   // DOWNLOAD WORKBOOK IN BROWSER
   // -------------------------------------------------------------------------
@@ -2288,6 +2306,6 @@ export async function exportReservationsChecklistToExcel(
     URL.revokeObjectURL(url);
   }
 
-  return reservationItems.length;
+  return count;
 }
 

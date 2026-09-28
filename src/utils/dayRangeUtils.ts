@@ -52,13 +52,51 @@ export function mergeOverlappingRanges(
 // ────────────────────────────────────────────────
 
 /**
+ * Computes the complement of excluded ranges across [0, totalDays - 1].
+ * E.g., if totalDays is 10 and excluded is [3–5], complement is [0–2, 6–9].
+ */
+export function computeDayRangeComplement(
+  excludedRanges: DayRangeConstraint[],
+  totalDays: number
+): DayRangeConstraint[] {
+  if (totalDays <= 0) return [];
+  if (excludedRanges.length === 0) {
+    return [{ startDay: 0, endDay: totalDays - 1 }];
+  }
+
+  const merged = mergeOverlappingRanges(
+    excludedRanges.map((r) => ({
+      startDay: Math.max(0, Math.min(totalDays - 1, r.startDay)),
+      endDay: Math.max(0, Math.min(totalDays - 1, r.endDay)),
+    }))
+  );
+
+  const complement: DayRangeConstraint[] = [];
+  let currentStart = 0;
+
+  for (const range of merged) {
+    if (range.startDay > currentStart) {
+      complement.push({ startDay: currentStart, endDay: range.startDay - 1 });
+    }
+    currentStart = Math.max(currentStart, range.endDay + 1);
+  }
+
+  if (currentStart < totalDays) {
+    complement.push({ startDay: currentStart, endDay: totalDays - 1 });
+  }
+
+  return complement;
+}
+
+/**
  * Returns the effective allowed day ranges for a place, incorporating pinning.
  * Returns null if the place is completely unconstrained.
  *
  * UNIFIES:
  * 1. Hard single-day pinning (pinnedToDay) -> [{dayIndex, dayIndex}]
  * 2. Range constraints (allowedDayRanges) -> [{startDay, endDay}, ...]
- * 3. Both combined (pin day takes precedence)
+ * 3. Excluded mode complement computation
+ * 4. Both combined (pin day takes precedence)
  */
 export function getEffectiveAllowedDayRanges(
   place: Place,
@@ -80,6 +118,9 @@ export function getEffectiveAllowedDayRanges(
   }
 
   if (ranges.length > 0) {
+    if (place.dayRangeMode === "exclude" && totalDays !== undefined && totalDays > 0) {
+      return computeDayRangeComplement(ranges, totalDays);
+    }
     return ranges.map((r) => ({
       startDay: Math.max(0, r.startDay),
       endDay: Math.min(r.endDay, maxDay),
@@ -108,16 +149,32 @@ export function getEffectiveAllowedDayRange(
 
 /**
  * Checks if a specific 0-indexed dayIndex is allowed for this place.
- * Returns true if dayIndex falls within ANY of the allowed ranges.
+ * Returns true if dayIndex is allowed according to the place's pinning and constraints.
  */
 export function isDayAllowedForPlace(
   place: Place,
   dayIndex: number,
   totalDays?: number
 ): boolean {
-  const ranges = getEffectiveAllowedDayRanges(place, totalDays);
-  if (!ranges || ranges.length === 0) return true;
-  return ranges.some((r) => dayIndex >= r.startDay && dayIndex <= r.endDay);
+  if (totalDays !== undefined && (dayIndex < 0 || dayIndex >= totalDays)) {
+    return false;
+  }
+
+  if (
+    place.pinnedToDay &&
+    place.dayIndex !== null &&
+    place.dayIndex !== undefined
+  ) {
+    return dayIndex === place.dayIndex;
+  }
+
+  const ranges = getAllowedDayRanges(place);
+  if (ranges.length === 0) return true;
+
+  const isExclude = place.dayRangeMode === "exclude";
+  const inAnyRange = ranges.some((r) => dayIndex >= r.startDay && dayIndex <= r.endDay);
+
+  return isExclude ? !inAnyRange : inAnyRange;
 }
 
 // ────────────────────────────────────────────────
@@ -218,14 +275,16 @@ export function formatDayRangeBadge(
 export function formatMultiRangeBadge(
   ranges: DayRangeConstraint[],
   startDateISO?: string,
-  dayTitles?: Record<number, string>
+  dayTitles?: Record<number, string>,
+  mode?: "allow" | "exclude"
 ): { fullLabel: string; rangeCount: number } {
   if (ranges.length === 0) {
     return { fullLabel: "No restriction", rangeCount: 0 };
   }
+  const prefix = mode === "exclude" ? "NOT " : "";
   if (ranges.length === 1) {
     return {
-      fullLabel: formatDayRangeBadge(ranges[0], startDateISO, dayTitles).fullLabel,
+      fullLabel: prefix + formatDayRangeBadge(ranges[0], startDateISO, dayTitles).fullLabel,
       rangeCount: 1,
     };
   }
@@ -234,7 +293,7 @@ export function formatMultiRangeBadge(
     (r) => formatDayRangeBadge(r, startDateISO, dayTitles).fullLabel
   );
   return {
-    fullLabel: labels.join(", "),
+    fullLabel: prefix + labels.join(", "),
     rangeCount: ranges.length,
   };
 }

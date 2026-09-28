@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus, Compass, FileText } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO, isValid, addDays, differenceInCalendarDays } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
 import { formatDayIndexLabel, mergeOverlappingRanges, MAX_DAY_RANGES, formatMultiRangeBadge } from "../../utils/dayRangeUtils";
@@ -52,14 +52,17 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [bookingUrl, setBookingUrl] = useState("");
   const [confirmationNumber, setConfirmationNumber] = useState("");
   const [customTimeVal, setCustomTimeVal] = useState("");
+  const [assignedDayIndex, setAssignedDayIndex] = useState<number | null>(null);
   const [pinnedToDay, setPinnedToDay] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [dismissedDuplicate, setDismissedDuplicate] = useState(false);
   const [hasDayRange, setHasDayRange] = useState(false);
+  const [dayRangeMode, setDayRangeMode] = useState<"allow" | "exclude">("allow");
   const [dayRangeRows, setDayRangeRows] = useState<DayRangeConstraint[]>([
     { startDay: 0, endDay: Math.max(0, days - 1) },
   ]);
   const [hasTimeRange, setHasTimeRange] = useState(false);
+  const [timeRangeMode, setTimeRangeMode] = useState<"allow" | "exclude">("allow");
   const [timeRangeStart, setTimeRangeStart] = useState("09:00");
   const [timeRangeEnd, setTimeRangeEnd] = useState("18:00");
   const [tabelogRating, setTabelogRating] = useState("");
@@ -96,11 +99,13 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setBookingUrl(place.reservation?.bookingUrl || "");
       setConfirmationNumber(place.reservation?.confirmationNumber || "");
       setCustomTimeVal(place.customTime || "");
+      setAssignedDayIndex(place.dayIndex ?? null);
       setPinnedToDay(!!place.pinnedToDay);
       setIsStarred(!!place.isStarred);
       setDismissedDuplicate(!!place.dismissedDuplicate);
       if (place.allowedDayRanges && place.allowedDayRanges.length > 0) {
         setHasDayRange(true);
+        setDayRangeMode(place.dayRangeMode || "allow");
         setDayRangeRows(
           place.allowedDayRanges.map((r) => ({
             startDay: Math.max(0, Math.min(days - 1, r.startDay)),
@@ -109,14 +114,17 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         );
       } else {
         setHasDayRange(false);
+        setDayRangeMode(place.dayRangeMode || "allow");
         setDayRangeRows([{ startDay: 0, endDay: Math.max(0, days - 1) }]);
       }
       if (place.allowedTimeRange && place.allowedTimeRange.startTime && place.allowedTimeRange.endTime) {
         setHasTimeRange(true);
+        setTimeRangeMode(place.allowedTimeRange.mode || "allow");
         setTimeRangeStart(place.allowedTimeRange.startTime);
         setTimeRangeEnd(place.allowedTimeRange.endTime);
       } else {
         setHasTimeRange(false);
+        setTimeRangeMode("allow");
         setTimeRangeStart("09:00");
         setTimeRangeEnd("18:00");
       }
@@ -140,6 +148,55 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   }, [place, days]);
 
   if (!place) return null;
+
+  const tripStartDateObj = startDate ? parseISO(startDate) : null;
+  const isTripDateValid = !!(tripStartDateObj && isValid(tripStartDateObj));
+  const minReservationDateStr = isTripDateValid ? format(tripStartDateObj, "yyyy-MM-dd") : undefined;
+  const maxReservationDateStr = isTripDateValid ? format(addDays(tripStartDateObj, Math.max(0, days - 1)), "yyyy-MM-dd") : undefined;
+
+  const currentReservationDateStr =
+    isTripDateValid && assignedDayIndex !== null && assignedDayIndex >= 0 && assignedDayIndex < days
+      ? format(addDays(tripStartDateObj, assignedDayIndex), "yyyy-MM-dd")
+      : "";
+
+  const handleReservationDateChange = (dateStr: string) => {
+    if (!dateStr) {
+      setAssignedDayIndex(null);
+      setPinnedToDay(false);
+      return;
+    }
+    if (isTripDateValid && tripStartDateObj) {
+      try {
+        const parsed = parseISO(dateStr);
+        if (isValid(parsed)) {
+          const diff = differenceInCalendarDays(parsed, tripStartDateObj);
+          if (diff >= 0 && diff < days) {
+            setAssignedDayIndex(diff);
+            setPinnedToDay(true); // Auto pin!
+            if (hasDayRange && !dayRangeRows.some((r) => diff >= r.startDay && diff <= r.endDay)) {
+              setDayRangeRows((prev) => [...prev, { startDay: diff, endDay: diff }]);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleReservationDaySelect = (dayVal: string) => {
+    if (dayVal === "") {
+      setAssignedDayIndex(null);
+      setPinnedToDay(false);
+    } else {
+      const idx = parseInt(dayVal, 10);
+      setAssignedDayIndex(idx);
+      setPinnedToDay(true); // Auto pin!
+      if (hasDayRange && !dayRangeRows.some((r) => idx >= r.startDay && idx <= r.endDay)) {
+        setDayRangeRows((prev) => [...prev, { startDay: idx, endDay: idx }]);
+      }
+    }
+  };
 
   // Opening hours helper functions
   const updateDayEntry = (dayIndex: number, updates: Partial<DayHoursEntry>) => {
@@ -273,22 +330,34 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       )
       : undefined;
 
+    const finalDayRangeMode = hasDayRange ? dayRangeMode : undefined;
+
     const finalAllowedTimeRange: TimeRangeConstraint | undefined = (hasTimeRange && timeRangeStart && timeRangeEnd)
       ? {
         startTime: timeRangeStart,
         endTime: timeRangeEnd,
+        mode: timeRangeMode,
       }
       : undefined;
 
+    const prevDayIndex = place.dayIndex ?? null;
     const isDayOutOfRange =
-      place.dayIndex !== null &&
-      place.dayIndex !== undefined &&
+      assignedDayIndex !== null &&
       finalAllowedDayRanges !== undefined &&
-      !finalAllowedDayRanges.some((r) => place.dayIndex! >= r.startDay && place.dayIndex! <= r.endDay);
+      (finalDayRangeMode === "exclude"
+        ? finalAllowedDayRanges.some((r) => assignedDayIndex >= r.startDay && assignedDayIndex <= r.endDay)
+        : !finalAllowedDayRanges.some((r) => assignedDayIndex >= r.startDay && assignedDayIndex <= r.endDay));
+    const targetDayIndex = isDayOutOfRange ? null : assignedDayIndex;
+    const dayChanged = targetDayIndex !== prevDayIndex;
 
     const timeRangeChanged =
       finalAllowedTimeRange?.startTime !== place.allowedTimeRange?.startTime ||
-      finalAllowedTimeRange?.endTime !== place.allowedTimeRange?.endTime;
+      finalAllowedTimeRange?.endTime !== place.allowedTimeRange?.endTime ||
+      finalAllowedTimeRange?.mode !== place.allowedTimeRange?.mode;
+
+    const dayRangeChanged =
+      JSON.stringify(finalAllowedDayRanges || []) !== JSON.stringify(place.allowedDayRanges || []) ||
+      finalDayRangeMode !== place.dayRangeMode;
 
     // Final opening hours
     let finalOpeningHours: string[] | undefined = undefined;
@@ -307,14 +376,15 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
     const hoursChanged = JSON.stringify(finalOpeningHours || []) !== JSON.stringify(place.openingHours || []);
 
     const shouldReoptimize =
-      place.dayIndex !== null &&
-      place.dayIndex !== undefined &&
       (((trimmedCustomTime || undefined) !== place.customTime ||
         finalDuration !== place.estimatedDuration ||
         pinnedToDay !== place.pinnedToDay ||
         timeRangeChanged ||
-        hoursChanged) ||
-        isDayOutOfRange);
+        dayRangeChanged ||
+        hoursChanged ||
+        dayChanged) &&
+        (targetDayIndex !== null || prevDayIndex !== null)) ||
+      isDayOutOfRange;
 
     const parsedRating = parseFloat(tabelogRating);
     const hasTabelog =
@@ -349,10 +419,12 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       reservation: finalReservation,
       tabelog: finalTabelog,
       customTime: trimmedCustomTime || undefined,
-      pinnedToDay: isDayOutOfRange ? false : pinnedToDay,
+      dayIndex: targetDayIndex,
+      pinnedToDay: isDayOutOfRange || targetDayIndex === null ? false : pinnedToDay,
       isStarred,
       dismissedDuplicate,
       allowedDayRanges: finalAllowedDayRanges,
+      dayRangeMode: finalDayRangeMode,
       allowedTimeRange: finalAllowedTimeRange,
       isArea,
       areaNote: isArea ? (areaNoteVal.trim() || place.areaNote || undefined) : undefined,
@@ -361,14 +433,29 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
     });
     onClose();
 
-    if (shouldReoptimize && place.dayIndex !== null && place.dayIndex !== undefined && !isDayOutOfRange) {
+    if (shouldReoptimize) {
       try {
-        useRouteStore.getState().optimizeDay(place.dayIndex);
+        if (prevDayIndex !== null && prevDayIndex !== undefined && dayChanged) {
+          useRouteStore.getState().optimizeDay(prevDayIndex);
+        }
+        if (targetDayIndex !== null && targetDayIndex !== undefined) {
+          useRouteStore.getState().optimizeDay(targetDayIndex);
+        }
       } catch (e) {
         console.error("Failed to re-optimize day after editing place", e);
       }
+    }
+
+    if (dayChanged && targetDayIndex !== null) {
+      toast.success(
+        `Assigned and pinned "${place.name}" to ${formatDayIndexLabel(targetDayIndex, startDate, dayTitles)}.`,
+        "Reservation Scheduled"
+      );
     } else if (isDayOutOfRange) {
-      toast.info(`Moved "${place.name}" to unassigned because Day ${(place.dayIndex ?? 0) + 1} is outside the new allowed range.`, "Schedule Updated");
+      toast.info(
+        `Moved "${place.name}" to unassigned because Day ${(place.dayIndex ?? 0) + 1} is outside the new allowed range.`,
+        "Schedule Updated"
+      );
     }
   };
 
@@ -797,68 +884,140 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
               </label>
             </div>
 
-            {/* Custom Locked Reservation Time */}
-            <div className="pt-2.5 mt-2 border-t border-indigo-100 dark:border-indigo-900/40 space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1">
-                    <Lock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-                    Locked Arrival Time
-                  </span>
-                  <span className="text-[10px] text-indigo-700/80 dark:text-indigo-400 leading-tight">
-                    Fixed arrival/reservation time (e.g. 21:00 for club/dinner)
-                  </span>
+            {/* Reservation Date & Locked Arrival Time */}
+            <div className="pt-2.5 mt-2 border-t border-indigo-100 dark:border-indigo-900/40 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                  <CalendarClock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Reservation Date & Time</span>
+                </span>
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                  Auto-pins to schedule
+                </span>
+              </div>
+
+              {/* Date Entry + Day Selector + Locked Arrival Time */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Date / Day Selection */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-indigo-500" />
+                      Reservation Date / Day
+                    </span>
+                    {assignedDayIndex !== null && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAssignedDayIndex(null);
+                          setPinnedToDay(false);
+                        }}
+                        className="text-[10px] font-bold text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </label>
+
+                  {isTripDateValid ? (
+                    <div className="space-y-1">
+                      <input
+                        type="date"
+                        min={minReservationDateStr}
+                        max={maxReservationDateStr}
+                        value={currentReservationDateStr}
+                        onChange={(e) => handleReservationDateChange(e.target.value)}
+                        className="w-full text-xs font-bold bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                        title="Select reservation calendar date"
+                      />
+                      <select
+                        value={assignedDayIndex !== null ? assignedDayIndex : ""}
+                        onChange={(e) => handleReservationDaySelect(e.target.value)}
+                        className="w-full text-[11px] font-medium bg-white dark:bg-surface-900 border border-indigo-200/80 dark:border-indigo-800/60 text-surface-700 dark:text-surface-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                      >
+                        <option value="">Choose trip day...</option>
+                        {Array.from({ length: days }, (_, i) => (
+                          <option key={i} value={i}>
+                            {formatDayIndexLabel(i, startDate, dayTitles)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <select
+                      value={assignedDayIndex !== null ? assignedDayIndex : ""}
+                      onChange={(e) => handleReservationDaySelect(e.target.value)}
+                      className="w-full text-xs font-bold bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      <option value="">Unassigned (Flexible Day)</option>
+                      {Array.from({ length: days }, (_, i) => (
+                        <option key={i} value={i}>
+                          {formatDayIndexLabel(i, startDate, dayTitles)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+
+                {/* Locked Arrival Time */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-indigo-500" />
+                      Locked Arrival Time
+                    </span>
+                    {customTimeVal && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomTimeVal("")}
+                        className="text-[10px] font-bold text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </label>
                   <input
                     type="time"
                     value={customTimeVal}
                     onChange={(e) => setCustomTimeVal(e.target.value)}
-                    className="text-xs font-bold bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    title="Lock schedule arrival time"
+                    className="w-full text-xs font-bold bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    title="Lock arrival/reservation time"
                   />
-                  {customTimeVal && (
-                    <button
-                      type="button"
-                      onClick={() => setCustomTimeVal("")}
-                      className="text-[10px] font-bold text-red-500 hover:text-red-700 dark:hover:text-red-400 hover:underline"
-                    >
-                      Clear
-                    </button>
-                  )}
+                  <span className="text-[10px] text-indigo-700/70 dark:text-indigo-400 block leading-tight">
+                    {customTimeVal ? `Locks stop arrival to ${customTimeVal}` : "Optional fixed time (e.g. 19:30)"}
+                  </span>
                 </div>
               </div>
 
-              {/* Explicit Pin to Day Toggle (when place is assigned to a day) */}
-              {place.dayIndex !== null && place.dayIndex !== undefined && (
-                <div className="pt-2 border-t border-indigo-100/60 dark:border-indigo-900/30 flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
-                      <Pin className={`w-3 h-3 ${pinnedToDay ? "fill-current text-indigo-600 dark:text-indigo-400" : "text-surface-400"}`} />
-                      Pin to Day {place.dayIndex + 1}
-                    </span>
-                    <span className="text-[10px] text-indigo-700/70 dark:text-indigo-400">
-                      {customTimeVal
-                        ? pinnedToDay
-                          ? `Exact reservation locked to Day ${place.dayIndex + 1} at ${customTimeVal}`
-                          : `Flexible day — optimizer can place this on the best day at ${customTimeVal}`
-                        : pinnedToDay
-                          ? `Locked to Day ${place.dayIndex + 1} (optimizer won't move to another day)`
-                          : `Flexible day — optimizer can redistribute to another day`}
-                    </span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-3 shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={pinnedToDay}
-                      onChange={(e) => setPinnedToDay(e.target.checked)}
-                      className="sr-only peer"
-                      aria-label={`Pin place to Day ${place.dayIndex + 1}`}
-                    />
-                    <div className="w-8 h-4.5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all dark:bg-surface-700 peer-checked:bg-indigo-600"></div>
-                  </label>
+              {/* Pin to Day Toggle & Status */}
+              <div className="pt-2 border-t border-indigo-100/60 dark:border-indigo-900/30 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[11px] font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <Pin className={`w-3 h-3 ${pinnedToDay ? "fill-current text-indigo-600 dark:text-indigo-400" : "text-surface-400"}`} />
+                    {assignedDayIndex !== null
+                      ? `Pin to ${formatDayIndexLabel(assignedDayIndex, startDate, dayTitles)}`
+                      : "Pin to Day"}
+                  </span>
+                  <span className="text-[10px] text-indigo-700/70 dark:text-indigo-400">
+                    {assignedDayIndex !== null
+                      ? pinnedToDay
+                        ? `✓ Pinned to this day — optimizer will keep this reservation locked to this date`
+                        : `Assigned to this day, but unpinned (optimizer can redistribute)`
+                      : "Selecting a reservation date or day above automatically pins this place to that day."}
+                  </span>
                 </div>
-              )}
+                <label className={`relative inline-flex items-center ml-3 shrink-0 ${assignedDayIndex === null ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
+                  <input
+                    type="checkbox"
+                    checked={pinnedToDay}
+                    disabled={assignedDayIndex === null}
+                    onChange={(e) => setPinnedToDay(e.target.checked)}
+                    className="sr-only peer"
+                    aria-label="Pin place to day"
+                  />
+                  <div className="w-8 h-4.5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all dark:bg-surface-700 peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -1025,15 +1184,31 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
           <div className="p-3.5 rounded-xl bg-surface-100/60 dark:bg-surface-800/40 border border-surface-200 dark:border-surface-700/80 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className={`p-2 rounded-lg ${hasDayRange ? "bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400" : "bg-surface-200/60 dark:bg-surface-700 text-surface-400 dark:text-surface-500"}`}>
+                <div className={`p-2 rounded-lg ${
+                  hasDayRange
+                    ? dayRangeMode === "exclude"
+                      ? "bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400"
+                      : "bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400"
+                    : "bg-surface-200/60 dark:bg-surface-700 text-surface-400 dark:text-surface-500"
+                }`}>
                   <CalendarDays className="w-4 h-4" />
                 </div>
                 <div>
                   <span className="text-xs font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
-                    Restrict to Certain Days / Dates
+                    Restrict Date Window {hasDayRange && (
+                      <span className={`text-[10px] font-black uppercase px-1.5 py-0.2 rounded ${
+                        dayRangeMode === "exclude"
+                          ? "bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300"
+                          : "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300"
+                      }`}>
+                        {dayRangeMode === "exclude" ? "NOT / Exclude" : "Allow Only"}
+                      </span>
+                    )}
                   </span>
                   <p className="text-[10px] text-surface-500 dark:text-surface-400">
-                    Optimizer will only schedule this place within your specified day or date range.
+                    {hasDayRange && dayRangeMode === "exclude"
+                      ? "Exclude this place from being scheduled on specific trip dates/days (e.g. anywhere but Oct 11–17)."
+                      : "Limit which days or date ranges this place can be scheduled on."}
                   </p>
                 </div>
               </div>
@@ -1045,12 +1220,46 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                   className="sr-only peer"
                   aria-label="Restrict to certain days"
                 />
-                <div className="w-9 h-5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-700 peer-checked:bg-indigo-600"></div>
+                <div className={`w-9 h-5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-700 ${
+                  dayRangeMode === "exclude" ? "peer-checked:bg-rose-600" : "peer-checked:bg-indigo-600"
+                }`}></div>
               </label>
             </div>
 
             {hasDayRange && (
               <div className="pt-2 border-t border-surface-200/60 dark:border-surface-700/60 space-y-2.5 animate-in fade-in duration-150">
+                {/* Mode Selector: Allow Only vs NOT (Exclude) */}
+                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-200/50 dark:bg-surface-900/60 border border-surface-200 dark:border-surface-700/80">
+                  <button
+                    type="button"
+                    onClick={() => setDayRangeMode("allow")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                      dayRangeMode === "allow"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <span>✓ Allow Only</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDayRangeMode("exclude")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                      dayRangeMode === "exclude"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <span>🚫 NOT (Exclude)</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-surface-500 dark:text-surface-400">
+                  {dayRangeMode === "exclude"
+                    ? "Place can be scheduled on any trip day EXCEPT the dates/days specified below:"
+                    : "Place will only be scheduled during the dates/days specified below:"}
+                </p>
+
                 {/* Range Rows */}
                 <div className="space-y-2">
                   {dayRangeRows.map((row, idx) => (
@@ -1059,14 +1268,18 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                       className="flex items-end gap-2 p-2 rounded-lg bg-surface-50/80 dark:bg-surface-800/60 border border-surface-200/80 dark:border-surface-700/60"
                     >
                       <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 shrink-0 self-center">
-                        <span className="w-5 h-5 rounded bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-black text-[10px]">
+                        <span className={`w-5 h-5 rounded flex items-center justify-center font-black text-[10px] ${
+                          dayRangeMode === "exclude"
+                            ? "bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300"
+                            : "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300"
+                        }`}>
                           {idx + 1}
                         </span>
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
-                          From (Start Day)
+                          {dayRangeMode === "exclude" ? "Excluded From" : "From (Start Day)"}
                         </label>
                         <select
                           value={row.startDay}
@@ -1089,7 +1302,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
 
                       <div className="flex-1 min-w-0">
                         <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
-                          To (End Day)
+                          {dayRangeMode === "exclude" ? "Excluded Until" : "To (End Day)"}
                         </label>
                         <select
                           value={row.endDay}
@@ -1128,7 +1341,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                     className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2.5 py-1.5 rounded-lg border border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>Add another date range ({dayRangeRows.length}/{MAX_DAY_RANGES})</span>
+                    <span>Add another {dayRangeMode === "exclude" ? "excluded" : "date"} range ({dayRangeRows.length}/{MAX_DAY_RANGES})</span>
                   </button>
                 )}
 
@@ -1171,15 +1384,19 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                 </div>
 
                 {/* Summary badge / text */}
-                <div className="text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/30 px-2.5 py-1.5 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40 flex items-center justify-between flex-wrap gap-1">
+                <div className={`text-[10px] px-2.5 py-1.5 rounded-lg border flex items-center justify-between flex-wrap gap-1 ${
+                  dayRangeMode === "exclude"
+                    ? "text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/30 border-rose-200/60 dark:border-rose-900/40"
+                    : "text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/30 border-indigo-200/60 dark:border-indigo-900/40"
+                }`}>
                   <span>
-                    Allowed schedule:{" "}
+                    {dayRangeMode === "exclude" ? "Excluded schedule (NOT): " : "Allowed schedule: "}
                     <strong>
-                      {formatMultiRangeBadge(dayRangeRows, startDate, dayTitles).fullLabel}
+                      {formatMultiRangeBadge(dayRangeRows, startDate, dayTitles, dayRangeMode).fullLabel}
                     </strong>
                   </span>
                   {dayRangeRows.length > 1 && (
-                    <span className="text-[9px] text-indigo-500/80 dark:text-indigo-400/70">
+                    <span className={`text-[9px] ${dayRangeMode === "exclude" ? "text-rose-500/80 dark:text-rose-400/70" : "text-indigo-500/80 dark:text-indigo-400/70"}`}>
                       (Overlapping ranges auto-merge on save)
                     </span>
                   )}
@@ -1192,15 +1409,31 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
           <div className="p-3.5 rounded-xl bg-surface-100/60 dark:bg-surface-800/40 border border-surface-200 dark:border-surface-700/80 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className={`p-2 rounded-lg ${hasTimeRange ? "bg-teal-100 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400" : "bg-surface-200/60 dark:bg-surface-700 text-surface-400 dark:text-surface-500"}`}>
+                <div className={`p-2 rounded-lg ${
+                  hasTimeRange
+                    ? timeRangeMode === "exclude"
+                      ? "bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400"
+                      : "bg-teal-100 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400"
+                    : "bg-surface-200/60 dark:bg-surface-700 text-surface-400 dark:text-surface-500"
+                }`}>
                   <Clock className="w-4 h-4" />
                 </div>
                 <div>
                   <span className="text-xs font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
-                    Restrict to Time Window
+                    Restrict Time Window {hasTimeRange && (
+                      <span className={`text-[10px] font-black uppercase px-1.5 py-0.2 rounded ${
+                        timeRangeMode === "exclude"
+                          ? "bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300"
+                          : "bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300"
+                      }`}>
+                        {timeRangeMode === "exclude" ? "NOT / Exclude" : "Allow Only"}
+                      </span>
+                    )}
                   </span>
                   <p className="text-[10px] text-surface-500 dark:text-surface-400">
-                    Optimizer will only schedule this place within your specified daily time window.
+                    {hasTimeRange && timeRangeMode === "exclude"
+                      ? "Do NOT schedule during this time window (e.g. any time but 7–10 AM; venue opening hours still apply)."
+                      : "Optimizer will only schedule this place within your specified daily time window."}
                   </p>
                 </div>
               </div>
@@ -1212,16 +1445,50 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                   className="sr-only peer"
                   aria-label="Restrict to time window"
                 />
-                <div className="w-9 h-5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-700 peer-checked:bg-teal-600"></div>
+                <div className={`w-9 h-5 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:bg-surface-700 ${
+                  timeRangeMode === "exclude" ? "peer-checked:bg-amber-600" : "peer-checked:bg-teal-600"
+                }`}></div>
               </label>
             </div>
 
             {hasTimeRange && (
               <div className="pt-2 border-t border-surface-200/60 dark:border-surface-700/60 space-y-2.5 animate-in fade-in duration-150">
+                {/* Mode Selector: Allow Only vs NOT (Exclude) */}
+                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-200/50 dark:bg-surface-900/60 border border-surface-200 dark:border-surface-700/80">
+                  <button
+                    type="button"
+                    onClick={() => setTimeRangeMode("allow")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                      timeRangeMode === "allow"
+                        ? "bg-teal-600 text-white shadow-xs"
+                        : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <span>✓ Allow Only</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeRangeMode("exclude")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                      timeRangeMode === "exclude"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <span>🚫 NOT (Exclude)</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-surface-500 dark:text-surface-400">
+                  {timeRangeMode === "exclude"
+                    ? "Do NOT schedule during this time window (schedule any time outside this window; venue hours still apply):"
+                    : "Only schedule within this time window:"}
+                </p>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block">
-                      Earliest Arrival
+                      {timeRangeMode === "exclude" ? "Excluded Window Start" : "Earliest Arrival"}
                     </label>
                     <input
                       type="time"
@@ -1234,7 +1501,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block">
-                      Latest Departure
+                      {timeRangeMode === "exclude" ? "Excluded Window End" : "Latest Departure"}
                     </label>
                     <input
                       type="time"
@@ -1292,19 +1559,41 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                 </div>
 
                 {/* Preview Badge */}
-                <div className="text-[10px] text-teal-700 dark:text-teal-300 bg-teal-50/80 dark:bg-teal-950/30 px-2.5 py-1.5 rounded-lg border border-teal-200/60 dark:border-teal-900/40 flex items-center justify-between">
+                <div className={`text-[10px] px-2.5 py-1.5 rounded-lg border flex items-center justify-between ${
+                  timeRangeMode === "exclude"
+                    ? "text-amber-800 dark:text-amber-200 bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-900/40"
+                    : "text-teal-700 dark:text-teal-300 bg-teal-50/80 dark:bg-teal-950/30 border-teal-200/60 dark:border-teal-900/40"
+                }`}>
                   <span>
-                    Only schedule between <strong>{(() => {
-                      const [h, m] = timeRangeStart.split(":").map(Number);
-                      const ampm = (h || 0) >= 12 ? "PM" : "AM";
-                      const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
-                      return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
-                    })()}</strong> and <strong>{(() => {
-                      const [h, m] = timeRangeEnd.split(":").map(Number);
-                      const ampm = (h || 0) >= 12 ? "PM" : "AM";
-                      const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
-                      return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
-                    })()}</strong>.
+                    {timeRangeMode === "exclude" ? (
+                      <>
+                        Exclude visit between <strong>{(() => {
+                          const [h, m] = timeRangeStart.split(":").map(Number);
+                          const ampm = (h || 0) >= 12 ? "PM" : "AM";
+                          const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
+                          return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
+                        })()}</strong> and <strong>{(() => {
+                          const [h, m] = timeRangeEnd.split(":").map(Number);
+                          const ampm = (h || 0) >= 12 ? "PM" : "AM";
+                          const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
+                          return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
+                        })()}</strong> (any other time allowed; venue hours still apply).
+                      </>
+                    ) : (
+                      <>
+                        Only schedule between <strong>{(() => {
+                          const [h, m] = timeRangeStart.split(":").map(Number);
+                          const ampm = (h || 0) >= 12 ? "PM" : "AM";
+                          const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
+                          return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
+                        })()}</strong> and <strong>{(() => {
+                          const [h, m] = timeRangeEnd.split(":").map(Number);
+                          const ampm = (h || 0) >= 12 ? "PM" : "AM";
+                          const h12 = h === 0 ? 12 : (h || 0) > 12 ? (h || 0) - 12 : h;
+                          return m === 0 ? `${h12} ${ampm}` : `${h12}:${(m ?? 0).toString().padStart(2, "0")} ${ampm}`;
+                        })()}</strong>.
+                      </>
+                    )}
                   </span>
                   {timeRangeStart >= timeRangeEnd && (
                     <span className="text-amber-600 dark:text-amber-400 font-semibold ml-2">
@@ -1602,7 +1891,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
           </div>
         </div>
 
-        <div className="p-4 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0 safe-pb">
+        <div className="px-4 sm:px-6 py-4 pb-5 sm:pb-5 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + " " + place.address)}`}

@@ -382,10 +382,28 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
               )}
               {stop.allowedDayRanges && stop.allowedDayRanges.length > 0 && (
                 <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 shadow-2xs"
-                  title={`Constrained by user to ${formatMultiRangeBadge(stop.allowedDayRanges, startDate).fullLabel}`}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border shadow-2xs ${
+                    stop.dayRangeMode === "exclude"
+                      ? "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/80"
+                      : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80"
+                  }`}
+                  title={`${stop.dayRangeMode === "exclude" ? "Excluded dates (NOT)" : "Constrained by user to"}: ${formatMultiRangeBadge(stop.allowedDayRanges, startDate, undefined, stop.dayRangeMode).fullLabel}`}
                 >
-                  <CalendarDays className="w-2.5 h-2.5 text-indigo-500" />
+                  <CalendarDays className={`w-2.5 h-2.5 ${stop.dayRangeMode === "exclude" ? "text-rose-500" : "text-indigo-500"}`} />
+                  {stop.dayRangeMode === "exclude" && <span className="text-[9px] font-black uppercase">NOT</span>}
+                </span>
+              )}
+              {stop.allowedTimeRange && stop.allowedTimeRange.startTime && stop.allowedTimeRange.endTime && (
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border shadow-2xs ${
+                    stop.allowedTimeRange.mode === "exclude"
+                      ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/80"
+                      : "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/80"
+                  }`}
+                  title={`${stop.allowedTimeRange.mode === "exclude" ? "Excluded time (NOT)" : "Constrained time window"}: ${stop.allowedTimeRange.mode === "exclude" ? "NOT " : ""}${stop.allowedTimeRange.startTime} – ${stop.allowedTimeRange.endTime}`}
+                >
+                  <Clock className={`w-2.5 h-2.5 ${stop.allowedTimeRange.mode === "exclude" ? "text-amber-600 dark:text-amber-400" : "text-teal-600 dark:text-teal-400"}`} />
+                  {stop.allowedTimeRange.mode === "exclude" && <span className="text-[9px] font-black uppercase">NOT</span>}
                 </span>
               )}
               {stop.reservation && (

@@ -710,9 +710,20 @@ function evaluateRouteCost(
           }
         }
         if (place.allowedTimeRange?.startTime) {
+          const isExclude = place.allowedTimeRange.mode === "exclude";
           const rangeStart = parseTimeToMinutes(place.allowedTimeRange.startTime);
-          if (rangeStart > currentTime) {
-            currentTime = rangeStart;
+          let rangeEnd = place.allowedTimeRange.endTime ? parseTimeToMinutes(place.allowedTimeRange.endTime) : 0;
+          if (rangeEnd === 0) rangeEnd = 24 * 60;
+          else if (rangeEnd < rangeStart) rangeEnd += 24 * 60;
+
+          if (isExclude) {
+            if (currentTime >= rangeStart && currentTime < rangeEnd) {
+              currentTime = rangeEnd;
+            }
+          } else {
+            if (rangeStart > currentTime) {
+              currentTime = rangeStart;
+            }
           }
         }
       }
@@ -789,8 +800,19 @@ function optimize2OptSub(
     else if (typeof hours === "object" && hours) openMin = hours.open;
 
     if (p.allowedTimeRange?.startTime) {
+      const isExclude = p.allowedTimeRange.mode === "exclude";
       const allowedOpen = parseTimeToMinutes(p.allowedTimeRange.startTime);
-      openMin = Math.max(openMin, allowedOpen);
+      let allowedClose = p.allowedTimeRange.endTime ? parseTimeToMinutes(p.allowedTimeRange.endTime) : 0;
+      if (allowedClose === 0) allowedClose = 24 * 60;
+      else if (allowedClose < allowedOpen) allowedClose += 24 * 60;
+
+      if (isExclude) {
+        if (openMin >= allowedOpen && openMin < allowedClose) {
+          openMin = allowedClose;
+        }
+      } else {
+        openMin = Math.max(openMin, allowedOpen);
+      }
     }
     return openMin;
   };
@@ -1084,19 +1106,35 @@ function optimizeDayRoute(
         }
       }
 
-      // Penalize assigning to a window outside user-defined allowedTimeRange
+      // Penalize assigning to a window violating user-defined allowedTimeRange
       if (place.allowedTimeRange?.startTime && place.allowedTimeRange?.endTime) {
+        const isExclude = place.allowedTimeRange.mode === "exclude";
         const rangeStart = parseTimeToMinutes(place.allowedTimeRange.startTime);
         let rangeEnd = parseTimeToMinutes(place.allowedTimeRange.endTime);
         if (rangeEnd === 0) rangeEnd = 24 * 60;
         if (rangeEnd < rangeStart) rangeEnd += 24 * 60;
-        if (windowEndTimes[w] <= rangeStart || windowStartTimes[w] >= rangeEnd) {
-          score += 50000000;
+
+        if (isExclude) {
+          if (windowStartTimes[w] >= rangeStart && windowEndTimes[w] <= rangeEnd) {
+            score += 50000000;
+          } else {
+            const overlapStart = Math.max(windowStartTimes[w], rangeStart);
+            const overlapEnd = Math.min(windowEndTimes[w], rangeEnd);
+            const overlapDuration = Math.max(0, overlapEnd - overlapStart);
+            const availableWindow = (windowEndTimes[w] - windowStartTimes[w]) - overlapDuration;
+            if (availableWindow < duration) {
+              score += 25000000;
+            }
+          }
         } else {
-          const overlapStart = Math.max(windowStartTimes[w], rangeStart);
-          const overlapEnd = Math.min(windowEndTimes[w], rangeEnd);
-          if (overlapEnd - overlapStart < duration) {
-            score += 25000000;
+          if (windowEndTimes[w] <= rangeStart || windowStartTimes[w] >= rangeEnd) {
+            score += 50000000;
+          } else {
+            const overlapStart = Math.max(windowStartTimes[w], rangeStart);
+            const overlapEnd = Math.min(windowEndTimes[w], rangeEnd);
+            if (overlapEnd - overlapStart < duration) {
+              score += 25000000;
+            }
           }
         }
       }
@@ -1429,9 +1467,20 @@ function evictClosedHourConflicts(
           }
         }
         if (stop.allowedTimeRange?.startTime) {
+          const isExclude = stop.allowedTimeRange.mode === "exclude";
           const rangeStart = parseTimeToMinutes(stop.allowedTimeRange.startTime);
-          if (rangeStart > currTime) {
-            currTime = rangeStart;
+          let rangeEnd = stop.allowedTimeRange.endTime ? parseTimeToMinutes(stop.allowedTimeRange.endTime) : 0;
+          if (rangeEnd === 0) rangeEnd = 24 * 60;
+          else if (rangeEnd < rangeStart) rangeEnd += 24 * 60;
+
+          if (isExclude) {
+            if (currTime >= rangeStart && currTime < rangeEnd) {
+              currTime = rangeEnd;
+            }
+          } else {
+            if (rangeStart > currTime) {
+              currTime = rangeStart;
+            }
           }
         }
       }

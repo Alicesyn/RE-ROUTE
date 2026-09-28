@@ -86,7 +86,8 @@ export interface Place {
   isStarred?: boolean; // If true, optimizer will force this place into the schedule (never leave unassigned)
   dismissedDuplicate?: boolean; // If true, user manually removed/dismissed the duplicate flag for this place
   allowedDayRanges?: DayRangeConstraint[]; // Multiple disjoint day range constraints (e.g., Oct 3–6 AND Oct 9–12)
-  allowedTimeRange?: TimeRangeConstraint; // User-defined scheduling time window (e.g., only visit between 7 AM – 5 PM)
+  dayRangeMode?: "allow" | "exclude"; // Default "allow". "exclude" means NOT during these days
+  allowedTimeRange?: TimeRangeConstraint; // User-defined scheduling time window (e.g., only visit between 7 AM – 5 PM, or NOT between 7–10 AM)
   whosInterested?: string; // Group trip planning: travelers/members interested in this place
   addedAt?: number; // Unix timestamp (ms) when place was added/saved
 }
@@ -94,11 +95,13 @@ export interface Place {
 export interface TimeRangeConstraint {
   startTime: string; // "HH:mm" format (e.g. "07:00")
   endTime: string;   // "HH:mm" format (e.g. "17:00")
+  mode?: "allow" | "exclude"; // Default "allow". "exclude" means NOT during this time window
 }
 
 export interface DayRangeConstraint {
   startDay: number; // 0-indexed day index (e.g. 0 for Day 1)
   endDay: number;   // 0-indexed day index (e.g. 6 for Day 7)
+  mode?: "allow" | "exclude"; // Default "allow". "exclude" means NOT during these days
 }
 
 export interface Hotel {

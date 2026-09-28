@@ -702,19 +702,19 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/80 flex flex-wrap justify-between items-center gap-2 safe-pb">
+        <div className="px-5 sm:px-6 py-4 sm:py-5 pb-5 sm:pb-6 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/80 flex flex-wrap justify-between items-center gap-3 shrink-0">
           <button
             onClick={() => {
               applyCategoryDurationsToPlaces();
               onClose();
             }}
-            className="px-4 py-2 text-sm font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors cursor-pointer"
           >
             Apply Category Defaults to Current PTVs
           </button>
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold rounded-full shadow-sm transition-colors"
+            className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold rounded-full shadow-xs transition-colors cursor-pointer"
           >
             Done
           </button>

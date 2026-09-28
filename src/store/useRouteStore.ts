@@ -622,7 +622,9 @@ export const useRouteStore = create<RouteState>()(
 
         const newRoutes = state.optimizedRoutes.map((r) => ({
           ...r,
-          stops: r.stops.map((s) => (s.id === id ? mergePlaceUpdates(s, updates) : s)),
+          stops: r.stops
+            .filter((s) => (updates.dayIndex !== undefined && s.id === id ? updates.dayIndex === r.day : true))
+            .map((s) => (s.id === id ? mergePlaceUpdates(s, updates) : s)),
         }));
 
         if (isUnpinning && dayIndex !== null && dayIndex !== undefined) {
@@ -1364,7 +1366,12 @@ export const useRouteStore = create<RouteState>()(
           const state = get();
           const dayPlaces = state.places.filter((p) => p.dayIndex === dayIndex && !p.isDisabled);
           if (dayPlaces.length === 0) {
-            set({ isCalculating: false });
+            const newRoutes = state.optimizedRoutes.map((r) =>
+              r.day === dayIndex
+                ? { ...r, stops: [], segments: [], totalDistance: 0, totalTime: 0, totalVisitTime: 0, manualSequence: undefined }
+                : r
+            );
+            set({ optimizedRoutes: newRoutes, isCalculating: false });
             return;
           }
 
