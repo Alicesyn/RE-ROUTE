@@ -95,8 +95,10 @@ function clusterPlaces(
   arrivalFlight?: FlightInfo | null,
   departureFlight?: FlightInfo | null,
   exemptDays: number[] = [],
+  customTransitTimes?: Record<string, number>,
 ): Place[] {
-  const isExempt = (dayIdx: number | null) => dayIdx !== null && exemptDays.includes(dayIdx);
+  const safeExemptDays = Array.isArray(exemptDays) ? exemptDays : [];
+  const isExempt = (dayIdx: number | null) => dayIdx !== null && safeExemptDays.includes(dayIdx);
   const pinned = places.filter((p) => p.dayIndex !== null && (p.pinnedToDay || isExempt(p.dayIndex)));
   const unassigned = places.filter(
     (p) => (p.dayIndex === null || !p.pinnedToDay) && !isExempt(p.dayIndex),
@@ -118,14 +120,41 @@ function clusterPlaces(
     let dEnd = baseDayEndMin;
     if (d === 0 && arrivalFlight) {
       const arrMin = parseTimeToMinutes(arrivalFlight.time) + (arrivalFlight.buffer ?? 30);
-      dStart = Math.max(baseDayStartMin, arrMin);
+      let arrivalTransferMin = 0;
+      if (customTransitTimes?.["arrival->start-hotel"]) {
+        arrivalTransferMin = Math.round(customTransitTimes["arrival->start-hotel"] / 60);
+      } else if (arrivalLocation) {
+        const h0 = hotels.find((h) => h.dayIndex === 0) || hotels[0];
+        if (h0) {
+          arrivalTransferMin = Math.round(estimateTime(getDistance(arrivalLocation.lat, arrivalLocation.lng, h0.lat, h0.lng), travelMode) / 60);
+        }
+      }
+      dStart = Math.max(baseDayStartMin, arrMin + arrivalTransferMin);
     }
     if (d === days - 1 && departureFlight) {
       const depMin = parseTimeToMinutes(departureFlight.time) - (departureFlight.buffer ?? 90);
-      dEnd = Math.min(baseDayEndMin, depMin);
+      let departureTransferMin = 0;
+      if (customTransitTimes?.["hotel->departure"]) {
+        departureTransferMin = Math.round(customTransitTimes["hotel->departure"] / 60);
+      } else if (departureLocation) {
+        const lastHotel = hotels.find((h) => h.dayIndex === days - 1) || hotels[0];
+        if (lastHotel) {
+          departureTransferMin = Math.round(estimateTime(getDistance(lastHotel.lat, lastHotel.lng, departureLocation.lat, departureLocation.lng), travelMode) / 60);
+        }
+      }
+      dEnd = Math.min(baseDayEndMin, depMin - departureTransferMin);
     }
     dayWindows.push({ start: dStart, end: dEnd });
   }
+
+  const effectiveDayBudgets = dailyBudgets.map((b, d) => {
+    const w = dayWindows[d];
+    if (w) {
+      const windowDur = Math.max(0, w.end - w.start);
+      return Math.min(b, windowDur);
+    }
+    return b;
+  });
 
   // Calculate already-committed time per day from pinned places
   const dayTimeUsed: number[] = Array(days).fill(0);
@@ -152,14 +181,19 @@ function clusterPlaces(
 
   // Pre-allocate base inter-hotel travel time on transition days (traveling between different hotels)
   for (let d = 0; d < days; d++) {
+    // If d === 0 and arrivalFlight exists, dStart is already shifted to arrival at start hotel; do not double count
+    if (d === 0 && arrivalFlight) continue;
+    // If d === days - 1 and departureFlight exists, dEnd is already shifted to departure from last hotel; do not double count
+    if (d === days - 1 && departureFlight) continue;
+
     const startHotelRaw =
       d > 0
         ? hotels.find((h) => h.dayIndex === d - 1) || null
         : hotels.find((h) => h.dayIndex === 0) || null;
     const endHotelRaw = hotels.find((h) => h.dayIndex === d) || null;
 
-    const startAnchor = d === 0 && arrivalLocation ? arrivalLocation : startHotelRaw;
-    const endAnchor = d === days - 1 && departureLocation ? departureLocation : endHotelRaw;
+    const startAnchor = startHotelRaw;
+    const endAnchor = endHotelRaw;
 
     if (startAnchor && endAnchor) {
       const isTransition =
@@ -294,6 +328,101 @@ function clusterPlaces(
     return 0;
   };
 
+  const getTransitMin = (
+    from: { lat: number; lng: number; id?: string },
+    to: { lat: number; lng: number; id?: string },
+  ): number => {
+    if (from.id && to.id && customTransitTimes?.[`${from.id}->${to.id}`] !== undefined) {
+      return Math.round(customTransitTimes[`${from.id}->${to.id}`] / 60);
+    }
+    if (from.id && to.id && customTransitTimes?.[`${to.id}->${from.id}`] !== undefined) {
+      return Math.round(customTransitTimes[`${to.id}->${from.id}`] / 60);
+    }
+    return Math.round(estimateTime(getDistance(from.lat, from.lng, to.lat, to.lng), travelMode) / 60);
+  };
+
+  const isPlaceFeasibleOnDay = (place: Place, d: number): boolean => {
+    if (!avoidClosedHours || !place.openingHours || place.openingHours.length === 0) {
+      return true;
+    }
+    const dayDate = addDays(parseISO(startDateISO), d);
+    const dayHours = getPlaceDayHours(place.openingHours, dayDate);
+    if (dayHours === "closed") {
+      return false;
+    }
+    if (typeof dayHours !== "object" || dayHours === null) {
+      return true;
+    }
+
+    const duration = place.estimatedDuration || 60;
+    const intervals = dayHours.intervals || [{ open: dayHours.open, close: dayHours.close }];
+    const window = dayWindows[d] || { start: baseDayStartMin, end: baseDayEndMin };
+
+    // Find locked/custom-timed stops on day d
+    const dayLocked = pinned
+      .filter((p) => p.dayIndex === d && p.customTime)
+      .map((p) => {
+        const startMin = parseTimeToMinutes(p.customTime!);
+        const dur = p.estimatedDuration || 60;
+        return {
+          place: p,
+          start: startMin,
+          end: startMin + dur,
+        };
+      })
+      .sort((a, b) => a.start - b.start);
+
+    // If no locked stops, simple window overlap check
+    if (dayLocked.length === 0) {
+      return intervals.some((inv) => {
+        const overlapStart = Math.max(inv.open, window.start);
+        const overlapEnd = Math.min(inv.close, window.end);
+        return overlapEnd - overlapStart >= duration;
+      });
+    }
+
+    // Construct feasible time blocks outside of locked stops
+    const freeBlocks: { start: number; end: number }[] = [];
+
+    // 1. Block before first locked stop
+    const firstLocked = dayLocked[0];
+    const transitToFirst = getTransitMin(place, firstLocked.place);
+    const block1End = firstLocked.start - transitToFirst;
+    if (block1End > window.start) {
+      freeBlocks.push({ start: window.start, end: block1End });
+    }
+
+    // 2. Blocks between consecutive locked stops
+    for (let i = 0; i < dayLocked.length - 1; i++) {
+      const prev = dayLocked[i];
+      const next = dayLocked[i + 1];
+      const transitFromPrev = getTransitMin(prev.place, place);
+      const transitToNext = getTransitMin(place, next.place);
+      const blockStart = prev.end + transitFromPrev;
+      const blockEnd = next.start - transitToNext;
+      if (blockEnd > blockStart) {
+        freeBlocks.push({ start: blockStart, end: blockEnd });
+      }
+    }
+
+    // 3. Block after last locked stop
+    const lastLocked = dayLocked[dayLocked.length - 1];
+    const transitFromLast = getTransitMin(lastLocked.place, place);
+    const blockLastStart = lastLocked.end + transitFromLast;
+    if (window.end > blockLastStart) {
+      freeBlocks.push({ start: blockLastStart, end: window.end });
+    }
+
+    // Check if place can fit into ANY free block during its operating hours
+    return intervals.some((inv) =>
+      freeBlocks.some((block) => {
+        const overlapStart = Math.max(inv.open, block.start);
+        const overlapEnd = Math.min(inv.close, block.end);
+        return overlapEnd - overlapStart >= duration;
+      })
+    );
+  };
+
   // Spatial clustering assignment: balances available budget, excess detour relative to the best candidate day,
   // neighborhood clustering affinity, and geographic-appropriate category quotas.
   for (const place of toAssign) {
@@ -400,26 +529,9 @@ function clusterPlaces(
 
       // 2. Strict Avoid Closed Hours Check:
       // If avoidClosedHours is on, NEVER assign unpinned places to days they are closed,
-      // or to days where open hours have zero/insufficient overlap with active day window.
-      if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
-        const dayDate = addDays(parseISO(startDateISO), d);
-        const dayHours = getPlaceDayHours(place.openingHours, dayDate);
-        if (dayHours === "closed") {
-          continue; // Place is closed all day on day d
-        }
-        if (typeof dayHours === "object" && dayHours !== null) {
-          const duration = place.estimatedDuration || 60;
-          const intervals = dayHours.intervals || [{ open: dayHours.open, close: dayHours.close }];
-          const window = dayWindows[d] || { start: baseDayStartMin, end: baseDayEndMin };
-          const hasFeasibleOverlap = intervals.some((inv) => {
-            const overlapStart = Math.max(inv.open, window.start);
-            const overlapEnd = Math.min(inv.close, window.end);
-            return overlapEnd - overlapStart >= duration;
-          });
-          if (!hasFeasibleOverlap) {
-            continue; // Place operating hours cannot fit the visit duration on day d
-          }
-        }
+      // or to days where open hours have zero/insufficient overlap with active day window or locked stops.
+      if (avoidClosedHours && !isPlaceFeasibleOnDay(place, d)) {
+        continue;
       }
 
       // Detour & travel time estimation
@@ -443,11 +555,11 @@ function clusterPlaces(
       const travelMin = Math.round(estimateTime(effectiveTravelMeters, travelMode) / 60);
 
       const totalIfAdded = dayTimeUsed[d] + (place.estimatedDuration ?? 60) + travelMin;
-      const remaining = dailyBudgets[d] - totalIfAdded;
+      const remaining = effectiveDayBudgets[d] - totalIfAdded;
 
       // Force strict if this day has a reduced budget (e.g. due to a flight cutoff)
-      const baseBudget = dailyBudgets.length > 0 ? Math.max(...dailyBudgets) : dailyBudgets[d];
-      const dayIsConstrained = dailyBudgets[d] < baseBudget;
+      const baseBudget = effectiveDayBudgets.length > 0 ? Math.max(...effectiveDayBudgets) : effectiveDayBudgets[d];
+      const dayIsConstrained = effectiveDayBudgets[d] < baseBudget;
       const forceStrict = strictBudget || dayIsConstrained;
 
       // If this day is below the user's min target, prioritize fulfilling it!
@@ -477,11 +589,16 @@ function clusterPlaces(
           }
         }
 
-        // Spatial clustering affinity to existing stops on day d
+        // Spatial clustering affinity to existing stops or base hotel on day d
         let minNeighborDistKm = Infinity;
         for (const existing of currentAssignedToDay) {
           const nd = getDistance(place.lat, place.lng, existing.lat, existing.lng) / 1000;
           if (nd < minNeighborDistKm) minNeighborDistKm = nd;
+        }
+        const dayHotel = hotels.find((h) => h.dayIndex === d) || hotels[0];
+        if (dayHotel) {
+          const hd = getDistance(place.lat, place.lng, dayHotel.lat, dayHotel.lng) / 1000;
+          if (hd < minNeighborDistKm) minNeighborDistKm = hd;
         }
 
         let clusterBonus = 0;
@@ -506,7 +623,7 @@ function clusterPlaces(
           if (excessDetourKm <= 25) {
             quotaBonus = deficit * 350;
             if (hasSpecificDayOverride) {
-              quotaBonus += 150;
+              quotaBonus += 600;
             }
           }
         } else if (minSpacing > 0 && currentCount > 0) {
@@ -554,13 +671,19 @@ function clusterPlaces(
       if (place.isStarred) {
         let forceBestDay = -1;
         let forceMaxScore = -Infinity;
+        const hasFeasibleDay = Array.from({ length: days }).some((_, d) =>
+          isDayAllowedForPlace(place, d, days) && (!avoidClosedHours || isPlaceFeasibleOnDay(place, d))
+        );
         for (let d = 0; d < days; d++) {
           if (!isDayAllowedForPlace(place, d, days)) {
             continue;
           }
+          if (avoidClosedHours && hasFeasibleDay && !isPlaceFeasibleOnDay(place, d)) {
+            continue;
+          }
           const detourKm = computeDayDetourMeters(place, d) / 1000;
           const excessDetourKm = Math.max(0, detourKm - minDetourKm);
-          const remaining = dailyBudgets[d] - dayTimeUsed[d];
+          const remaining = effectiveDayBudgets[d] - dayTimeUsed[d];
           let forceScore = remaining - excessDetourKm * 80 - detourKm * 4;
 
           // If avoidClosedHours, prefer days where the place is actually open
@@ -1494,7 +1617,7 @@ function evictClosedHourConflicts(
         }
       }
 
-      const isPinnedOrCustom = stop.pinnedToDay || !!stop.customTime || !!stop.isStarred;
+      const isPinnedOrCustom = stop.pinnedToDay || !!stop.customTime;
 
       const earlyMins = parseEarlyArrivalMinutes(stop.reservation?.advanceTime);
       const conflict = checkTimeConflict(
@@ -1792,6 +1915,7 @@ export async function solveTSP(
     arrivalFlight,
     departureFlight,
     exemptDays,
+    allCustomTimes,
   );
 
   // 2. Build initial routes for each day

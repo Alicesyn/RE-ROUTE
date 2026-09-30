@@ -1,9 +1,10 @@
-import React from "react";
-import { Search, CalendarClock, Star, X, Layers, Ticket } from "lucide-react";
+import React, { useState } from "react";
+import { Search, X, Layers } from "lucide-react";
 import { PlaceCategory } from "../../types";
 import { ALL_CATEGORIES, getCategoryLabel, getCategoryEmoji } from "../../utils/categoryUtils";
 import { useRouteStore } from "../../store/useRouteStore";
 import { format, addDays, parseISO } from "date-fns";
+import { formatTimeString } from "../schedule/scheduleTimeUtils";
 
 export type SortOption =
   | "default"
@@ -29,18 +30,18 @@ interface PlaceListToolbarProps {
   onCategoryFilterChange: (cat: PlaceCategory | "all") => void;
   sortBy: SortOption;
   onSortChange: (sort: SortOption) => void;
-  starredOnly: boolean;
-  onToggleStarredOnly: () => void;
-  starredCount: number;
-  reservationOnly: boolean;
-  onToggleReservationOnly: () => void;
-  recPlacesCount: number;
+  starredOnly?: boolean;
+  starredCount?: number;
+  reservationOnly?: boolean;
+  recPlacesCount?: number;
   isMassEditOpen: boolean;
   onToggleMassEdit: () => void;
   filteredPlacesCount: number;
   duplicatesOnly: boolean;
+  openBeforeTime: string | null;
+  onOpenBeforeTimeChange: (time: string | null) => void;
+  openBeforeCount?: number;
   onResetFilters: () => void;
-  onOpenReservationsHub?: () => void;
 }
 
 export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
@@ -54,21 +55,24 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
   onCategoryFilterChange,
   sortBy,
   onSortChange,
-  starredOnly,
-  onToggleStarredOnly,
-  starredCount,
-  reservationOnly,
-  onToggleReservationOnly,
-  recPlacesCount,
+  starredOnly = false,
+  starredCount = 0,
+  reservationOnly = false,
+  recPlacesCount = 0,
   isMassEditOpen,
   onToggleMassEdit,
   filteredPlacesCount,
   duplicatesOnly,
+  openBeforeTime,
+  onOpenBeforeTimeChange,
+  openBeforeCount,
   onResetFilters,
-  onOpenReservationsHub,
 }) => {
   const startDate = useRouteStore((s) => s.startDate);
   const dayIndices = React.useMemo(() => Array.from({ length: days }, (_, i) => i), [days]);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const STANDARD_PRESETS = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00"];
+  const isCustom = Boolean(openBeforeTime && !STANDARD_PRESETS.includes(openBeforeTime)) || showCustomInput;
 
   const getSortLabel = (sort: SortOption) => {
     switch (sort) {
@@ -103,20 +107,21 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
     starredOnly ||
     duplicatesOnly ||
     dayFilter !== "all" ||
-    categoryFilter !== "all";
+    categoryFilter !== "all" ||
+    Boolean(openBeforeTime);
 
   return (
     <>
       {/* PTV Search & Filter */}
-      <div className="flex flex-col lg:flex-row gap-2 mb-3">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 w-3.5 h-3.5" />
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 mb-3">
+        <div className="relative flex-1 min-w-[180px] w-full lg:w-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 w-3.5 h-3.5 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search places by name, highlights, or description..."
-            className="w-full h-9 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg pl-8 pr-8 text-surface-900 dark:text-white placeholder:text-surface-400 dark:placeholder:text-surface-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="w-full h-9 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg pl-8 pr-8 text-surface-900 dark:text-white placeholder:text-surface-400 dark:placeholder:text-surface-500 focus:outline-none focus:ring-1 focus:ring-primary-500 transition-all truncate"
           />
           {searchQuery && (
             <button
@@ -130,7 +135,7 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
           )}
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 min-w-0 pr-1 custom-scrollbar">
           {/* Day Filter Dropdown */}
           <select
             value={dayFilter}
@@ -193,66 +198,97 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
             </select>
           </div>
 
-          {/* Quick Filter: Starred Only */}
-          <button
-            type="button"
-            onClick={onToggleStarredOnly}
-            className={`h-9 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer ${
-              starredOnly
-                ? "bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700 shadow-2xs"
-                : "bg-surface-50 dark:bg-surface-800 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700"
-            }`}
-            title={starredOnly ? "Show all places" : "Filter to only starred must-visit places"}
-          >
-            <Star className={`w-3.5 h-3.5 shrink-0 ${starredOnly ? "fill-amber-500 text-amber-500" : "text-amber-500"}`} />
-            <span className="hidden sm:inline">Starred</span>
-            {starredCount > 0 && (
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${starredOnly
-                  ? "bg-amber-200/90 dark:bg-amber-800/90 text-amber-900 dark:text-amber-100"
-                  : "bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300"
-                }`}>
-                {starredCount}
-              </span>
-            )}
-          </button>
 
-          {/* Quick Filter: Reservation Rec Only */}
-          <button
-            type="button"
-            onClick={onToggleReservationOnly}
-            className={`h-9 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer ${
-              reservationOnly
-                ? "bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700 shadow-2xs"
-                : "bg-surface-50 dark:bg-surface-800 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700"
-            }`}
-            title={reservationOnly ? "Show all places" : "Filter to only places with reservation recommendations"}
-          >
-            <CalendarClock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span className="hidden sm:inline">Reservation Rec</span>
-            <span className="sm:hidden">Rec</span>
-            {recPlacesCount > 0 && (
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${reservationOnly
-                  ? "bg-amber-200/90 dark:bg-amber-800/90 text-amber-900 dark:text-amber-100"
-                  : "bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300"
-                }`}>
-                {recPlacesCount}
-              </span>
-            )}
-          </button>
-
-          {/* Quick Action: Open Reservations & Booking Hub */}
-          {onOpenReservationsHub && (
-            <button
-              type="button"
-              onClick={onOpenReservationsHub}
-              className="h-9 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 shadow-2xs"
-              title="Open Reservations & Booking Hub"
+          {/* Quick Filter: Open Before X Time */}
+          <div className="relative shrink-0 flex items-center">
+            <select
+              value={
+                !openBeforeTime
+                  ? "all"
+                  : ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00"].includes(openBeforeTime)
+                  ? openBeforeTime
+                  : "custom"
+              }
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "all") {
+                  onOpenBeforeTimeChange(null);
+                  setShowCustomInput(false);
+                } else if (val === "custom") {
+                  setShowCustomInput(true);
+                  if (!openBeforeTime) {
+                    onOpenBeforeTimeChange("09:00");
+                  }
+                } else {
+                  setShowCustomInput(false);
+                  onOpenBeforeTimeChange(val);
+                }
+              }}
+              className={`h-9 shrink-0 text-xs rounded-lg px-2.5 font-medium transition-all cursor-pointer border ${
+                openBeforeTime
+                  ? "bg-teal-100 dark:bg-teal-900/50 text-teal-900 dark:text-teal-200 border-teal-300 dark:border-teal-700 shadow-2xs font-semibold"
+                  : "bg-surface-50 dark:bg-surface-800 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-700"
+              }`}
+              title={
+                openBeforeTime
+                  ? `Filtered to places open before ${formatTimeString(openBeforeTime)}`
+                  : "Filter by places that are open before a specific time"
+              }
             >
-              <Ticket className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span className="hidden sm:inline">Booking Hub</span>
-              <span className="sm:hidden">Hub</span>
-            </button>
-          )}
+              <option value="all">Hours: All Times</option>
+              <option value="07:00">Open before 7:00 AM</option>
+              <option value="08:00">Open before 8:00 AM</option>
+              <option value="09:00">Open before 9:00 AM</option>
+              <option value="10:00">Open before 10:00 AM</option>
+              <option value="11:00">Open before 11:00 AM</option>
+              <option value="12:00">Open before 12:00 PM</option>
+              <option value="13:00">Open before 1:00 PM</option>
+              <option value="14:00">Open before 2:00 PM</option>
+              <option value="custom">
+                {openBeforeTime && !["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00"].includes(openBeforeTime)
+                  ? `Custom: ${formatTimeString(openBeforeTime)}`
+                  : "Custom time..."}
+              </option>
+            </select>
+
+            {/* Custom Time Picker Inline Input */}
+            {isCustom && (
+              <div className="flex items-center gap-1 ml-1.5 shrink-0 animate-in fade-in duration-150">
+                <input
+                  type="time"
+                  value={openBeforeTime || "09:00"}
+                  onChange={(e) => onOpenBeforeTimeChange(e.target.value)}
+                  className="h-9 w-24 px-1.5 text-xs bg-surface-50 dark:bg-surface-900 border border-teal-300 dark:border-teal-700 rounded-lg text-teal-900 dark:text-teal-100 font-mono focus:outline-none focus:ring-1 focus:ring-teal-500 shadow-2xs text-center"
+                  title="Choose exact time"
+                />
+              </div>
+            )}
+
+            {/* Clear Button & Count Badge */}
+            {openBeforeTime && (
+              <div className="flex items-center gap-1 ml-1 shrink-0">
+                {openBeforeCount !== undefined && openBeforeCount > 0 && (
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-200/90 dark:bg-teal-800/90 text-teal-900 dark:text-teal-100 shrink-0"
+                    title={`${openBeforeCount} places open before ${formatTimeString(openBeforeTime)}`}
+                  >
+                    {openBeforeCount}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenBeforeTimeChange(null);
+                    setShowCustomInput(false);
+                  }}
+                  className="p-1 text-surface-400 hover:text-red-500 rounded cursor-pointer shrink-0"
+                  title="Clear hours filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Quick Toggle: Mass Edit */}
           <button
@@ -270,7 +306,7 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
             <span className="sm:hidden">Mass</span>
             {filteredPlacesCount > 0 && (
               <span
-                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
                   isMassEditOpen
                     ? "bg-primary-200/90 dark:bg-primary-800/90 text-primary-900 dark:text-primary-100"
                     : "bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300"
@@ -326,6 +362,11 @@ export const PlaceListToolbar: React.FC<PlaceListToolbarProps> = React.memo(({
             {reservationOnly && (
               <span>
                 Filter: <strong className="text-amber-700 dark:text-amber-300">Reservation Recommendations ({recPlacesCount})</strong>
+              </span>
+            )}
+            {openBeforeTime && (
+              <span>
+                Filter: <strong className="text-teal-700 dark:text-teal-300">Open Before {formatTimeString(openBeforeTime)} ({openBeforeCount ?? filteredPlacesCount})</strong>
               </span>
             )}
           </div>

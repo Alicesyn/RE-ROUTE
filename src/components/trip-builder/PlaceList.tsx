@@ -29,6 +29,7 @@ import { formatMultiRangeBadge } from "../../utils/dayRangeUtils";
 import { toast } from "../../services/toastService";
 import { isAreaPlace } from "../../utils/areaOpeningHoursUtils";
 import { getCategoryLabel } from "../../utils/categoryUtils";
+import { isPlaceOpenBefore } from "../../utils/timeUtils";
 
 const EditPlaceModal = React.lazy(() =>
   import("../schedule/EditPlaceModal").then((m) => ({ default: m.EditPlaceModal }))
@@ -80,6 +81,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
     const [reservationOnly, setReservationOnly] = useState(false);
     const [starredOnly, setStarredOnly] = useState(false);
     const [duplicatesOnly, setDuplicatesOnly] = useState(false);
+    const [openBeforeTime, setOpenBeforeTime] = useState<string | null>(null);
     const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
     const [isReservationsOpen, setIsReservationsOpen] = useState(false);
 
@@ -216,9 +218,33 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       ).length;
     }, [baseFilteredPlaces]);
 
+    const reservationPlaces = useMemo(() => {
+      return places.filter(
+        (p) =>
+          p.reservation?.requirement === "recommended" ||
+          p.reservation?.requirement === "required"
+      );
+    }, [places]);
+
+    const pendingReservationsCount = useMemo(() => {
+      return reservationPlaces.filter(
+        (p) =>
+          !p.reservation?.isBooked &&
+          p.reservation?.requirement !== "walk_ins_only" &&
+          p.reservation?.requirement !== "not_needed"
+      ).length;
+    }, [reservationPlaces]);
+
     const starredCount = useMemo(() => {
       return baseFilteredPlaces.filter((p) => p.isStarred).length;
     }, [baseFilteredPlaces]);
+
+    const openBeforeCount = useMemo(() => {
+      if (!openBeforeTime) return 0;
+      return baseFilteredPlaces.filter((p) =>
+        isPlaceOpenBefore(p, openBeforeTime, dayFilter, startDate, days)
+      ).length;
+    }, [baseFilteredPlaces, openBeforeTime, dayFilter, startDate, days]);
 
     const filteredPlaces = useMemo(() => {
       let list: Place[];
@@ -253,6 +279,12 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           (p) =>
             p.reservation?.requirement === "recommended" ||
             p.reservation?.requirement === "required"
+        );
+      }
+
+      if (openBeforeTime) {
+        list = list.filter((p) =>
+          isPlaceOpenBefore(p, openBeforeTime, dayFilter, startDate, days)
         );
       }
 
@@ -342,11 +374,14 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       dayFilter,
       starredOnly,
       reservationOnly,
+      openBeforeTime,
       duplicatesOnly,
       duplicatePlaceIds,
       sortBy,
       places,
       searchQuery,
+      startDate,
+      days,
     ]);
 
     const sortableItemIds = useMemo(
@@ -362,7 +397,8 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
         activeTab !== "active" ||
         starredOnly ||
         reservationOnly ||
-        duplicatesOnly
+        duplicatesOnly ||
+        Boolean(openBeforeTime)
       );
     }, [
       categoryFilter,
@@ -372,6 +408,7 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       starredOnly,
       reservationOnly,
       duplicatesOnly,
+      openBeforeTime,
     ]);
 
     const activeFilterDescription = useMemo(() => {
@@ -603,6 +640,15 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           onReenableAll={() =>
             setAllPlacesDisabled(false, filteredPlaces.map((p) => p.id))
           }
+          onOpenReservationsHub={() => setIsReservationsOpen(true)}
+          pendingReservationsCount={pendingReservationsCount}
+          reservationPlacesCount={reservationPlaces.length}
+          starredOnly={starredOnly}
+          onToggleStarredOnly={() => setStarredOnly((prev) => !prev)}
+          starredCount={starredCount}
+          reservationOnly={reservationOnly}
+          onToggleReservationOnly={() => setReservationOnly((prev) => !prev)}
+          recPlacesCount={recPlacesCount}
         />
 
         {/* Duplicate Places Warning Banner */}
@@ -634,22 +680,24 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           sortBy={sortBy}
           onSortChange={setSortBy}
           starredOnly={starredOnly}
-          onToggleStarredOnly={() => setStarredOnly((prev) => !prev)}
           starredCount={starredCount}
           reservationOnly={reservationOnly}
-          onToggleReservationOnly={() => setReservationOnly((prev) => !prev)}
           recPlacesCount={recPlacesCount}
           isMassEditOpen={isMassEditOpen}
           onToggleMassEdit={() => setIsMassEditOpen((prev) => !prev)}
           filteredPlacesCount={filteredPlaces.length}
           duplicatesOnly={duplicatesOnly}
-          onOpenReservationsHub={() => setIsReservationsOpen(true)}
+          openBeforeTime={openBeforeTime}
+          onOpenBeforeTimeChange={setOpenBeforeTime}
+          openBeforeCount={openBeforeCount}
           onResetFilters={() => {
             setSortBy("default");
             setReservationOnly(false);
             setStarredOnly(false);
             setDuplicatesOnly(false);
             setDayFilter("all");
+            setCategoryFilter("all");
+            setOpenBeforeTime(null);
           }}
         />
 
@@ -682,6 +730,8 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
             dayFilter={dayFilter}
             dayTitles={dayTitles}
             activeTab={activeTab}
+            openBeforeTime={openBeforeTime}
+            onClearHoursFilter={() => setOpenBeforeTime(null)}
           />
         ) : (
           <DndContext

@@ -68,6 +68,7 @@ export interface Place {
   descriptionSource: "user" | "ai" | "mock";
   category: PlaceCategory;
   estimatedDuration: number; // minutes
+  aiEstimatedDuration?: number; // Raw AI suggested duration in minutes
   dayIndex: number | null; // 0-indexed day
   orderInDay: number | null;
   pinnedToDay: boolean; // true if user manually assigned to a day; optimizer won't move pinned places

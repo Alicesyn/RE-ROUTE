@@ -58,6 +58,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [pinnedToDay, setPinnedToDay] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [dismissedDuplicate, setDismissedDuplicate] = useState(false);
+  const [aiEstimatedDuration, setAiEstimatedDuration] = useState<number | undefined>(undefined);
   const [hasDayRange, setHasDayRange] = useState(false);
   const [dayRangeMode, setDayRangeMode] = useState<"allow" | "exclude">("allow");
   const [dayRangeRows, setDayRangeRows] = useState<DayRangeConstraint[]>([
@@ -89,6 +90,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
     if (place) {
       setDesc(stripTabelogPrefix(place.description || ""));
       setDurationVal((place.estimatedDuration ?? 60).toString());
+      setAiEstimatedDuration(place.aiEstimatedDuration);
       setCategory(place.category);
       setRomanizedName(place.romanizedName || "");
       setHighlightLabel(place.highlight?.label || "");
@@ -437,6 +439,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       allowedDayRanges: finalAllowedDayRanges,
       dayRangeMode: finalDayRangeMode,
       allowedTimeRange: finalAllowedTimeRange,
+      aiEstimatedDuration: aiEstimatedDuration ?? place.aiEstimatedDuration,
       isArea,
       areaNote: isArea ? (areaNoteVal.trim() || place.areaNote || undefined) : undefined,
       openingHours: finalOpeningHours,
@@ -570,7 +573,15 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       }
       setDesc(aiData.description);
       setCategory(aiData.category);
-      setDurationVal(aiData.estimatedDuration.toString());
+      const catDefault = getDefaultDuration(aiData.category);
+      setDurationVal(catDefault.toString());
+      setAiEstimatedDuration(aiData.estimatedDuration);
+      if (aiData.estimatedDuration > catDefault + 30) {
+        toast.warning(
+          `AI estimates this place may take ${aiData.estimatedDuration} min (${aiData.estimatedDuration - catDefault}m longer than ${getCategoryLabel(aiData.category)} default). Assigned default ${catDefault} min.`,
+          "Visit Duration Warning"
+        );
+      }
       if (aiData.romanizedName) {
         setRomanizedName(aiData.romanizedName);
       }
@@ -730,6 +741,21 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                 onChange={(e) => setDurationVal(e.target.value)}
                 className="w-full text-sm font-medium bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 text-surface-900 dark:text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
+              {aiEstimatedDuration && aiEstimatedDuration > getDefaultDuration(category) + 30 && (parseInt(durationVal) || 0) < aiEstimatedDuration && (
+                <div className="text-xs flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 mt-1">
+                  <span className="flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>AI suggests <strong>{aiEstimatedDuration} min</strong> (+{aiEstimatedDuration - getDefaultDuration(category)}m longer than category default)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDurationVal(aiEstimatedDuration.toString())}
+                    className="font-bold text-amber-800 dark:text-amber-200 bg-amber-200/80 dark:bg-amber-800/80 hover:bg-amber-300 dark:hover:bg-amber-700 px-2 py-0.5 rounded text-[11px] cursor-pointer shrink-0 ml-1.5"
+                  >
+                    Apply {aiEstimatedDuration}m
+                  </button>
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider flex items-center gap-1">

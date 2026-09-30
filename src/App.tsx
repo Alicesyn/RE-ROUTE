@@ -23,7 +23,7 @@ const ResetTripModal = React.lazy(() =>
 import { hasNonLatinScript } from "./utils/textUtils";
 import type { DayRoute, Place } from "./types";
 import { isLocalDev } from "./utils/envUtils";
-import { getCategoryLabel } from "./utils/categoryUtils";
+import { getCategoryLabel, getDefaultDuration } from "./utils/categoryUtils";
 import {
   getSpecificMockHighlight,
   getSpecificMockPrice,
@@ -365,12 +365,14 @@ function App() {
           for (const p of placesToUpdate) {
             const aiData = aiDataArray.find((d) => d.id === p.id);
             if (aiData) {
+              const defaultCatDuration = getDefaultDuration(aiData.category);
               updates.push({
                 id: p.id,
                 updates: {
                   description: aiData.description,
                   category: aiData.category,
-                  estimatedDuration: aiData.estimatedDuration,
+                  estimatedDuration: defaultCatDuration,
+                  aiEstimatedDuration: aiData.estimatedDuration,
                   descriptionSource: "ai" as const,
                   ...(aiData.romanizedName ? { romanizedName: aiData.romanizedName } : {}),
                   ...(aiData.highlight ? { highlight: aiData.highlight } : {}),
@@ -450,6 +452,17 @@ function App() {
       if (updates.length > 0) {
         console.log(`[AI Describe] Saving ${updates.length} descriptions to state...`);
         updatePlacesBulk(updates);
+        const longPlaces = updates.filter(
+          (u) =>
+            u.updates.aiEstimatedDuration &&
+            u.updates.aiEstimatedDuration > getDefaultDuration(u.updates.category || "other") + 30
+        );
+        if (longPlaces.length > 0) {
+          toast.warning(
+            `AI flagged ${longPlaces.length} place(s) as potentially taking >30m longer than category defaults. Category defaults were assigned; see place cards to review warnings.`,
+            "Visit Duration Warning"
+          );
+        }
         toast.success(`Generated AI descriptions for ${updates.length} places!`, "AI Descriptions Ready");
       } else {
         toast.info("No description updates needed.", "AI Describe");
@@ -611,6 +624,7 @@ function App() {
         for (const p of targetPlaces) {
           const aiData = aiDataArray.find((d) => d.id === p.id);
           if (aiData) {
+            const defaultCatDuration = getDefaultDuration(aiData.category);
             updates.push({
               id: p.id,
               updates: {
@@ -619,7 +633,8 @@ function App() {
                     ? `${aiData.description}\n\n${p.areaNote}`
                     : aiData.description,
                 category: aiData.category,
-                estimatedDuration: aiData.estimatedDuration,
+                estimatedDuration: defaultCatDuration,
+                aiEstimatedDuration: aiData.estimatedDuration,
                 descriptionSource: "ai",
                 ...(aiData.romanizedName ? { romanizedName: aiData.romanizedName } : {}),
                 ...(aiData.highlight ? { highlight: aiData.highlight } : {}),
@@ -674,6 +689,17 @@ function App() {
 
       if (updates.length > 0) {
         updatePlacesBulk(updates);
+        const longPlaces = updates.filter(
+          (u) =>
+            u.updates.aiEstimatedDuration &&
+            u.updates.aiEstimatedDuration > getDefaultDuration(u.updates.category || "other") + 30
+        );
+        if (longPlaces.length > 0) {
+          toast.warning(
+            `AI flagged ${longPlaces.length} place(s) as potentially taking >30m longer than category defaults. Category defaults were assigned; see place cards to review warnings.`,
+            "Visit Duration Warning"
+          );
+        }
         toast.success(
           `Regenerated AI data & highlights for ${updates.length} places${scopeNotice}!`,
           "Regeneration Complete"

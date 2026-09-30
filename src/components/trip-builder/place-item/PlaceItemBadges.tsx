@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Timer, Clock, Coins, CalendarDays, ExternalLink, Pin, ChevronDown, Calendar } from "lucide-react";
+import { Timer, Clock, Coins, CalendarDays, ExternalLink, Pin, ChevronDown, Calendar, AlertTriangle } from "lucide-react";
 import { Place, PlaceCategory } from "../../../types";
 import {
   ALL_CATEGORIES,
   getCategoryEmoji,
   getCategoryLabel,
+  getDefaultDuration,
 } from "../../../utils/categoryUtils";
 import { formatMultiRangeBadge } from "../../../utils/dayRangeUtils";
 import { ReservationBadge } from "../../common/ReservationBadge";
@@ -51,6 +52,7 @@ export interface PlaceItemBadgesProps {
   onCategoryChange: (cat: PlaceCategory) => void;
   onAssignDay: (dayIndex: number) => void;
   onUnassignDay: () => void;
+  onAcceptAiDuration?: (duration: number) => void;
   onEdit?: (id: string) => void;
 }
 
@@ -69,12 +71,20 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
   onCategoryChange,
   onAssignDay,
   onUnassignDay,
+  onAcceptAiDuration,
   onEdit,
 }) => {
   const assignedDayTitle =
     place.dayIndex !== null && place.dayIndex !== undefined
       ? dayTitles?.[place.dayIndex]?.trim()
       : undefined;
+
+  const defaultDuration = getDefaultDuration(place.category);
+  const hasAiDurationWarning = Boolean(
+    place.aiEstimatedDuration &&
+    place.aiEstimatedDuration > defaultDuration + 30 &&
+    (place.estimatedDuration ?? defaultDuration) < place.aiEstimatedDuration
+  );
 
   const [showFullGoogle, setShowFullGoogle] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -314,6 +324,30 @@ export const PlaceItemBadges: React.FC<PlaceItemBadgesProps> = ({
               <Timer className="w-3 h-3" />
               {place.estimatedDuration ?? 60} min
             </button>
+          )}
+
+          {/* AI Duration Warning Pill if AI thinks PTV takes > 30m longer than category default */}
+          {hasAiDurationWarning && (
+            <div
+              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80 shadow-2xs whitespace-nowrap"
+              title={`Warning: AI estimates this place may take ${place.aiEstimatedDuration} min (${place.aiEstimatedDuration! - defaultDuration} min longer than the ${defaultDuration} min ${getCategoryLabel(place.category)} default).`}
+            >
+              <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>AI est. {place.aiEstimatedDuration}m (+{place.aiEstimatedDuration! - defaultDuration}m)</span>
+              {onAcceptAiDuration && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAcceptAiDuration(place.aiEstimatedDuration!);
+                  }}
+                  className="ml-1 px-1.5 py-0.2 text-[10px] font-bold rounded bg-amber-200/90 dark:bg-amber-800/90 hover:bg-amber-300 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 transition-colors cursor-pointer"
+                  title={`Accept ${place.aiEstimatedDuration} min for this place`}
+                >
+                  Apply
+                </button>
+              )}
+            </div>
           )}
 
           {/* Opening Hours badge */}

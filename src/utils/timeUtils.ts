@@ -1,3 +1,4 @@
+import { addDays, parseISO } from "date-fns";
 import type { TimeRangeConstraint } from "../types";
 
 const WEEKDAYS_LONG = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -340,5 +341,93 @@ export const checkTimeConflict = (
     waitMinutes,
     effectiveStartTime,
   };
+};
+
+/**
+ * Checks if a place is open before or at a specified target time (e.g. "09:00" = 9:00 AM).
+ *
+ * @param place - Place-like object with openingHours, allowedTimeRange, and optional businessStatus.
+ * @param targetTime - "HH:mm" time string (e.g. "09:00" for 9:00 AM).
+ * @param dayFilter - Day filter ("all", "unassigned", or 0-indexed day number).
+ * @param startDate - Trip start date (YYYY-MM-DD).
+ * @param days - Number of days in the trip.
+ */
+export const isPlaceOpenBefore = (
+  place: {
+    openingHours?: string[];
+    allowedTimeRange?: { startTime: string; endTime: string };
+    businessStatus?: string;
+  },
+  targetTime: string,
+  dayFilter: number | "all" | "unassigned" = "all",
+  startDate?: string,
+  days: number = 1
+): boolean => {
+  if (!targetTime) return true;
+  if (place.businessStatus === "CLOSED_PERMANENTLY") return false;
+
+  const targetMinutes = parseTimeToMinutes(targetTime);
+
+  const matchesDayHours = (dayHours: ParsedOpeningHours | "closed" | "24hours" | null): boolean => {
+    if (!dayHours || dayHours === "closed") return false;
+    if (dayHours === "24hours") return true;
+    return dayHours.intervals.some((interval) => {
+      // Place opened before or at the target time, and has valid operating duration
+      return interval.open <= targetMinutes && interval.close > interval.open;
+    });
+  };
+
+  // 1. If filtered to a specific day index
+  if (typeof dayFilter === "number" && startDate) {
+    try {
+      const targetDate = addDays(parseISO(startDate), dayFilter);
+      if (place.openingHours && place.openingHours.length > 0) {
+        const dayHours = getPlaceDayHours(place.openingHours, targetDate);
+        if (dayHours !== null) {
+          return matchesDayHours(dayHours);
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // 2. Check place.openingHours across trip days or week
+  if (place.openingHours && place.openingHours.length > 0) {
+    if (startDate && days > 0) {
+      try {
+        const start = parseISO(startDate);
+        for (let i = 0; i < days; i++) {
+          const d = addDays(start, i);
+          const dayHours = getPlaceDayHours(place.openingHours, d);
+          if (dayHours && matchesDayHours(dayHours)) {
+            return true;
+          }
+        }
+        return false;
+      } catch {
+        // fallback
+      }
+    }
+
+    // Fallback: check 7 weekdays
+    const now = new Date();
+    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+      const testDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset);
+      const dayHours = getPlaceDayHours(place.openingHours, testDate);
+      if (dayHours && matchesDayHours(dayHours)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 3. User custom allowedTimeRange fallback
+  if (place.allowedTimeRange?.startTime) {
+    const startMins = parseTimeToMinutes(place.allowedTimeRange.startTime);
+    return startMins <= targetMinutes;
+  }
+
+  return false;
 };
 

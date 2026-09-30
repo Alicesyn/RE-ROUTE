@@ -1,5 +1,6 @@
 import React from "react";
 import type { FilterTab } from "./PlaceFilterTabs";
+import { formatTimeString } from "../schedule/scheduleTimeUtils";
 
 export interface PlaceListEmptyStateProps {
   searchQuery: string;
@@ -9,6 +10,8 @@ export interface PlaceListEmptyStateProps {
   dayFilter: number | "all" | "unassigned";
   dayTitles?: Record<number, string>;
   activeTab: FilterTab;
+  openBeforeTime?: string | null;
+  onClearHoursFilter?: () => void;
 }
 
 export const PlaceListEmptyState: React.FC<PlaceListEmptyStateProps> = React.memo(
@@ -20,11 +23,15 @@ export const PlaceListEmptyState: React.FC<PlaceListEmptyStateProps> = React.mem
     dayFilter,
     dayTitles,
     activeTab,
+    openBeforeTime,
+    onClearHoursFilter,
   }) => {
     let message: string;
 
     if (searchQuery.trim()) {
       message = `No places matching "${searchQuery}". Try searching by a different name, dish/highlight, or keyword.`;
+    } else if (openBeforeTime) {
+      message = `No places found open before ${formatTimeString(openBeforeTime)}. Try selecting a later time or clearing the hours filter.`;
     } else if (duplicatesOnly) {
       message = "No duplicate places found.";
     } else if (starredOnly) {
@@ -54,9 +61,19 @@ export const PlaceListEmptyState: React.FC<PlaceListEmptyStateProps> = React.mem
         <p className="text-surface-500 dark:text-surface-400 text-sm">
           {message}
         </p>
+        {openBeforeTime && onClearHoursFilter && (
+          <button
+            type="button"
+            onClick={onClearHoursFilter}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors cursor-pointer"
+          >
+            Clear Hours Filter
+          </button>
+        )}
       </div>
     );
   }
 );
 
 PlaceListEmptyState.displayName = "PlaceListEmptyState";
+

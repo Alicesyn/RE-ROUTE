@@ -5,7 +5,7 @@ import { GripVertical, AlertCircle, Sparkles, Loader2, X } from "lucide-react";
 import { Place, PlaceCategory } from "../../types";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
-import { getDefaultDuration, getActivePhotoUrl } from "../../utils/categoryUtils";
+import { getDefaultDuration, getActivePhotoUrl, getCategoryLabel } from "../../utils/categoryUtils";
 import { summarizePlace } from "../../services/aiService";
 import {
   getSpecificMockHighlight,
@@ -122,10 +122,12 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
         place.areaNote && !aiData.description.includes(place.areaNote)
           ? `${aiData.description}\n\n${place.areaNote}`
           : aiData.description;
+      const defaultCatDuration = getDefaultDuration(aiData.category);
       updatePlace(place.id, {
         description: finalDesc,
         category: aiData.category,
-        estimatedDuration: aiData.estimatedDuration,
+        estimatedDuration: defaultCatDuration,
+        aiEstimatedDuration: aiData.estimatedDuration,
         descriptionSource: "ai",
         ...(aiData.romanizedName ? { romanizedName: aiData.romanizedName } : {}),
         ...(aiData.highlight ? { highlight: aiData.highlight } : {}),
@@ -144,6 +146,13 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
         ...(aiData.tabelog ? { tabelog: aiData.tabelog } : {}),
       });
       setDesc(finalDesc);
+      setDurationVal(defaultCatDuration.toString());
+      if (aiData.estimatedDuration > defaultCatDuration + 30) {
+        toast.warning(
+          `AI estimates "${place.name}" may take ${aiData.estimatedDuration} min (${aiData.estimatedDuration - defaultCatDuration}m longer than ${getCategoryLabel(aiData.category)} default). Assigned default ${defaultCatDuration} min.`,
+          "Visit Duration Warning"
+        );
+      }
     } catch (err) {
       console.error(err);
       if (place.editorialSummary) {
@@ -297,6 +306,11 @@ export const PlaceItem: React.FC<PlaceItemProps> = React.memo(({ place, isDuplic
             onDurationCancel={() => {
               setIsEditingDuration(false);
               setDurationVal((place.estimatedDuration ?? 60).toString());
+            }}
+            onAcceptAiDuration={(dur) => {
+              updatePlace(place.id, { estimatedDuration: dur });
+              setDurationVal(dur.toString());
+              toast.success(`Updated duration to ${dur} min based on AI suggestion.`, "Duration Updated");
             }}
             onCategoryChange={handleCategoryChange}
             onEdit={onEdit}

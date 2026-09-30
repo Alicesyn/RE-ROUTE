@@ -11,6 +11,7 @@ import {
   getSpecificMockReservation,
 } from "../utils/mockAiUtils";
 import { formatDescriptionWithTabelog, stripTabelogPrefix } from "../utils/tabelogUtils";
+import { getDefaultDuration } from "../utils/categoryUtils";
 
 // Curated top sights for Kyoto (expanded pool for fresh suggestions on refresh)
 const KYOTO_SIGHTS = [
@@ -1169,7 +1170,8 @@ export async function getSuggestedPlaces(
                   lat: bestMatch.lat,
                   lng: bestMatch.lng,
                   category: suggestion.category,
-                  estimatedDuration: suggestion.estimatedDuration,
+                  estimatedDuration: getDefaultDuration(suggestion.category),
+                  aiEstimatedDuration: suggestion.estimatedDuration,
                   description: suggestion.tabelog?.rating
                     ? formatDescriptionWithTabelog(suggestion.description, suggestion.tabelog.rating, suggestion.tabelog.award)
                     : suggestion.description,
@@ -1204,7 +1206,8 @@ export async function getSuggestedPlaces(
               lat: suggestion.lat,
               lng: suggestion.lng,
               category: suggestion.category,
-              estimatedDuration: suggestion.estimatedDuration,
+              estimatedDuration: getDefaultDuration(suggestion.category),
+              aiEstimatedDuration: suggestion.estimatedDuration,
               description: suggestion.tabelog?.rating
                 ? formatDescriptionWithTabelog(suggestion.description, suggestion.tabelog.rating, suggestion.tabelog.award)
                 : suggestion.description,
