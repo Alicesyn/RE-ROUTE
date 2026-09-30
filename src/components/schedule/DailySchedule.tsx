@@ -230,20 +230,64 @@ export const DailySchedule: React.FC = React.memo(() => {
     setEditingPlaceId(id);
   }, []);
 
-  // Prevent mouse wheel controls from scrolling the horizontal schedule;
-  // it can now only be moved by dragging/clicking the horizontal scrollbar or using Jump-to buttons.
+  // Enable scrolling around the whole page when hovering in-between day cards (gap or container padding),
+  // while isolating day card scrolling so scrolling all the way to the top of a card does not scroll up the page.
   React.useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // Prevent horizontal wheel events (e.g. mouse tilt/thumb wheel, Shift + wheel)
-      // from scrolling this container horizontally so only the scrollbar moves it.
-      if (e.deltaX !== 0 || e.shiftKey) {
+      const target = e.target as HTMLElement | null;
+      // Hovering in-between cards: directly on the scroll container or outside any day card
+      const isBetweenCards = !target?.closest('[id^="schedule-day-"]');
+      const stopsContainer = target?.closest(".smooth-scroll-container") as HTMLElement | null;
+
+      const deltaMultiplier = e.deltaMode === 1 ? 20 : e.deltaMode === 2 ? 500 : 1;
+      const deltaY = e.deltaY * deltaMultiplier;
+      const deltaX = e.deltaX * deltaMultiplier;
+
+      // 1. Allow native horizontal scrolling of the day cards container for horizontal gestures (trackpad swipe or Shift+wheel)
+      if ((Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 1) || e.shiftKey) {
+        return;
+      }
+
+      // 2. If hovering in-between day cards (gap or container padding):
+      // Directly scroll the main page container up and down
+      if (isBetweenCards) {
+        if (Math.abs(deltaY) > 0) {
+          e.preventDefault();
+          const mainEl = el.closest("main");
+          if (mainEl && mainEl.scrollHeight > mainEl.clientHeight) {
+            mainEl.scrollTop += deltaY;
+          } else {
+            window.scrollBy({ top: deltaY });
+          }
+        }
+        return;
+      }
+
+      // 3. Hovering inside a day card's stops list:
+      // Allow stops list to scroll if it has room in the requested direction.
+      // Prevent scrolling past the boundary (especially scrolling all the way to the top) from moving the page.
+      if (stopsContainer) {
+        const canScrollDown = deltaY > 0 && stopsContainer.scrollTop + stopsContainer.clientHeight < stopsContainer.scrollHeight - 1;
+        const canScrollUp = deltaY < 0 && stopsContainer.scrollTop > 1;
+
+        if (canScrollDown || canScrollUp) {
+          // Let the inner stops list scroll naturally
+          return;
+        }
+
+        // Reached boundary inside the day card: prevent the wheel event from scrolling the page
+        e.preventDefault();
+        return;
+      }
+
+      // 4. Hovering on card header or footer outside the stops list:
+      // Prevent upward scroll from moving the page while hovering over the day card
+      if (deltaY < 0) {
         e.preventDefault();
       }
-      // Standard vertical mouse wheel (e.deltaY) is not intercepted,
-      // allowing it to scroll the page or inner stops list naturally.
     };
 
     el.addEventListener("wheel", handleWheel, { passive: false });
@@ -618,7 +662,7 @@ export const DailySchedule: React.FC = React.memo(() => {
 
         <div
           ref={scrollContainerRef}
-          className="p-6 overflow-x-auto overflow-y-hidden custom-scrollbar flex gap-6 snap-x snap-proximity overscroll-x-contain items-start"
+          className="p-6 overflow-x-auto custom-scrollbar flex gap-6 snap-x snap-proximity overscroll-x-contain items-start"
         >
           {optimizedRoutes.map((route, i) => {
             const currentDate = addDays(parseISO(startDate), i);
@@ -1169,7 +1213,7 @@ export const DailySchedule: React.FC = React.memo(() => {
                       if (el) dayScrollRefs.current.set(i, el);
                       else dayScrollRefs.current.delete(i);
                     }}
-                    className={`flex-1 overflow-x-hidden pl-8 pr-4 py-4 space-y-0 relative smooth-scroll-container ${isExpanded ? "overflow-visible" : "overflow-y-auto custom-scrollbar"
+                    className={`flex-1 overflow-x-hidden pl-8 pr-4 py-4 space-y-0 relative smooth-scroll-container ${isExpanded ? "overflow-visible" : "overflow-y-auto custom-scrollbar overscroll-y-contain"
                       }`}
                   >
                     <DndContext

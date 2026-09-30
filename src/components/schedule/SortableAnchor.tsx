@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, PlaneLanding, PlaneTakeoff, Building2 } from "lucide-react";
@@ -29,10 +29,12 @@ export const SortableAnchor: React.FC<SortableAnchorProps> = React.memo(
       isDragging,
     } = useSortable({ id });
 
+    const [isBufferOpen, setIsBufferOpen] = useState(false);
+
     const style = {
       transform: CSS.Transform.toString(transform),
       transition,
-      zIndex: isDragging ? 50 : 1,
+      zIndex: isDragging ? 50 : isBufferOpen ? 50 : 1,
       position: "relative" as const,
       opacity: isDragging ? 0.3 : 1,
       scale: isDragging ? 1.02 : 1,
@@ -64,7 +66,7 @@ export const SortableAnchor: React.FC<SortableAnchorProps> = React.memo(
       <div
         ref={setNodeRef}
         style={style}
-        className={`relative group ${isDragging ? "cursor-grabbing" : ""}`}
+        className={`relative group ${isDragging ? "cursor-grabbing" : ""} ${isBufferOpen ? "z-50" : ""}`}
       >
         {/* Visual Drop Indicator */}
         {isDragging && (
@@ -92,6 +94,7 @@ export const SortableAnchor: React.FC<SortableAnchorProps> = React.memo(
             showLine={false}
             type="departure"
             onSaveMinutes={onUpdateBuffer}
+            onOpenChange={setIsBufferOpen}
           />
         )}
 
@@ -156,6 +159,7 @@ export const SortableAnchor: React.FC<SortableAnchorProps> = React.memo(
             showLine={!isLast}
             type={type === "arrival" ? "arrival" : undefined}
             onSaveMinutes={onUpdateBuffer}
+            onOpenChange={setIsBufferOpen}
           />
         )}
       </div>

@@ -1184,20 +1184,21 @@ export async function exportTripToExcel(
     { width: 28 }, // C: Place Name
     { width: 22 }, // D: Romanized Name
     { width: 18 }, // E: Category
-    { width: 14 }, // F: Duration
-    { width: 16 }, // G: Price Estimate
-    { width: 20 }, // H: Reservation
-    { width: 24 }, // I: Booking Window
-    { width: 34 }, // J: Highlight
-    { width: 36 }, // K: Description
-    { width: 34 }, // L: Address
-    { width: 16 }, // M: Google Maps
-    { width: 26 }, // N: Notes
+    { width: 22 }, // F: Who's Interested
+    { width: 14 }, // G: Duration
+    { width: 16 }, // H: Price Estimate
+    { width: 20 }, // I: Reservation
+    { width: 24 }, // J: Booking Window
+    { width: 34 }, // K: Highlight
+    { width: 36 }, // L: Description
+    { width: 34 }, // M: Address
+    { width: 16 }, // N: Google Maps
+    { width: 26 }, // O: Notes
   ];
 
   // Header Banner
   const catTitleRow = catalogSheet.addRow(["ALL PLACES TO VISIT (MASTER CATALOG & DATABASE)"]);
-  catalogSheet.mergeCells("A1:N1");
+  catalogSheet.mergeCells("A1:O1");
   catTitleRow.getCell(1).font = {
     name: FONT_FAMILY,
     size: 13,
@@ -1219,6 +1220,7 @@ export async function exportTripToExcel(
     "Place Name",
     "Romanized Name",
     "Category",
+    "Who's Interested",
     "Est. Duration",
     "Price Estimate",
     "Reservation Req.",
@@ -1232,7 +1234,7 @@ export async function exportTripToExcel(
   const catHeaderRowCells = catalogSheet.addRow(catHeaders);
   catHeaderRowCells.height = 24;
 
-  for (let c = 1; c <= 14; c++) {
+  for (let c = 1; c <= 15; c++) {
     const cell = catHeaderRowCells.getCell(c);
     cell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: COLORS.NAVY_SUBHEADER } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.EMERALD_LIGHT } };
@@ -1242,7 +1244,7 @@ export async function exportTripToExcel(
       left: { style: "thin", color: { argb: COLORS.BORDER_LIGHT } },
       right: { style: "thin", color: { argb: COLORS.BORDER_LIGHT } },
     };
-    cell.alignment = { vertical: "middle", horizontal: c === 1 || c === 2 || c === 6 ? "center" : "left" };
+    cell.alignment = { vertical: "middle", horizontal: c === 1 || c === 2 || c === 7 ? "center" : "left" };
   }
 
   // Populate all places
@@ -1263,12 +1265,18 @@ export async function exportTripToExcel(
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + " " + place.address)}`
       : undefined;
 
+    const interestedVal =
+      place.whosInterested ||
+      place.reservation?.whosInterested ||
+      "-";
+
     const r = catalogSheet.addRow([
       statusStr,
       place.isStarred ? "⭐ Yes" : "-",
       place.name,
       place.romanizedName || "-",
       `${emoji} ${catLabel}`,
+      interestedVal,
       formatDuration(place.estimatedDuration || 60),
       place.priceEstimate || "-",
       place.reservation?.requirement
@@ -1287,7 +1295,7 @@ export async function exportTripToExcel(
     ]);
 
     r.height = 24;
-    for (let c = 1; c <= 14; c++) {
+    for (let c = 1; c <= 15; c++) {
       const cell = r.getCell(c);
       cell.font = { name: FONT_FAMILY, size: 9.5, color: { argb: COLORS.TEXT_MAIN } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
@@ -1299,15 +1307,15 @@ export async function exportTripToExcel(
       };
       cell.alignment = {
         vertical: "middle",
-        horizontal: c === 1 || c === 2 || c === 6 ? "center" : "left",
-        wrapText: c === 10 || c === 11 || c === 12 || c === 14,
+        horizontal: c === 1 || c === 2 || c === 7 ? "center" : "left",
+        wrapText: c === 6 || c === 11 || c === 12 || c === 13 || c === 15,
       };
     }
 
     r.getCell(3).font = { name: FONT_FAMILY, size: 9.5, bold: true, color: { argb: COLORS.TEXT_MAIN } };
 
     if (mapsLink) {
-      r.getCell(13).font = {
+      r.getCell(14).font = {
         name: FONT_FAMILY,
         size: 9.5,
         color: { argb: COLORS.LINK_BLUE },
@@ -1319,7 +1327,7 @@ export async function exportTripToExcel(
   // Enable AutoFilter on Catalog
   catalogSheet.autoFilter = {
     from: { row: 2, column: 1 },
-    to: { row: catalogSheet.rowCount, column: 14 },
+    to: { row: catalogSheet.rowCount, column: 15 },
   };
 
   // -------------------------------------------------------------------------
@@ -1944,6 +1952,11 @@ export function appendReservationsWorksheets(
       place.address || "-",                      // 13: Address (at end)
     ];
 
+    // When confirmed/booked, make the whole row green!
+    const CONFIRMED_ROW_BG = "FFD1FAE5"; // Emerald 100: crisp, visibly green, comfortable contrast
+    const CONFIRMED_BORDER = "FFA7F3D0"; // Emerald 200: matching subtle green border
+    const rowBg = isBooked ? CONFIRMED_ROW_BG : baseBg;
+
     // Dynamic row height to prevent cutting off multi-line names and descriptions
     const maxContentLen = Math.max(
       displayName.length,
@@ -1957,18 +1970,18 @@ export function appendReservationsWorksheets(
       cell.font = {
         name: FONT_FAMILY,
         size: 9.5,
-        color: { argb: COLORS.TEXT_MAIN },
+        color: { argb: isBooked ? "FF064E3B" : COLORS.TEXT_MAIN },
       };
       cell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: baseBg },
+        fgColor: { argb: rowBg },
       };
       cell.border = {
-        top: { style: "thin", color: { argb: COLORS.BORDER_LIGHT } },
-        bottom: { style: "thin", color: { argb: COLORS.BORDER_LIGHT } },
-        left: { style: "thin", color: { argb: COLORS.BORDER_LIGHT } },
-        right: { style: "thin", color: { argb: COLORS.BORDER_LIGHT } },
+        top: { style: "thin", color: { argb: isBooked ? CONFIRMED_BORDER : COLORS.BORDER_LIGHT } },
+        bottom: { style: "thin", color: { argb: isBooked ? CONFIRMED_BORDER : COLORS.BORDER_LIGHT } },
+        left: { style: "thin", color: { argb: isBooked ? CONFIRMED_BORDER : COLORS.BORDER_LIGHT } },
+        right: { style: "thin", color: { argb: isBooked ? CONFIRMED_BORDER : COLORS.BORDER_LIGHT } },
       };
       cell.alignment = {
         vertical: "middle",
@@ -1985,13 +1998,13 @@ export function appendReservationsWorksheets(
     statusCell.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: statusBg },
+      fgColor: { argb: isBooked ? "FFA7F3D0" : statusBg },
     };
     statusCell.font = {
       name: FONT_FAMILY,
       size: 9.5,
       bold: true,
-      color: { argb: statusColor },
+      color: { argb: isBooked ? "FF065F46" : statusColor },
     };
 
     // Specific highlight styling for Requirement Emoji (Col 2)
@@ -1999,7 +2012,7 @@ export function appendReservationsWorksheets(
     reqCell.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: reqBg },
+      fgColor: { argb: isBooked ? CONFIRMED_ROW_BG : reqBg },
     };
     reqCell.font = {
       name: FONT_FAMILY,
@@ -2017,11 +2030,11 @@ export function appendReservationsWorksheets(
       underline: true,
     };
 
-    // Description (Col 4): Subtle Muted text
+    // Description (Col 4): Subtle Muted text (or soft emerald if booked)
     row.getCell(4).font = {
       name: FONT_FAMILY,
       size: 9,
-      color: { argb: COLORS.TEXT_MUTED },
+      color: { argb: isBooked ? "FF047857" : COLORS.TEXT_MUTED },
     };
 
     // Tabelog link styling (Col 8)

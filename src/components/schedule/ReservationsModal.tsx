@@ -16,6 +16,8 @@ import {
   Hash,
   Info,
   FileSpreadsheet,
+  Users,
+  Pencil,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouteStore } from "../../store/useRouteStore";
@@ -53,6 +55,36 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [editingInterestedPlaceId, setEditingInterestedPlaceId] = useState<string | null>(null);
+  const [tempInterestedText, setTempInterestedText] = useState("");
+
+  const startEditingInterested = (place: EnrichedReservationPlace["place"]) => {
+    setEditingInterestedPlaceId(place.id);
+    setTempInterestedText(place.whosInterested || place.reservation?.whosInterested || "");
+  };
+
+  const handleSaveInterested = (placeId: string) => {
+    const trimmed = tempInterestedText.trim();
+    const targetItem = allReservationPlaces.find((p) => p.place.id === placeId);
+    if (!targetItem) return;
+
+    updatePlace(placeId, {
+      whosInterested: trimmed || undefined,
+      reservation: targetItem.place.reservation
+        ? {
+            ...targetItem.place.reservation,
+            whosInterested: trimmed || undefined,
+          }
+        : trimmed
+          ? {
+              requirement: targetItem.requirement,
+              whosInterested: trimmed,
+            }
+          : undefined,
+    });
+    setEditingInterestedPlaceId(null);
+    toast.success(trimmed ? `Updated interested members to "${trimmed}"` : "Removed interested members");
+  };
 
   // Filter all relevant places & enrich them with booking math
   const allReservationPlaces: EnrichedReservationPlace[] = useMemo(() => {
@@ -121,7 +153,9 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
           item.place.name.toLowerCase().includes(q) ||
           (item.place.reservation?.notes && item.place.reservation.notes.toLowerCase().includes(q)) ||
           (item.place.reservation?.confirmationNumber && item.place.reservation.confirmationNumber.toLowerCase().includes(q)) ||
-          (item.place.reservation?.advanceTime && item.place.reservation.advanceTime.toLowerCase().includes(q))
+          (item.place.reservation?.advanceTime && item.place.reservation.advanceTime.toLowerCase().includes(q)) ||
+          (item.place.whosInterested && item.place.whosInterested.toLowerCase().includes(q)) ||
+          (item.place.reservation?.whosInterested && item.place.reservation.whosInterested.toLowerCase().includes(q))
       );
     }
 
@@ -673,6 +707,63 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
                               </button>
                             </div>
                           )}
+
+                          {/* Who's Interested (Group Trip Planning) */}
+                          <div className="pt-1 flex items-center gap-2 flex-wrap text-xs">
+                            <div className="flex items-center gap-1 text-indigo-700 dark:text-indigo-300 font-semibold shrink-0">
+                              <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              <span>Who's Interested:</span>
+                            </div>
+                            {editingInterestedPlaceId === place.id ? (
+                              <div className="flex items-center gap-1.5 flex-1 min-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  value={tempInterestedText}
+                                  onChange={(e) => setTempInterestedText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveInterested(place.id);
+                                    if (e.key === "Escape") setEditingInterestedPlaceId(null);
+                                  }}
+                                  placeholder="e.g. Alice, Bob, or All"
+                                  className="flex-1 text-xs font-semibold px-2 py-0.5 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-surface-900 text-surface-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveInterested(place.id)}
+                                  className="p-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors cursor-pointer"
+                                  title="Save"
+                                >
+                                  <Check className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingInterestedPlaceId(null)}
+                                  className="p-1 text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 transition-colors cursor-pointer"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div
+                                className="inline-flex items-center gap-1.5 group/interested cursor-pointer"
+                                onClick={() => startEditingInterested(place)}
+                                title="Click to edit who's interested"
+                              >
+                                {place.reservation?.whosInterested || place.whosInterested ? (
+                                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 font-semibold group-hover/interested:border-indigo-400 transition-colors">
+                                    {place.reservation?.whosInterested || place.whosInterested}
+                                  </span>
+                                ) : (
+                                  <span className="text-surface-400 dark:text-surface-500 hover:text-indigo-600 dark:hover:text-indigo-400 italic text-[11px] flex items-center gap-1 transition-colors">
+                                    + Add interested travelers
+                                  </span>
+                                )}
+                                <Pencil className="w-2.5 h-2.5 opacity-0 group-hover/interested:opacity-80 text-indigo-600 dark:text-indigo-400 transition-opacity" />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 

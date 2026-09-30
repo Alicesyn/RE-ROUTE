@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus, Compass, FileText, AlertTriangle } from "lucide-react";
+import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus, Compass, FileText, AlertTriangle, Users } from "lucide-react";
 import { format, parseISO, isValid, addDays, differenceInCalendarDays } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
 import { toast } from "../../services/toastService";
@@ -52,6 +52,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [isBooked, setIsBooked] = useState(false);
   const [bookingUrl, setBookingUrl] = useState("");
   const [confirmationNumber, setConfirmationNumber] = useState("");
+  const [whosInterested, setWhosInterested] = useState("");
   const [customTimeVal, setCustomTimeVal] = useState("");
   const [assignedDayIndex, setAssignedDayIndex] = useState<number | null>(null);
   const [pinnedToDay, setPinnedToDay] = useState(false);
@@ -99,6 +100,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setIsBooked(Boolean(place.reservation?.isBooked));
       setBookingUrl(place.reservation?.bookingUrl || "");
       setConfirmationNumber(place.reservation?.confirmationNumber || "");
+      setWhosInterested(place.whosInterested || place.reservation?.whosInterested || "");
       setCustomTimeVal(place.customTime || "");
       setAssignedDayIndex(place.dayIndex ?? null);
       setPinnedToDay(!!place.pinnedToDay);
@@ -312,7 +314,8 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       Boolean(bookingUrl.trim()) ||
       Boolean(confirmationNumber.trim()) ||
       Boolean(reservationAdvance.trim()) ||
-      Boolean(reservationNotes.trim());
+      Boolean(reservationNotes.trim()) ||
+      Boolean(whosInterested.trim());
 
     const finalReservation: ReservationInfo | undefined = hasReservationContent
       ? {
@@ -322,7 +325,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
         isBooked,
         bookingUrl: bookingUrl.trim() || undefined,
         confirmationNumber: confirmationNumber.trim() || undefined,
-        whosInterested: place.reservation?.whosInterested,
+        whosInterested: whosInterested.trim() || undefined,
       }
       : undefined;
 
@@ -423,6 +426,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       highlight: finalHighlight,
       priceEstimate: priceEstimate.trim() || undefined,
       reservation: finalReservation,
+      whosInterested: whosInterested.trim() || undefined,
       tabelog: finalTabelog,
       customTime: trimmedCustomTime || undefined,
       dayIndex: targetDayIndex,
@@ -985,6 +989,42 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
                   onChange={(e) => setConfirmationNumber(e.target.value)}
                   placeholder="Confirmation / Code #"
                   className="w-full pl-8 text-xs font-medium bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Who's Interested (Group Trip Planning) */}
+            <div className="pt-1.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-tight flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Who's Interested</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  {["Everyone", "Just Me", "Optional"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setWhosInterested(preset)}
+                      className={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                        whosInterested === preset
+                          ? "bg-indigo-200 dark:bg-indigo-800 text-indigo-900 dark:text-indigo-100 font-bold shadow-2xs"
+                          : "bg-indigo-100/60 dark:bg-indigo-950/40 hover:bg-indigo-200/80 text-indigo-700 dark:text-indigo-300"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="relative flex items-center">
+                <Users className="absolute left-2.5 w-3.5 h-3.5 text-indigo-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={whosInterested}
+                  onChange={(e) => setWhosInterested(e.target.value)}
+                  placeholder="e.g. Alice, Bob (or Everyone)"
+                  className="w-full pl-8 text-xs font-medium bg-white dark:bg-surface-900 border border-indigo-200 dark:border-indigo-800/80 text-surface-900 dark:text-white rounded-lg py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>

@@ -274,6 +274,10 @@ export function generateBookingChecklist(
       lines.push(`- [ ] **${place.name}** [${place.reservation?.requirement || "custom time"}]`);
       lines.push(`  - Visit: ${dayLabel} — ${visitText}`);
       lines.push(`  - Booking Window: ${targetText}`);
+      const who = place.reservation?.whosInterested || place.whosInterested;
+      if (who) {
+        lines.push(`  - Who's Interested: ${who}`);
+      }
       if (place.reservation?.bookingUrl) {
         lines.push(`  - Link: ${place.reservation.bookingUrl}`);
       }
@@ -298,6 +302,10 @@ export function generateBookingChecklist(
 
       lines.push(`- [x] **${place.name}**`);
       lines.push(`  - Scheduled: ${dayLabel} — ${visitText}`);
+      const who = place.reservation?.whosInterested || place.whosInterested;
+      if (who) {
+        lines.push(`  - Who's Interested: ${who}`);
+      }
       if (place.reservation?.confirmationNumber) {
         lines.push(`  - Confirmation #: ${place.reservation.confirmationNumber}`);
       }
