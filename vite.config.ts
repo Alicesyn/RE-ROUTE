@@ -5,6 +5,15 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      "/ekispert-proxy": {
+        target: "https://api.ekispert.jp",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ekispert-proxy/, "/v1/json"),
+        headers: {
+          Origin: "https://reroute.tools",
+          Referer: "https://reroute.tools/",
+        },
+      },
       "/api": {
         target: "https://reroute.tools",
         changeOrigin: true,

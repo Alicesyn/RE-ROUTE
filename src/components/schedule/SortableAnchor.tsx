@@ -99,6 +99,7 @@ export const SortableAnchor: React.FC<SortableAnchorProps> = React.memo(
           <div className="relative">
             <div
               className={`w-10 h-10 rounded-full ${getColors()} flex items-center justify-center shrink-0 shadow-sm border border-white/50 dark:border-surface-700`}
+              title={name}
             >
               {getIcon()}
             </div>
@@ -116,7 +117,7 @@ export const SortableAnchor: React.FC<SortableAnchorProps> = React.memo(
 
           <div className="flex-1 min-w-0 pt-0.5 pb-2">
             <div className="flex items-center justify-between gap-2">
-              <h4 className="text-sm font-bold text-surface-900 dark:text-white truncate">
+              <h4 className="text-sm font-bold text-surface-900 dark:text-white truncate" title={name}>
                 {name}
               </h4>
               {time && (

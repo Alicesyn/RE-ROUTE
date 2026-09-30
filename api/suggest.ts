@@ -90,7 +90,9 @@ export default async function handler(req: Request) {
       - 3-7 comma-separated, punchy phrases highlighting the core food vibe, specialties, and dining atmosphere in "description".
       - Categorize into one of: restaurant, coffee_shop, nightlife, shopping.
       - Estimated dining/visit duration in minutes in "estimatedDuration" (typically 45-90 mins).
+      - If name contains foreign characters (Japanese Kanji/Kana, etc.), provide clean romanized/English name in "romanizedName", otherwise null.
       - Typical cost per person in local currency (e.g. "¥1,000 - ¥2,500", "$15 - $35 / person") in "priceEstimate".
+      - Operating hours in "openingHours" as an array of strings e.g. ["Monday: 11:30 AM – 2:30 PM, 5:30 – 9:30 PM", "Tuesday: ..."] or ["11:00 AM – 9:00 PM daily"].
       - CRITICAL HIGHLIGHT GUIDELINES in "highlight": { "label": "Must-Try" | "Must-Order", "text": "Exact signature dish name, specialty cut of meat, noodle broth, dessert, or drink this venue is famous for" }.
       - RESERVATION GUIDELINES in "reservation":
         {
@@ -98,17 +100,29 @@ export default async function handler(req: Request) {
           "advanceTime": <string with concrete timing, e.g. "Walk-ins only; line forms 15m before opening", "Walk-ins only; peak wait 30m at dinner", "Reserve 1 month ahead via official site", "No reservation needed">,
           "notes": <string or null>
         }
+      - TABELOG GUIDELINES (FOR RESTAURANTS/CAFES IN JAPAN):
+        If this venue is in Japan, provide its official Tabelog (食べログ) URL and award:
+        "tabelog": {
+          "rating": null,
+          "url": <string official Tabelog url e.g. "https://tabelog.com/...", or null>,
+          "award": <string e.g. "Hyakumeiten 2024", "Bronze", or null>
+        }
+        CRITICAL: DO NOT AI-GENERATE OR GUESS RATINGS. Always set "rating" to null.
+        NEVER put star ratings, numbers, or Tabelog prefixes into the "description" field. Keep "description" purely focused on food, dishes, and atmosphere.
+        If not in Japan, set "tabelog" to null.
 
       Return ONLY a JSON array of objects with this exact structure:
       [
         {
           "name": "Exact Place Name",
+          "romanizedName": "string or null",
           "description": "Short punchy description highlighting food vibe and famous dishes.",
           "category": "restaurant" | "coffee_shop" | "nightlife" | "shopping",
           "lat": number,
           "lng": number,
           "estimatedDuration": number,
           "priceEstimate": "string",
+          "openingHours": ["string"],
           "highlight": {
             "label": "Must-Try" | "Must-Order",
             "text": "Exact dish name"
@@ -117,6 +131,11 @@ export default async function handler(req: Request) {
             "requirement": "required" | "recommended" | "not_needed" | "walk_ins_only",
             "advanceTime": "string",
             "notes": "string or null"
+          },
+          "tabelog": {
+            "rating": null,
+            "url": "https://tabelog.com/...",
+            "award": "Hyakumeiten 2024"
           }
         }
       ]
@@ -134,8 +153,10 @@ export default async function handler(req: Request) {
       - 3-7 comma-separated, punchy phrases highlighting the core vibe and what it's famous for in "description".
       - Categorize into one of: museum, restaurant, coffee_shop, park, landmark, shopping, entertainment, beach, religious_site, nightlife, other.
       - Estimated visit duration in minutes in "estimatedDuration".
+      - If name contains non-Latin characters, provide clean romanized/English transliteration in "romanizedName", otherwise null.
       - Typical cost or admission fee per person in local currency (e.g. "Free", "¥600", "$15 - $25 / person") in "priceEstimate".
         If admission or access is completely free, explicitly set "priceEstimate" to "Free".
+      - Typical operating hours in "openingHours" as an array of strings e.g. ["Monday: 9:00 AM – 5:00 PM", ...] or ["Open 24 hours"].
       - CRITICAL HIGHLIGHT GUIDELINES in "highlight": { "label": "string", "text": "string" }:
         Highlights must NEVER be generic. Provide ultra-specific, concrete recommendations:
         * For restaurant: label="Must-Try", text=<Name the EXACT signature dish>
@@ -157,12 +178,14 @@ export default async function handler(req: Request) {
       [
         {
           "name": "Exact Place Name",
+          "romanizedName": "string or null",
           "description": "Short punchy description highlighting vibe and what it is famous for.",
           "category": "museum" | "restaurant" | "coffee_shop" | "park" | "landmark" | "shopping" | "entertainment" | "beach" | "religious_site" | "nightlife" | "other",
           "lat": number,
           "lng": number,
           "estimatedDuration": number,
           "priceEstimate": "string",
+          "openingHours": ["string"],
           "highlight": {
             "label": "string",
             "text": "string"
@@ -207,6 +230,19 @@ export default async function handler(req: Request) {
     }
 
     const parsed = parseJsonResponse(rawText);
+    const stripPrefix = (desc?: string | null) => {
+      if (!desc) return "";
+      return desc.replace(/^(?:\[Tabelog\s*[^\]]*\]|★\s*\d+(?:\.\d+)?(?:\s*stars?)?(?:\s*Tabelog)?(?:\s*\([^)]*\))?|(?:★\s*)?Tabelog(?:\s*★)?(?:\s*\d+(?:\.\d+)?)?(?:\s*\([^)]*\))?)\s*[•—–|\-:]?\s*/i, "").trim();
+    };
+
+    if (Array.isArray(parsed)) {
+      parsed.forEach((item: any) => {
+        if (item && item.description) {
+          item.description = stripPrefix(item.description);
+        }
+      });
+    }
+
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { "Content-Type": "application/json" },

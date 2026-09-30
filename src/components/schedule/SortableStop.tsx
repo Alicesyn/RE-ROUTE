@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Clock,
   GripVertical,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "../../services/toastService";
 import { useRouteStore } from "../../store/useRouteStore";
@@ -21,6 +22,11 @@ import { checkTimeConflict } from "../../utils/timeUtils";
 import { PlaceHighlightBadge } from "../common/PlaceHighlightBadge";
 import { ReservationBadge } from "../common/ReservationBadge";
 import { ExpandableDescription } from "./ExpandableDescription";
+import {
+  isJapanRestaurant,
+  getTabelogSearchUrl,
+  getTabelogBadgeStyle,
+} from "../../utils/tabelogUtils";
 import {
   formatMinutesTo24h,
   formatTime,
@@ -107,6 +113,15 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
 
     const openUpward = isLast && !isFirst;
 
+    const fullName = [
+      stop.name,
+      stop.romanizedName && stop.romanizedName.toLowerCase() !== stop.name.toLowerCase()
+        ? `(${stop.romanizedName})`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     const style = {
       transform: CSS.Transform.toString(transform),
       transition,
@@ -135,9 +150,11 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
         <div className="flex gap-4 relative z-10">
           <div className="relative z-20">
             <button
+              type="button"
               onClick={() => onEdit(stop.id)}
-              className="w-10 h-10 rounded-full bg-white dark:bg-surface-800 border-2 border-surface-100 dark:border-surface-700 flex items-center justify-center shrink-0 shadow-sm hover:border-primary-500 group-hover:border-primary-500 transition-colors"
-              title="Edit Place Details"
+              className="w-10 h-10 rounded-full bg-white dark:bg-surface-800 border-2 border-surface-100 dark:border-surface-700 flex items-center justify-center shrink-0 shadow-sm hover:border-primary-500 group-hover:border-primary-500 transition-colors cursor-pointer"
+              title={fullName}
+              aria-label={`Edit ${fullName}`}
             >
               <span className="text-sm">{getCategoryEmoji(stop.category)}</span>
             </button>
@@ -156,11 +173,13 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
           <div className="flex-1 min-w-0 pt-0.5 pb-4">
             <div className="flex items-center justify-between gap-2 relative">
               <button
+                type="button"
                 onClick={() => onEdit(stop.id)}
-                className="text-sm font-bold text-surface-900 dark:text-white truncate hover:text-primary-600 group-hover:text-primary-600 transition-colors text-left outline-none focus:ring-2 focus:ring-primary-500 rounded flex-1 min-w-0"
-                title="Edit Place Details"
+                className="text-sm font-bold text-surface-900 dark:text-white truncate hover:text-primary-600 group-hover:text-primary-600 transition-colors text-left outline-none focus:ring-2 focus:ring-primary-500 rounded flex-1 min-w-0 cursor-pointer"
+                title={fullName}
+                aria-label={`Edit ${fullName}`}
               >
-                <span className="truncate block">
+                <span className="truncate block" title={fullName}>
                   {stop.name}
                   {stop.romanizedName && stop.romanizedName.toLowerCase() !== stop.name.toLowerCase() && (
                     <span className="ml-1.5 text-xs font-normal text-surface-500 dark:text-surface-400 italic">
@@ -408,6 +427,38 @@ export const SortableStop: React.FC<SortableStopProps> = React.memo(
               )}
               {stop.reservation && (
                 <ReservationBadge reservation={stop.reservation} compact />
+              )}
+              {isJapanRestaurant(stop) && (
+                stop.tabelog?.rating ? (
+                  (() => {
+                    const tbStyle = getTabelogBadgeStyle(stop.tabelog.rating);
+                    return (
+                      <a
+                        href={stop.tabelog.url || getTabelogSearchUrl(stop)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 border shadow-2xs transition-colors hover:opacity-85 ${tbStyle.badgeBg} ${tbStyle.textColor} ${tbStyle.borderColor}`}
+                        title={`Tabelog: ★ ${stop.tabelog.rating.toFixed(2)}${stop.tabelog.award ? ` (${stop.tabelog.award})` : ""} [${tbStyle.tierLabel}] - Click to open listing`}
+                      >
+                        <span className="font-bold">★ {stop.tabelog.rating.toFixed(2)}</span>
+                        <span className="text-[9px] font-normal opacity-85">Tabelog</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                      </a>
+                    );
+                  })()
+                ) : (
+                  <a
+                    href={stop.tabelog?.url || getTabelogSearchUrl(stop)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 border shadow-2xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border-amber-200 dark:border-amber-800/60 transition-colors"
+                    title="Search or view on Tabelog (食べログ)"
+                  >
+                    <span>🍜 Tabelog ↗</span>
+                  </a>
+                )
               )}
             </div>
 

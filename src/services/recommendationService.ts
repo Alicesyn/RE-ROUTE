@@ -10,6 +10,7 @@ import {
   getSpecificMockPrice,
   getSpecificMockReservation,
 } from "../utils/mockAiUtils";
+import { formatDescriptionWithTabelog, stripTabelogPrefix } from "../utils/tabelogUtils";
 
 // Curated top sights for Kyoto (expanded pool for fresh suggestions on refresh)
 const KYOTO_SIGHTS = [
@@ -570,8 +571,22 @@ const KYOTO_FOOD = [
     description: "Michelin Bib Gourmand ramen shop famous for its delicate, crystal-clear dashi broth and shaved tororo kombu.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,300 - ¥1,800",
+    openingHours: [
+      "Monday: 11:00 AM – 2:30 PM, 5:30 – 9:00 PM",
+      "Tuesday: 11:00 AM – 2:30 PM, 5:30 – 9:00 PM",
+      "Wednesday: 11:00 AM – 2:30 PM, 5:30 – 9:00 PM",
+      "Thursday: 11:00 AM – 2:30 PM, 5:30 – 9:00 PM",
+      "Friday: 11:00 AM – 2:30 PM, 5:30 – 9:00 PM",
+      "Saturday: 11:00 AM – 2:30 PM, 5:30 – 9:00 PM",
+      "Sunday: 11:00 AM – 2:30 PM, 5:30 – 9:00 PM"
+    ],
     highlight: { label: "Must-Try", text: "Special White Soy Sauce (Shiro Shoyu) Ramen with A5 Wagyu slices" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Queue 20-30 min before opening at lunch or dinner" },
+    tabelog: {
+      rating: 3.66,
+      url: "https://tabelog.com/kyoto/A2601/A260201/26032368/",
+      award: "Hyakumeiten 2024 / Michelin Bib Gourmand"
+    },
   },
   {
     id: "rec_kyoto_food_chaochao",
@@ -584,8 +599,21 @@ const KYOTO_FOOD = [
     description: "Lively, award-winning casual gyoza specialty bar serving crispy pan-fried gyoza with golden lattice wings.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,000 - ¥2,000",
+    openingHours: [
+      "Monday: 11:30 AM – 2:30 PM, 5:00 – 11:00 PM",
+      "Tuesday: 11:30 AM – 2:30 PM, 5:00 – 11:00 PM",
+      "Wednesday: 11:30 AM – 2:30 PM, 5:00 – 11:00 PM",
+      "Thursday: 11:30 AM – 2:30 PM, 5:00 – 11:00 PM",
+      "Friday: 11:30 AM – 2:30 PM, 5:00 – 11:30 PM",
+      "Saturday: 11:30 AM – 11:30 PM",
+      "Sunday: 11:30 AM – 11:00 PM"
+    ],
     highlight: { label: "Must-Try", text: "Signature Chao Chao Gyoza wings & shrimp gyoza with cold draft beer" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; casual fast turnaround" },
+    tabelog: {
+      rating: 3.45,
+      url: "https://tabelog.com/kyoto/A2601/A260201/26002778/"
+    },
   },
   {
     id: "rec_kyoto_food_katsukura",
@@ -598,8 +626,21 @@ const KYOTO_FOOD = [
     description: "Kyoto's legendary tonkatsu institution serving premium Sangenton pork with freshly ground sesame sauce.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,800 - ¥2,800",
+    openingHours: [
+      "Monday: 11:00 AM – 9:30 PM",
+      "Tuesday: 11:00 AM – 9:30 PM",
+      "Wednesday: 11:00 AM – 9:30 PM",
+      "Thursday: 11:00 AM – 9:30 PM",
+      "Friday: 11:00 AM – 9:30 PM",
+      "Saturday: 11:00 AM – 9:30 PM",
+      "Sunday: 11:00 AM – 9:30 PM"
+    ],
     highlight: { label: "Must-Try", text: "Kurobuta Hirekatsu (pork tenderloin cutlet) with unlimited barley rice and shredded cabbage" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in; wait times 15-25 min during peak dinner" },
+    tabelog: {
+      rating: 3.49,
+      url: "https://tabelog.com/kyoto/A2601/A260202/26000456/"
+    },
   },
   {
     id: "rec_kyoto_food_kichikichi",
@@ -612,8 +653,21 @@ const KYOTO_FOOD = [
     description: "World-famous cozy eatery where Chef Motokichi slices molten fluffy omelets over chicken fried rice with theatrical flair.",
     types: ["restaurant", "food"],
     priceEstimate: "¥2,700 - ¥3,500",
+    openingHours: [
+      "Monday: 5:00 – 9:00 PM",
+      "Tuesday: 5:00 – 9:00 PM",
+      "Wednesday: Closed",
+      "Thursday: 5:00 – 9:00 PM",
+      "Friday: 5:00 – 9:00 PM",
+      "Saturday: 12:00 – 2:00 PM, 5:00 – 9:00 PM",
+      "Sunday: 12:00 – 2:00 PM, 5:00 – 9:00 PM"
+    ],
     highlight: { label: "Must-Try", text: "Signature Fluffy Demi-Glace Omurice sliced open live at the counter" },
     reservation: { requirement: "required" as const, advanceTime: "Online booking opens every Sunday for the coming week" },
+    tabelog: {
+      rating: 3.23,
+      url: "https://tabelog.com/kyoto/A2601/A260301/26000226/"
+    },
   },
   {
     id: "rec_kyoto_food_arabica",
@@ -626,8 +680,21 @@ const KYOTO_FOOD = [
     description: "Minimalist world-renowned specialty espresso bar situated on the scenic cobblestone approach to Yasaka Pagoda.",
     types: ["cafe", "coffee_shop"],
     priceEstimate: "¥550 - ¥750",
+    openingHours: [
+      "Monday: 9:00 AM – 6:00 PM",
+      "Tuesday: 9:00 AM – 6:00 PM",
+      "Wednesday: 9:00 AM – 6:00 PM",
+      "Thursday: 9:00 AM – 6:00 PM",
+      "Friday: 9:00 AM – 6:00 PM",
+      "Saturday: 9:00 AM – 6:00 PM",
+      "Sunday: 9:00 AM – 6:00 PM"
+    ],
     highlight: { label: "Must-Order", text: "Kyoto Latte with condensed milk and single-origin pour-over" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Walk-in takeaway; lines move steadily" },
+    tabelog: {
+      rating: 3.60,
+      url: "https://tabelog.com/kyoto/A2601/A260301/26024220/"
+    },
   },
   {
     id: "rec_kyoto_food_tsujiri",
@@ -640,8 +707,21 @@ const KYOTO_FOOD = [
     description: "Historic 1860 teahouse legendary for premium Uji matcha sweets, elaborate green tea parfaits, and roasted hojicha.",
     types: ["cafe", "food"],
     priceEstimate: "¥1,200 - ¥1,800",
+    openingHours: [
+      "Monday: 10:00 AM – 8:00 PM",
+      "Tuesday: 10:00 AM – 8:00 PM",
+      "Wednesday: 10:00 AM – 8:00 PM",
+      "Thursday: 10:00 AM – 8:00 PM",
+      "Friday: 10:00 AM – 8:00 PM",
+      "Saturday: 10:00 AM – 8:00 PM",
+      "Sunday: 10:00 AM – 8:00 PM"
+    ],
     highlight: { label: "Must-Order", text: "Tsujiri Tokusen Matcha Parfait layered with chiffon cake, warabimochi, and matcha soft serve" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Walk-in only; popular afternoons 2 PM - 5 PM" },
+    tabelog: {
+      rating: 3.55,
+      url: "https://tabelog.com/kyoto/A2601/A260301/26001099/"
+    },
   },
 ];
 
@@ -658,8 +738,22 @@ const TOKYO_FOOD = [
     description: "Pioneering dipping noodle titan serving ultra-rich tonkotsu-seafood broth with thick, chewy handmade noodles.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,050 - ¥1,400",
+    openingHours: [
+      "Monday: 7:30 – 9:30 AM, 10:00 AM – 10:30 PM",
+      "Tuesday: 7:30 – 9:30 AM, 10:00 AM – 10:30 PM",
+      "Wednesday: 7:30 – 9:30 AM, 10:00 AM – 10:30 PM",
+      "Thursday: 7:30 – 9:30 AM, 10:00 AM – 10:30 PM",
+      "Friday: 7:30 – 9:30 AM, 10:00 AM – 10:30 PM",
+      "Saturday: 7:30 – 9:30 AM, 10:00 AM – 10:30 PM",
+      "Sunday: 7:30 – 9:30 AM, 10:00 AM – 10:30 PM"
+    ],
     highlight: { label: "Must-Try", text: "Tokusei Tsukemen with seasoned ajitama egg and pork chashu, finished with soup-wari" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Ticket vending machine; queue averages 15-30 mins" },
+    tabelog: {
+      rating: 3.77,
+      url: "https://tabelog.com/tokyo/A1302/A130201/13093047/",
+      award: "Hyakumeiten 2024"
+    },
   },
   {
     id: "rec_tokyo_food_motomura",
@@ -672,8 +766,21 @@ const TOKYO_FOOD = [
     description: "Beloved deep-fried beef cutlet eatery where diners sear rare Wagyu cutlets on individual sizzling stone grills.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,900 - ¥2,600",
+    openingHours: [
+      "Monday: 11:00 AM – 10:00 PM",
+      "Tuesday: 11:00 AM – 10:00 PM",
+      "Wednesday: 11:00 AM – 10:00 PM",
+      "Thursday: 11:00 AM – 10:00 PM",
+      "Friday: 11:00 AM – 10:00 PM",
+      "Saturday: 11:00 AM – 10:00 PM",
+      "Sunday: 11:00 AM – 10:00 PM"
+    ],
     highlight: { label: "Must-Try", text: "Gyukatsu set with grated mountain yam (tororo) and wasabi soy sauce" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Arrive 20-30 min before opening to avoid lengthy queues" },
+    tabelog: {
+      rating: 3.58,
+      url: "https://tabelog.com/tokyo/A1303/A130301/13153325/"
+    },
   },
   {
     id: "rec_tokyo_food_hikiniku",
@@ -686,8 +793,21 @@ const TOKYO_FOOD = [
     description: "Famous theater-style counter serving 100% freshly ground Japanese beef patties grilled over charcoal onto rice.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,800",
+    openingHours: [
+      "Monday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Tuesday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Wednesday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Thursday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Friday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Saturday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Sunday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM"
+    ],
     highlight: { label: "Must-Try", text: "Charcoal-grilled hamburg steak set with unlimited hagama rice and fresh raw egg" },
     reservation: { requirement: "required" as const, advanceTime: "Numbered ticket distribution begins at 9:00 AM daily, or book weekly on TableCheck" },
+    tabelog: {
+      rating: 3.66,
+      url: "https://tabelog.com/tokyo/A1303/A130301/13253775/"
+    },
   },
   {
     id: "rec_tokyo_food_afuri",
@@ -700,8 +820,21 @@ const TOKYO_FOOD = [
     description: "Modern, hip ramen joint renowned for light golden dashi broth scented with aromatic Japanese yuzu citrus.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,200 - ¥1,600",
+    openingHours: [
+      "Monday: 10:00 AM – 11:00 PM",
+      "Tuesday: 10:00 AM – 11:00 PM",
+      "Wednesday: 10:00 AM – 11:00 PM",
+      "Thursday: 10:00 AM – 11:00 PM",
+      "Friday: 10:00 AM – 11:00 PM",
+      "Saturday: 10:00 AM – 11:00 PM",
+      "Sunday: 10:00 AM – 11:00 PM"
+    ],
     highlight: { label: "Must-Try", text: "Yuzu Shio Ramen with charcoal-grilled chashu and bamboo shoots" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Self-service ticket kiosk; steady turnover" },
+    tabelog: {
+      rating: 3.55,
+      url: "https://tabelog.com/tokyo/A1306/A130601/13092289/"
+    },
   },
   {
     id: "rec_tokyo_food_fuunji",
@@ -714,8 +847,22 @@ const TOKYO_FOOD = [
     description: "Legendary counter noodle shop famous for its velvety chicken and fish powder tsukemen dipping broth.",
     types: ["restaurant", "food"],
     priceEstimate: "¥1,000 - ¥1,300",
+    openingHours: [
+      "Monday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Tuesday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Wednesday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Thursday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Friday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Saturday: 11:00 AM – 3:00 PM, 5:00 – 9:00 PM",
+      "Sunday: Closed"
+    ],
     highlight: { label: "Must-Try", text: "Special Tsukemen (Tokusei) with mountain of bonito fish powder" },
     reservation: { requirement: "walk_ins_only" as const, advanceTime: "Line forms around the block; fast 15-20 min line turnover" },
+    tabelog: {
+      rating: 3.78,
+      url: "https://tabelog.com/tokyo/A1304/A130401/13044070/",
+      award: "Hyakumeiten 2024"
+    },
   },
   {
     id: "rec_tokyo_food_omoidiyokocho",
@@ -728,6 +875,15 @@ const TOKYO_FOOD = [
     description: "Atmospheric post-war lantern-lit alleyway packed with intimate yakitori stalls, cold beer, and charcoal grills.",
     types: ["restaurant", "bar", "food"],
     priceEstimate: "¥2,000 - ¥3,500",
+    openingHours: [
+      "Monday: 4:00 PM – 12:00 AM",
+      "Tuesday: 4:00 PM – 12:00 AM",
+      "Wednesday: 4:00 PM – 12:00 AM",
+      "Thursday: 4:00 PM – 12:00 AM",
+      "Friday: 4:00 PM – 12:00 AM",
+      "Saturday: 4:00 PM – 12:00 AM",
+      "Sunday: 4:00 PM – 12:00 AM"
+    ],
     highlight: { label: "Must-Try", text: "Charcoal-grilled chicken yakitori skewers, tsukune meatballs, and highballs" },
     reservation: { requirement: "not_needed" as const, advanceTime: "Walk into any stall with empty stools after 5:00 PM" },
   },
@@ -899,6 +1055,8 @@ export async function getSuggestedPlaces(
   const seenSuggestionNames = new Set<string>();
 
   for (const anchor of anchors) {
+    const cacheKeyV7 = `re_route_suggestions_v7_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const cacheKeyV6 = `re_route_suggestions_v6_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cacheKeyV5 = `re_route_suggestions_v5_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cacheKeyV4 = `re_route_suggestions_v4_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cacheKeyV3 = `re_route_suggestions_v3_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
@@ -906,6 +1064,10 @@ export async function getSuggestedPlaces(
 
     if (forceRefresh) {
       try {
+        localStorage.removeItem(cacheKeyV7);
+        sessionStorage.removeItem(cacheKeyV7);
+        localStorage.removeItem(cacheKeyV6);
+        sessionStorage.removeItem(cacheKeyV6);
         localStorage.removeItem(cacheKeyV5);
         sessionStorage.removeItem(cacheKeyV5);
         localStorage.removeItem(cacheKeyV4);
@@ -918,12 +1080,12 @@ export async function getSuggestedPlaces(
     }
 
     if (appMode === "real" && !forceRefresh) {
-      // Check persistent localStorage first, then sessionStorage (v5, then legacy v4)
+      // Check persistent localStorage first, then sessionStorage (v7, then v6)
       const cachedData =
-        localStorage.getItem(cacheKeyV5) ||
-        sessionStorage.getItem(cacheKeyV5) ||
-        localStorage.getItem(cacheKeyV4) ||
-        sessionStorage.getItem(cacheKeyV4);
+        localStorage.getItem(cacheKeyV7) ||
+        sessionStorage.getItem(cacheKeyV7) ||
+        localStorage.getItem(cacheKeyV6) ||
+        sessionStorage.getItem(cacheKeyV6);
 
       if (cachedData) {
         try {
@@ -1002,12 +1164,15 @@ export async function getSuggestedPlaces(
                 return {
                   id: `rec_ai_${idx}_${Date.now()}`,
                   name: bestMatch.name,
+                  romanizedName: suggestion.romanizedName,
                   address: bestMatch.address,
                   lat: bestMatch.lat,
                   lng: bestMatch.lng,
                   category: suggestion.category,
                   estimatedDuration: suggestion.estimatedDuration,
-                  description: suggestion.description,
+                  description: suggestion.tabelog?.rating
+                    ? formatDescriptionWithTabelog(suggestion.description, suggestion.tabelog.rating, suggestion.tabelog.award)
+                    : suggestion.description,
                   types: bestMatch.types,
                   photoReference: bestMatch.photoReference,
                   photoUrl,
@@ -1016,6 +1181,10 @@ export async function getSuggestedPlaces(
                   reservation: fallbackReservation,
                   businessStatus: bestMatch.businessStatus,
                   googlePlaceId: bestMatch.id,
+                  openingHours: (bestMatch.openingHours && bestMatch.openingHours.length > 0)
+                    ? bestMatch.openingHours
+                    : suggestion.openingHours,
+                  tabelog: suggestion.tabelog,
                 };
               }
             } catch (e) {
@@ -1030,18 +1199,23 @@ export async function getSuggestedPlaces(
             return {
               id: `rec_ai_${idx}_${Date.now()}`,
               name: suggestion.name,
+              romanizedName: suggestion.romanizedName,
               address: "Location in the area",
               lat: suggestion.lat,
               lng: suggestion.lng,
               category: suggestion.category,
               estimatedDuration: suggestion.estimatedDuration,
-              description: suggestion.description,
+              description: suggestion.tabelog?.rating
+                ? formatDescriptionWithTabelog(suggestion.description, suggestion.tabelog.rating, suggestion.tabelog.award)
+                : suggestion.description,
               types: [],
               photoUrl: undefined,
               highlight: fallbackHighlight,
               priceEstimate: fallbackPrice,
               reservation: fallbackReservation,
               businessStatus: "OPERATIONAL",
+              openingHours: suggestion.openingHours,
+              tabelog: suggestion.tabelog,
             };
           })
         );
@@ -1051,9 +1225,9 @@ export async function getSuggestedPlaces(
         );
 
         try {
-          localStorage.setItem(cacheKeyV5, JSON.stringify(candidateSights));
+          localStorage.setItem(cacheKeyV7, JSON.stringify(candidateSights));
         } catch {
-          sessionStorage.setItem(cacheKeyV5, JSON.stringify(candidateSights));
+          sessionStorage.setItem(cacheKeyV7, JSON.stringify(candidateSights));
         }
       } catch (err: any) {
         aiErrorOccurred = err;
@@ -1153,12 +1327,15 @@ export async function getSuggestedPlaces(
   return topSuggestions.map((s) => ({
     id: s.id,
     name: s.name,
+    romanizedName: s.romanizedName,
     address: s.address,
     lat: s.lat,
     lng: s.lng,
     category: s.category,
     estimatedDuration: s.estimatedDuration,
-    description: s.description,
+    description: s.tabelog?.rating
+      ? formatDescriptionWithTabelog(s.description, s.tabelog.rating, s.tabelog.award)
+      : stripTabelogPrefix(s.description),
     descriptionSource: "ai" as const,
     dayIndex: null,
     orderInDay: null,
@@ -1170,6 +1347,11 @@ export async function getSuggestedPlaces(
     nearestHotel: s._nearestHotelName
       ? { name: s._nearestHotelName, distanceM: s._nearestHotelDistanceM }
       : undefined,
+    openingHours: s.openingHours,
+    tabelog: s.tabelog,
+    businessStatus: s.businessStatus,
+    types: s.types,
+    googlePlaceId: s.googlePlaceId,
   }));
 }
 
@@ -1211,13 +1393,13 @@ export function getCachedSuggestions(
   const seenSuggestionNames = new Set<string>();
 
   for (const anchor of anchors) {
-    const cacheKeyV5 = `re_route_suggestions_v5_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
-    const cacheKeyV4 = `re_route_suggestions_v4_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const cacheKeyV7 = `re_route_suggestions_v7_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
+    const cacheKeyV6 = `re_route_suggestions_v6_${type}_${anchor.lat.toFixed(2)}_${anchor.lng.toFixed(2)}`;
     const cachedData =
-      localStorage.getItem(cacheKeyV5) ||
-      sessionStorage.getItem(cacheKeyV5) ||
-      localStorage.getItem(cacheKeyV4) ||
-      sessionStorage.getItem(cacheKeyV4);
+      localStorage.getItem(cacheKeyV7) ||
+      sessionStorage.getItem(cacheKeyV7) ||
+      localStorage.getItem(cacheKeyV6) ||
+      sessionStorage.getItem(cacheKeyV6);
     if (!cachedData) return null; // not cached yet
 
     try {

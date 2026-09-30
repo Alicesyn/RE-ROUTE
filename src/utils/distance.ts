@@ -24,22 +24,61 @@ export function getDistance(
   return EARTH_RADIUS_METERS * c;
 }
 
+export const STREET_DETOUR_FACTOR = 1.35; // City grid detour factor (Manhattan / urban grid vs straight line)
+export const WALKING_SPEED_MPS = 1.15; // Realistic pedestrian speed (~4.1 km/h) accounting for crosswalks and intersections
+
 // Estimate time in seconds based on mode and distance
 export function estimateTime(
   distanceMeters: number,
   mode: "walking" | "transit" | "driving",
 ): number {
-  const isLongDistance = distanceMeters > 50000; // Over 50 km is inter-city
+  if (distanceMeters <= 0) return 0;
 
-  let speedMps = 1.4; // walking avg speed ~ 1.4 m/s (5km/h)
-
-  if (mode === "driving") {
-    speedMps = isLongDistance ? 20 : 8; // Highway (72 km/h) vs City (30 km/h)
-  } else if (mode === "transit") {
-    speedMps = isLongDistance ? 45 : 5; // Bullet train (162 km/h) vs Local (18 km/h)
+  if (mode === "walking") {
+    // Pedestrian walking on urban street grid
+    return Math.round((distanceMeters * STREET_DETOUR_FACTOR) / WALKING_SPEED_MPS);
   }
 
-  return distanceMeters / speedMps;
+  if (mode === "driving") {
+    const isLongDistance = distanceMeters > 50000;
+    const speedMps = isLongDistance ? 20 : 8; // Highway (72 km/h) vs City (30 km/h)
+    const cityBufferS = isLongDistance ? 300 : 180; // Parking, ignition, traffic light buffer
+    return Math.round((distanceMeters * 1.25) / speedMps + cityBufferS);
+  }
+
+  if (mode === "transit") {
+    // Intercity / Shinkansen high-speed rail (> 50 km)
+    if (distanceMeters > 50000) {
+      const shinkansenSpeedMps = 55; // ~200 km/h average
+      const stationBoardingOverheadS = 1800; // 30 min (station arrival, ticket barrier, platform, arrival egress)
+      return Math.round(distanceMeters / shinkansenSpeedMps + stationBoardingOverheadS);
+    }
+
+    // Distances under 800m are faster to walk directly than descending into a train/subway station
+    if (distanceMeters < 800) {
+      return Math.round((distanceMeters * STREET_DETOUR_FACTOR) / WALKING_SPEED_MPS);
+    }
+
+    // Realistic Urban Door-to-Door Public Transit Model:
+    // 1. Pedestrian first-mile and last-mile combined walking to/from stations (~450m to 850m)
+    const combinedWalkM = Math.min(850, Math.max(450, Math.round(350 + Math.sqrt(distanceMeters) * 5.0)));
+    const walkS = Math.round((combinedWalkM * STREET_DETOUR_FACTOR) / WALKING_SPEED_MPS);
+
+    // 2. Station concourse access, ticket gates, stairs/escalator platform descent + headway wait buffer
+    const stationWaitS = 300; // 5 minutes
+
+    // 3. In-vehicle transit travel along rail/bus lines (~25-30 km/h for urban metro with stops)
+    const inVehicleDistM = distanceMeters * 1.22;
+    const inVehicleSpeedMps = distanceMeters > 12000 ? 10.5 : 7.2;
+    const rideS = Math.round(inVehicleDistM / inVehicleSpeedMps);
+
+    // 4. Line transfer penalty for cross-city trips (> 3.8 km)
+    const transferS = distanceMeters > 3800 ? 270 : 0; // 4.5 min transfer
+
+    return Math.round(walkS + stationWaitS + rideS + transferS);
+  }
+
+  return Math.round(distanceMeters / 1.4);
 }
 
 export const WALKING_THRESHOLD_METERS = 800;

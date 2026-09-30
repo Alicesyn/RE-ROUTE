@@ -99,17 +99,17 @@ export default async function handler(req: Request) {
             "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
           }
 
-        TABELOG GUIDELINES (FOR RESTAURANTS IN JAPAN):
-        If a place is a restaurant in Japan:
-        - Identify its official Tabelog (食べログ) listing if available.
+        TABELOG GUIDELINES (FOR RESTAURANTS/CAFES IN JAPAN):
+        If a place is a restaurant or cafe in Japan:
+        - Identify its official Tabelog (食べログ) listing URL if available.
         - "tabelog": {
-            "rating": <number e.g. 3.74, or null if unknown>,
+            "rating": null,
             "url": <string official Tabelog url e.g. "https://tabelog.com/...", or null>,
             "award": <string e.g. "Hyakumeiten 2024", "Bronze", or null>
           }
-        - If a Tabelog rating is identified (e.g. 3.74), PREPEND it to the beginning of the "description" field in the exact format:
-          "★ 3.74 Tabelog • <description text>"
-        If not a restaurant in Japan, set "tabelog" to null.
+        - CRITICAL: DO NOT AI-GENERATE OR GUESS RATINGS. Always set "rating" to null.
+        - NEVER put star ratings, numbers, or Tabelog prefixes into the "description" field. Keep "description" purely focused on food, dishes, and atmosphere.
+        If not a restaurant or cafe in Japan, set "tabelog" to null.
 
         Places:
         ${places
@@ -180,17 +180,17 @@ export default async function handler(req: Request) {
             "notes": <string or null, e.g. "Online timed-entry ticket required", "Book via TableCheck/Tabelog", or null>
           }
 
-        TABELOG GUIDELINES (FOR RESTAURANTS IN JAPAN):
-        If a place is a restaurant in Japan:
-        - Identify its official Tabelog (食べログ) listing if available.
+        TABELOG GUIDELINES (FOR RESTAURANTS/CAFES IN JAPAN):
+        If a place is a restaurant or cafe in Japan:
+        - Identify its official Tabelog (食べログ) listing URL if available.
         - "tabelog": {
-            "rating": <number e.g. 3.74, or null if unknown>,
+            "rating": null,
             "url": <string official Tabelog url e.g. "https://tabelog.com/...", or null>,
             "award": <string e.g. "Hyakumeiten 2024", "Bronze", or null>
           }
-        - If a Tabelog rating is identified (e.g. 3.74), PREPEND it to the beginning of the "description" field in the exact format:
-          "★ 3.74 Tabelog • <description text>"
-        If not a restaurant in Japan, set "tabelog" to null.
+        - CRITICAL: DO NOT AI-GENERATE OR GUESS RATINGS. Always set "rating" to null.
+        - NEVER put star ratings, numbers, or Tabelog prefixes into the "description" field. Keep "description" purely focused on food, dishes, and atmosphere.
+        If not a restaurant or cafe in Japan, set "tabelog" to null.
 
         Return ONLY a JSON object in this format:
         {
@@ -253,6 +253,21 @@ export default async function handler(req: Request) {
     }
 
     const parsed = parseJsonResponse(rawText);
+    const stripPrefix = (desc?: string | null) => {
+      if (!desc) return "";
+      return desc.replace(/^(?:\[Tabelog\s*[^\]]*\]|★\s*\d+(?:\.\d+)?(?:\s*stars?)?(?:\s*Tabelog)?(?:\s*\([^)]*\))?|(?:★\s*)?Tabelog(?:\s*★)?(?:\s*\d+(?:\.\d+)?)?(?:\s*\([^)]*\))?)\s*[•—–|\-:]?\s*/i, "").trim();
+    };
+
+    if (Array.isArray(parsed)) {
+      parsed.forEach((item: any) => {
+        if (item && item.description) {
+          item.description = stripPrefix(item.description);
+        }
+      });
+    } else if (parsed && typeof parsed === "object" && (parsed as any).description) {
+      (parsed as any).description = stripPrefix((parsed as any).description);
+    }
+
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { "Content-Type": "application/json" },

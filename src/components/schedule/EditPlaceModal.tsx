@@ -69,7 +69,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [tabelogRating, setTabelogRating] = useState("");
   const [tabelogUrl, setTabelogUrl] = useState("");
   const [tabelogAward, setTabelogAward] = useState("");
-  const [prependTabelogToDesc, setPrependTabelogToDesc] = useState(true);
+  const [prependTabelogToDesc, setPrependTabelogToDesc] = useState(false);
   const [isFetchingTabelog, setIsFetchingTabelog] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
@@ -86,7 +86,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
 
   useEffect(() => {
     if (place) {
-      setDesc(place.description || "");
+      setDesc(stripTabelogPrefix(place.description || ""));
       setDurationVal((place.estimatedDuration ?? 60).toString());
       setCategory(place.category);
       setRomanizedName(place.romanizedName || "");
@@ -132,7 +132,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
       setTabelogRating(place.tabelog?.rating !== undefined && place.tabelog?.rating !== null ? place.tabelog.rating.toString() : "");
       setTabelogUrl(place.tabelog?.url || "");
       setTabelogAward(place.tabelog?.award || "");
-      setPrependTabelogToDesc(true);
+      setPrependTabelogToDesc(false);
 
       // Area initialization
       setIsArea(isAreaPlace(place));
@@ -410,7 +410,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
     let finalDesc = desc.trim();
     if (finalTabelog?.rating && prependTabelogToDesc) {
       finalDesc = formatDescriptionWithTabelog(finalDesc, finalTabelog.rating, finalTabelog.award);
-    } else if (!prependTabelogToDesc) {
+    } else {
       finalDesc = stripTabelogPrefix(finalDesc);
     }
 
@@ -491,6 +491,8 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
           setTabelogRating(res.rating.toString());
           if (prependTabelogToDesc) {
             setDesc((prev) => formatDescriptionWithTabelog(prev, res.rating, res.award));
+          } else {
+            setDesc((prev) => stripTabelogPrefix(prev));
           }
         }
         if (res.url) setTabelogUrl(res.url);

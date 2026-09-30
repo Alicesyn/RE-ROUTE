@@ -9,7 +9,29 @@ const getApiKey = () =>
     ? process.env.VITE_EKISPERT_API_KEY
     : "") ||
   "";
-const EKISPERT_API_ENDPOINT = "https://api.ekispert.jp/v1/json";
+
+const getEkispertEndpoint = (): string => {
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1")
+  ) {
+    return "/ekispert-proxy";
+  }
+  return "https://api.ekispert.jp/v1/json";
+};
+
+const getApiUrl = (path: string): URL => {
+  const base = getEkispertEndpoint();
+  if (base.startsWith("/")) {
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "http://localhost:5173";
+    return new URL(`${base}${path}`, origin);
+  }
+  return new URL(`${base}${path}`);
+};
 
 export interface EkispertStation {
   code: string;
@@ -99,7 +121,7 @@ export const searchEkispertStation = async (
   if (!key || !name.trim()) return [];
 
   try {
-    const url = new URL(`${EKISPERT_API_ENDPOINT}/station/light`);
+    const url = getApiUrl("/station/light");
     url.searchParams.append("key", key);
     url.searchParams.append("name", name.trim());
 
@@ -140,7 +162,7 @@ export const findNearestStation = async (
   }
 
   try {
-    const url = new URL(`${EKISPERT_API_ENDPOINT}/geo/station`);
+    const url = getApiUrl("/geo/station");
     url.searchParams.append("key", key);
     url.searchParams.append("geoPoint", `${lat},${lng},wgs84,${radiusMeters}`);
 
@@ -198,7 +220,7 @@ export const getEkispertRouteUrl = async (
   }
 
   try {
-    const url = new URL(`${EKISPERT_API_ENDPOINT}/search/course/light`);
+    const url = getApiUrl("/search/course/light");
     url.searchParams.append("key", key);
     url.searchParams.append("from", from.trim());
     url.searchParams.append("to", to.trim());
@@ -234,13 +256,15 @@ export const calculateJapanStationTransit = async (
   }
 
   const directDist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
+  const STREET_DETOUR = 1.35; // City grid detour factor (Manhattan / urban grid vs straight line)
+  const WALK_SPEED_MPS = 1.15; // Realistic pedestrian speed ~4.1 km/h with crosswalks & traffic lights
 
   // If places are closer than 800m, direct walking is faster than descending to train platforms
   if (directDist < 800) {
-    const walkTimeS = Math.round(directDist / 1.25);
+    const walkTimeS = Math.round((directDist * STREET_DETOUR) / WALK_SPEED_MPS);
     const walkMin = Math.max(1, Math.round(walkTimeS / 60));
     return {
-      distanceM: Math.round(directDist),
+      distanceM: Math.round(directDist * STREET_DETOUR),
       durationS: walkTimeS,
       isHeuristic: true,
       heuristicReason: `Direct walk: ${walkMin} min (<800m is faster than rail transfer in Japan).`,
@@ -272,14 +296,14 @@ export const calculateJapanStationTransit = async (
   // Robust fallback if station is beyond 5km or Ekispert API is rate-limited/unconfigured
   if (!stationA || !stationB) {
     const estTimeS = Math.round(estimateTime(directDist, "transit"));
-    const totalMin = Math.max(5, Math.round(estTimeS / 60));
-    const walkAMin = Math.min(10, Math.max(4, Math.round(totalMin * 0.2)));
-    const walkBMin = Math.min(10, Math.max(4, Math.round(totalMin * 0.2)));
+    const totalMin = Math.max(8, Math.round(estTimeS / 60));
+    const walkAMin = Math.min(14, Math.max(5, Math.round(totalMin * 0.42)));
+    const walkBMin = Math.min(8, Math.max(2, Math.round(totalMin * 0.18)));
     const trainMin = Math.max(3, totalMin - walkAMin - walkBMin);
     const stationFrom = stationA?.name || "Local Station";
     const stationTo = stationB?.name || "Destination Station";
     return {
-      distanceM: Math.round(directDist),
+      distanceM: Math.round(directDist * STREET_DETOUR),
       durationS: totalMin * 60,
       isHeuristic: true,
       heuristicReason: `Station-aware transit estimate: ${walkAMin} min walk to ${stationFrom}, ${trainMin} min train ride, ${walkBMin} min walk to destination.`,
@@ -297,11 +321,11 @@ export const calculateJapanStationTransit = async (
 
   // If both origin and destination share the same nearest station
   if (stationA.code === stationB.code) {
-    const walkDist = stationA.distanceMeters + stationB.distanceMeters;
-    const walkTimeS = Math.round(walkDist / 1.25);
+    const walkDist = Math.round((stationA.distanceMeters + stationB.distanceMeters) * STREET_DETOUR);
+    const walkTimeS = Math.round(walkDist / WALK_SPEED_MPS);
     const walkMin = Math.max(1, Math.round(walkTimeS / 60));
     return {
-      distanceM: Math.round(walkDist),
+      distanceM: walkDist,
       durationS: walkTimeS,
       isHeuristic: true,
       heuristicReason: `Both locations near ${stationA.name} station: ${walkMin} min walking connection.`,
@@ -314,39 +338,60 @@ export const calculateJapanStationTransit = async (
     };
   }
 
-  // 1. Walk from origin to Station A (~1.25 m/s or 4.5 km/h)
-  const walkToStationS = Math.round(stationA.distanceMeters / 1.25);
+  // 1. Walk from origin to Station A with 1.35x street detour (~1.15 m/s)
+  const walkToStationS = Math.round((stationA.distanceMeters * STREET_DETOUR) / WALK_SPEED_MPS);
 
-  // 2. Headway wait time & platform ticket gates (4 minutes average in Japan urban networks)
-  const waitBufferS = 240;
+  // 2. Station entry, ticket gates, platform descent + headway wait buffer
+  // In urban Japan: average 4.5 minutes (270s)
+  const waitBufferS = 270;
 
   // 3. Train rail travel between stations
   const interStationDist = getDistance(stationA.lat, stationA.lng, stationB.lat, stationB.lng);
   const isLongDistance = interStationDist > 50000;
 
-  // ~36 km/h (10 m/s) urban metro/JR including station stops, or ~150 km/h (41.7 m/s) express/Shinkansen
-  const trainSpeedMps = isLongDistance ? 41.7 : 10.0;
-  let trainTimeS = Math.round(interStationDist / trainSpeedMps);
+  // ~27 km/h (7.5-8.0 m/s) urban metro/JR with station dwell times, or ~160 km/h (45.0 m/s) express/Shinkansen
+  const trainSpeedMps = isLongDistance ? 45.0 : 8.0;
+  let trainTimeS = Math.round((interStationDist * 1.12) / trainSpeedMps);
   if (isLongDistance) {
-    trainTimeS += 600; // 10 min intercity ticket gate / boarding buffer
+    trainTimeS += 900; // 15 min intercity ticketing / platform boarding buffer
   }
 
-  // 4. Megastation transfer / navigation padding (Shinjuku, Tokyo, Shibuya, Ikebukuro, Shinagawa, Yokohama)
-  const MEGASTATIONS = ["新宿", "東京", "渋谷", "池袋", "品川", "横浜", "Shinjuku", "Tokyo", "Shibuya", "Ikebukuro", "Shinagawa", "Yokohama"];
-  const isMegastation = MEGASTATIONS.some((m) => stationA.name.includes(m) || stationB.name.includes(m));
-  const megastationPaddingS = isMegastation ? 180 : 0; // 3 min extra for deep underground/complex stations
+  // 4. Megastation transfer / navigation padding (major high-traffic terminal hubs)
+  const MEGASTATION_NAMES = [
+    "新宿", "東京", "渋谷", "池袋", "品川", "横浜", "京都", "大阪", "梅田", "名古屋",
+    "博多", "天王寺", "難波", "なんば", "三宮", "札幌",
+    "Shinjuku", "Tokyo", "Shibuya", "Ikebukuro", "Shinagawa", "Yokohama", "Kyoto",
+    "Osaka", "Umeda", "Nagoya", "Hakata", "Tennoji", "Namba", "Sannomiya", "Sapporo"
+  ];
+  // Strip prefecture qualifiers in parentheses like (京都府) or (大阪府) before comparing
+  const cleanStationName = (name: string) => name.replace(/\([^)]+\)/g, "").trim();
+  const isMegastation = (st: EkispertStation) => {
+    const cleaned = cleanStationName(st.name);
+    return MEGASTATION_NAMES.some(
+      (m) => cleaned === m || cleaned === `${m}駅` || cleaned.toLowerCase() === m.toLowerCase()
+    );
+  };
+  const hasMegastation = isMegastation(stationA) || isMegastation(stationB);
+  const megastationPaddingS = hasMegastation ? 240 : 0; // 4 min extra for navigating complex multi-level terminals
 
-  // 5. Walk from Station B to destination (~1.25 m/s)
-  const walkFromStationS = Math.round(stationB.distanceMeters / 1.25);
+  // 5. Walk from Station B to destination with 1.35x street detour
+  const walkFromStationS = Math.round((stationB.distanceMeters * STREET_DETOUR) / WALK_SPEED_MPS);
 
-  const totalDurationS = walkToStationS + waitBufferS + trainTimeS + megastationPaddingS + walkFromStationS;
-  const totalDistanceM = Math.round(stationA.distanceMeters + interStationDist + stationB.distanceMeters);
+  // 6. Transfer penalty for longer cross-city transit journeys (> 3.8 km)
+  const transferPenaltyS = (!isLongDistance && interStationDist > 3800) ? 240 : 0; // 4 min transfer buffer
+
+  const totalDurationS = walkToStationS + waitBufferS + trainTimeS + megastationPaddingS + walkFromStationS + transferPenaltyS;
+  const totalDistanceM = Math.round(
+    stationA.distanceMeters * STREET_DETOUR +
+    interStationDist * 1.12 +
+    stationB.distanceMeters * STREET_DETOUR
+  );
 
   // Fetch Ekispert official timetable link
   const transitUrl = (await getEkispertRouteUrl(stationA.code, stationB.code)) || undefined;
 
   const walkAMin = Math.max(1, Math.round(walkToStationS / 60));
-  const trainMin = Math.max(1, Math.round((trainTimeS + megastationPaddingS + waitBufferS) / 60));
+  const trainMin = Math.max(1, Math.round((trainTimeS + megastationPaddingS + waitBufferS + transferPenaltyS) / 60));
   const walkBMin = Math.max(1, Math.round(walkFromStationS / 60));
   const totalMin = Math.round(totalDurationS / 60);
 

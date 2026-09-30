@@ -22,6 +22,9 @@ export const clearMapsCache = () => {
   localStorage.removeItem("reroute_search_cache");
   photoUrlCache = {};
   localStorage.removeItem(PHOTO_URL_CACHE_KEY);
+  localStorage.removeItem(ROUTES_CACHE_KEY);
+  localStorage.removeItem("reroute_routes_cache_v3");
+  localStorage.removeItem("reroute_routes_cache_v2");
 };
 
 const MAX_SEARCH_CACHE = 150;
@@ -91,7 +94,7 @@ export const resolvePhotoUrl = async (photoName: string, apiKey?: string): Promi
   return undefined;
 };
 
-const ROUTES_CACHE_KEY = "reroute_routes_cache_v3";
+const ROUTES_CACHE_KEY = "reroute_routes_cache_v4";
 const ROUTES_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type CachedRoute = { distanceM: number; durationS: number; savedAt?: number };

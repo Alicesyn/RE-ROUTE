@@ -23,10 +23,17 @@ import {
   Loader2,
   RefreshCw,
   Utensils,
+  Clock,
 } from "lucide-react";
 import { PlaceHighlightBadge } from "../common/PlaceHighlightBadge";
 import { ReservationBadge } from "../common/ReservationBadge";
 import { toast } from "../../services/toastService";
+import {
+  isJapanRestaurant,
+  getTabelogSearchUrl,
+  getTabelogBadgeStyle,
+  formatDescriptionWithTabelog,
+} from "../../utils/tabelogUtils";
 import {
   getSpecificMockHighlight,
   getSpecificMockPrice,
@@ -836,7 +843,13 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                   </div>
 
                   <h4 className="text-sm font-black text-surface-900 dark:text-white mb-1 leading-tight group-hover:text-purple-600 relative z-10">
-                    {place.name}
+                    <span>{place.name}</span>
+                    {place.romanizedName &&
+                      place.romanizedName.toLowerCase() !== place.name.toLowerCase() && (
+                        <span className="text-xs font-normal text-surface-500 dark:text-surface-400 italic ml-1.5 font-sans">
+                          ({place.romanizedName})
+                        </span>
+                      )}
                   </h4>
                   {place.address && (
                     <p
@@ -846,34 +859,107 @@ export const SuggestedPlaces: React.FC = React.memo(() => {
                       {place.address}
                     </p>
                   )}
-                  {place.description ? (
-                    <div className="relative group/desc mb-2 z-20">
-                      <p
-                        className="text-[11px] text-surface-500 dark:text-surface-400 leading-relaxed line-clamp-2 cursor-help hover:text-surface-700 dark:hover:text-surface-300 transition-colors"
-                        title={place.description}
-                      >
-                        {place.description}
-                      </p>
-                      <div className="absolute -inset-x-2.5 -top-2.5 bottom-auto z-40 hidden group-hover/desc:block animate-in fade-in zoom-in-95 duration-150">
-                        <div className="p-3 rounded-xl bg-surface-900/95 dark:bg-surface-800/98 text-white shadow-2xl border border-surface-700/80 backdrop-blur-md">
+
+                  {/* Hours & Tabelog meta strip */}
+                  {((place.openingHours && place.openingHours.length > 0) || isJapanRestaurant(place)) && (
+                    <div className="flex items-center gap-1.5 mb-2.5 flex-wrap relative z-10">
+                      {/* Opening Hours Badge */}
+                      {place.openingHours && place.openingHours.length > 0 && (
+                        <div className="relative group/hours">
                           <div
-                            className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-1 ${
-                              recType === "food" ? "text-amber-400" : "text-purple-400"
-                            }`}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-surface-600 dark:text-surface-300 bg-surface-50 dark:bg-surface-900/90 border border-surface-200/70 dark:border-surface-700/70 px-2 py-0.5 rounded-full cursor-help whitespace-nowrap shadow-2xs hover:border-surface-400 dark:hover:border-surface-500 transition-colors"
+                            title={place.openingHours.filter((h: any) => typeof h === "string").join("\n")}
                           >
-                            {recType === "food" ? (
-                              <Utensils className="w-3 h-3 text-amber-400 shrink-0" />
-                            ) : (
-                              <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
-                            )}
-                            <span>{recType === "food" ? "About this food spot" : "About this sight"}</span>
+                            <Clock className="w-3 h-3 text-surface-400 dark:text-surface-500" />
+                            <span>Hours</span>
                           </div>
-                          <p className="text-[11px] leading-relaxed text-surface-100 select-text font-normal">
-                            {place.description}
-                          </p>
+                          {/* Hover schedule popup */}
+                          <div className="absolute left-0 bottom-full mb-1.5 z-50 hidden group-hover/hours:block pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+                            <div className="p-2.5 rounded-xl bg-surface-900/95 dark:bg-surface-850/98 text-white text-[11px] shadow-2xl border border-surface-700/80 backdrop-blur-md w-60">
+                              <div className="font-bold flex items-center gap-1.5 text-surface-300 border-b border-surface-700/60 pb-1 mb-1.5 text-[10px] uppercase tracking-wider">
+                                <Clock className="w-3 h-3 text-primary-400" />
+                                <span>Operating Hours</span>
+                              </div>
+                              <div className="space-y-0.5 text-[10px] text-surface-200 font-mono">
+                                {place.openingHours.map((h: string, i: number) => (
+                                  <div key={i} className="truncate">{h}</div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* Tabelog (Japan Dining) Badge */}
+                      {isJapanRestaurant(place) && (
+                        place.tabelog?.rating ? (
+                          (() => {
+                            const tbStyle = getTabelogBadgeStyle(place.tabelog.rating);
+                            return (
+                              <a
+                                href={place.tabelog.url || getTabelogSearchUrl(place)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap transition-colors hover:opacity-85 shadow-2xs ${tbStyle.badgeBg} ${tbStyle.textColor} ${tbStyle.borderColor}`}
+                                title={`Tabelog: ★ ${place.tabelog.rating.toFixed(2)}${place.tabelog.award ? ` (${place.tabelog.award})` : ""} [${tbStyle.tierLabel}] - Click to open listing`}
+                              >
+                                <span className="font-bold">★ {place.tabelog.rating.toFixed(2)}</span>
+                                <span className="text-[9px] font-normal opacity-85">Tabelog</span>
+                                <ExternalLink className="w-2.5 h-2.5 opacity-70 shrink-0" />
+                              </a>
+                            );
+                          })()
+                        ) : (
+                          <a
+                            href={getTabelogSearchUrl(place)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800/60 rounded-full px-2 py-0.5 transition-colors whitespace-nowrap shadow-2xs"
+                            title="Search on Tabelog (食べログ)"
+                          >
+                            <span>Tabelog ↗</span>
+                          </a>
+                        )
+                      )}
                     </div>
+                  )}
+                  {place.description ? (
+                    (() => {
+                      const displayDesc = place.tabelog?.rating
+                        ? formatDescriptionWithTabelog(place.description, place.tabelog.rating, place.tabelog.award)
+                        : place.description;
+                      return (
+                        <div className="relative group/desc mb-2 z-20">
+                          <p
+                            className="text-[11px] text-surface-500 dark:text-surface-400 leading-relaxed line-clamp-2 cursor-help hover:text-surface-700 dark:hover:text-surface-300 transition-colors"
+                            title={displayDesc}
+                          >
+                            {displayDesc}
+                          </p>
+                          <div className="absolute -inset-x-2.5 -top-2.5 bottom-auto z-40 hidden group-hover/desc:block animate-in fade-in zoom-in-95 duration-150">
+                            <div className="p-3 rounded-xl bg-surface-900/95 dark:bg-surface-800/98 text-white shadow-2xl border border-surface-700/80 backdrop-blur-md">
+                              <div
+                                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                                  recType === "food" ? "text-amber-400" : "text-purple-400"
+                                }`}
+                              >
+                                {recType === "food" ? (
+                                  <Utensils className="w-3 h-3 text-amber-400 shrink-0" />
+                                ) : (
+                                  <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
+                                )}
+                                <span>{recType === "food" ? "About this food spot" : "About this sight"}</span>
+                              </div>
+                              <p className="text-[11px] leading-relaxed text-surface-100 select-text font-normal">
+                                {displayDesc}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
                   ) : null}
 
                   {/* Reservation Requirement Badge */}

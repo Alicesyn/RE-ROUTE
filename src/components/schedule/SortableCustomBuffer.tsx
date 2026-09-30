@@ -90,7 +90,10 @@ export const SortableCustomBuffer: React.FC<SortableCustomBufferProps> = React.m
             <div className="bg-amber-50/75 dark:bg-amber-950/30 rounded-xl p-3 border border-amber-200 dark:border-amber-800/60 shadow-2xs hover:shadow-md transition-all relative">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm font-bold text-amber-950 dark:text-amber-100 truncate">
+                  <span
+                    className="text-sm font-bold text-amber-950 dark:text-amber-100 truncate"
+                    title={buffer.label || "Buffer / Break"}
+                  >
                     {buffer.label || "Buffer / Break"}
                   </span>
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300/60 dark:border-amber-700/60 shrink-0">

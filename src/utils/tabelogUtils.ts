@@ -22,13 +22,13 @@ const JAPAN_KEYWORDS_REGEX =
 const JAPANESE_CHAR_REGEX = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
 
 const TABELOG_PREFIX_REGEX =
-  /^(?:\[Tabelog\s*[^\]]+\]|★\s*[\d.]+\s*(?:Tabelog)?(?:\s*\([^)]+\))?)\s*[•—–-]?\s*/i;
+  /^(?:\[Tabelog\s*[^\]]*\]|★\s*\d+(?:\.\d+)?(?:\s*stars?)?(?:\s*Tabelog)?(?:\s*\([^)]*\))?|(?:★\s*)?Tabelog(?:\s*★)?(?:\s*\d+(?:\.\d+)?)?(?:\s*\([^)]*\))?)\s*[•—–|\-:]?\s*/i;
 
 /**
  * Determines whether a place is a restaurant located in Japan.
  */
 export function isJapanRestaurant(place?: PlaceLike | null): boolean {
-  if (!place || place.category !== "restaurant") return false;
+  if (!place || (place.category !== "restaurant" && place.category !== "coffee_shop")) return false;
 
   // 1. Geocoordinates check (Japan bounding box approx: lat 24°–46°N, lng 122°–154°E)
   if (typeof place.lat === "number" && typeof place.lng === "number") {

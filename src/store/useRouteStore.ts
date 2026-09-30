@@ -22,6 +22,7 @@ import { cloudTripService } from "../services/cloudTripService";
 import { isSupabaseConfigured } from "../services/supabaseClient";
 import { toast } from "../services/toastService";
 import { isReservationRelevant } from "../utils/reservationUtils";
+import { formatDescriptionWithTabelog } from "../utils/tabelogUtils";
 
 interface ModeData {
   places: Place[];
@@ -304,9 +305,16 @@ function mergePlaceUpdates(existingPlace: Place, updates: Partial<Place>): Place
     }
   }
 
+  let finalDesc = updates.description !== undefined ? updates.description : existingPlace.description;
+  const finalTabelog = updates.tabelog !== undefined ? updates.tabelog : existingPlace.tabelog;
+  if (finalTabelog?.rating && finalDesc) {
+    finalDesc = formatDescriptionWithTabelog(finalDesc, finalTabelog.rating, finalTabelog.award);
+  }
+
   return {
     ...existingPlace,
     ...updates,
+    description: finalDesc,
     ...(updates.reservation !== undefined ? { reservation: mergedReservation } : {}),
   };
 }
@@ -596,8 +604,13 @@ export const useRouteStore = create<RouteState>()(
 
       addPlace: (place, targetDayIndex) =>
         set((state) => {
+          const finalDesc = place.tabelog?.rating && place.description
+            ? formatDescriptionWithTabelog(place.description, place.tabelog.rating, place.tabelog.award)
+            : place.description;
+
           const newPlace: Place = {
             ...place,
+            description: finalDesc,
             dayIndex: targetDayIndex !== undefined ? targetDayIndex : null,
             orderInDay:
               targetDayIndex !== undefined
