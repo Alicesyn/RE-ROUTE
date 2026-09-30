@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Ticket,
@@ -57,6 +58,22 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [editingInterestedPlaceId, setEditingInterestedPlaceId] = useState<string | null>(null);
   const [tempInterestedText, setTempInterestedText] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen, onClose]);
 
   const startEditingInterested = (place: EnrichedReservationPlace["place"]) => {
     setEditingInterestedPlaceId(place.id);
@@ -305,7 +322,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
       <AnimatePresence>
         <motion.div
@@ -849,6 +866,7 @@ export const ReservationsModal: React.FC<ReservationsModalProps> = ({
           onClose={() => setEditingPlaceId(null)}
         />
       )}
-    </div>
+    </div>,
+    document.body
   );
 };

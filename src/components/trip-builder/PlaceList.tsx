@@ -747,10 +747,10 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
                     : "max-h-[360px] overflow-y-auto pr-2 custom-scrollbar overscroll-contain smooth-scroll-container"
                 } print:max-h-none print:overflow-visible print:grid-cols-1`}
               >
-                {filteredPlaces.map((place, index) => (
+                {filteredPlaces.map((place) => (
                   <div
                     key={place.id}
-                    className={`h-full ${index >= 6 ? "content-auto" : ""}`}
+                    className="h-full"
                   >
                     <PlaceItem
                       place={place}

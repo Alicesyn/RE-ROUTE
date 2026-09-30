@@ -861,7 +861,7 @@ export const DailySchedule: React.FC = React.memo(() => {
               <div
                 key={i}
                 id={`schedule-day-${i}`}
-                className={`flex-shrink-0 w-80 md:w-96 snap-start ${i >= 3 && !isExpanded ? "content-auto-day" : ""}`}
+                className="flex-shrink-0 w-80 md:w-96 snap-start"
               >
                 <div
                   className={`bg-white dark:bg-surface-800 rounded-2xl border ${isDayExempt

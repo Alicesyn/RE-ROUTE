@@ -784,7 +784,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-50 dark:bg-surface-900 flex flex-col font-sans transition-colors overflow-hidden">
+    <div className="h-screen max-h-[100dvh] min-h-screen bg-surface-50 dark:bg-surface-900 flex flex-col font-sans transition-colors overflow-hidden">
       <Header />
       <ToastContainer />
       {isResetOpen && (

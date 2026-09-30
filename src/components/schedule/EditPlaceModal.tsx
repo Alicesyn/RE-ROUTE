@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, MapPin, Timer, Sparkles, Loader2, ExternalLink, Coins, CalendarClock, Lock, Star, Copy, Eye, EyeOff, CalendarDays, Pin, CheckCircle2, Link2, Hash, Calendar, Clock, Plus, Compass, FileText, AlertTriangle, Users } from "lucide-react";
 import { format, parseISO, isValid, addDays, differenceInCalendarDays } from "date-fns";
 import { useRouteStore } from "../../store/useRouteStore";
@@ -85,6 +86,22 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
   const [hoursEntries, setHoursEntries] = useState<DayHoursEntry[]>(() => parseOpeningHoursArrayToEntries(undefined));
   const [isRawHoursMode, setIsRawHoursMode] = useState(false);
   const [rawHoursText, setRawHoursText] = useState("");
+
+  // Lock body scroll and listen for Escape key while modal is open
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [onClose]);
 
   useEffect(() => {
     if (place) {
@@ -626,14 +643,14 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
 
   const currentRomanized = romanizedName || place.romanizedName;
 
-  return (
+  return createPortal(
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150"
     >
-      <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90dvh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-surface-200 dark:border-surface-700">
+      <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90dvh] overflow-hidden flex flex-col border border-surface-200 dark:border-surface-700 animate-in fade-in duration-150">
 
         <div className="flex items-center justify-between p-5 border-b border-surface-200 dark:border-surface-700 bg-surface-50/70 dark:bg-surface-900/70 shrink-0">
           <div className="flex-1 min-w-0 pr-4">
@@ -2123,6 +2140,7 @@ export const EditPlaceModal: React.FC<Props> = ({ placeId, onClose }) => {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
