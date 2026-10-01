@@ -509,22 +509,25 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       );
     };
 
-    const handleApplyDayRestriction = (ranges: DayRangeConstraint[] | null) => {
+    const handleApplyDayRestriction = (
+      ranges: DayRangeConstraint[] | null,
+      mode: "allow" | "exclude" = "allow"
+    ) => {
       if (filteredPlaces.length === 0) return;
 
       const updates = filteredPlaces.map((p) => {
-        const isOutOfRange =
-          ranges &&
-          ranges.length > 0 &&
-          p.dayIndex !== null &&
-          p.dayIndex !== undefined &&
-          !ranges.some((r) => p.dayIndex! >= r.startDay && p.dayIndex! <= r.endDay);
+        const hasRanges = ranges && ranges.length > 0;
+        let isOutOfRange = false;
+        if (hasRanges && p.dayIndex !== null && p.dayIndex !== undefined) {
+          const inRanges = ranges.some((r) => p.dayIndex! >= r.startDay && p.dayIndex! <= r.endDay);
+          isOutOfRange = mode === "exclude" ? inRanges : !inRanges;
+        }
 
         return {
           id: p.id,
           updates: {
-            allowedDayRanges: ranges && ranges.length > 0 ? ranges.map((r) => ({ ...r })) : undefined,
-            dayRangeMode: ranges && ranges.length > 0 ? p.dayRangeMode : undefined,
+            allowedDayRanges: hasRanges ? ranges.map((r) => ({ ...r })) : undefined,
+            dayRangeMode: hasRanges ? mode : undefined,
             ...(isOutOfRange ? { dayIndex: null, orderInDay: null, pinnedToDay: false } : {}),
           },
         };
@@ -533,10 +536,10 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
       updatePlacesBulk(updates);
 
       if (ranges && ranges.length > 0) {
-        const badge = formatMultiRangeBadge(ranges, startDate, dayTitles);
+        const badge = formatMultiRangeBadge(ranges, startDate, dayTitles, mode);
         toast.success(
-          `Restricted ${filteredPlaces.length} place(s) to ${badge.fullLabel}.`,
-          "Day Restriction Applied"
+          `${mode === "exclude" ? "Excluded" : "Restricted"} ${filteredPlaces.length} place(s) ${mode === "exclude" ? "from" : "to"} ${badge.fullLabel}.`,
+          mode === "exclude" ? "Dates Excluded (NOT)" : "Day Restriction Applied"
         );
       } else {
         toast.info(
@@ -565,9 +568,10 @@ export const PlaceList: React.FC<PlaceListProps> = React.memo(
           const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
           return m === 0 ? `${h12} ${ampm}` : `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
         };
+        const isExclude = range.mode === "exclude";
         toast.success(
-          `Restricted ${filteredPlaces.length} place(s) to ${formatTime(range.startTime)} – ${formatTime(range.endTime)}.`,
-          "Time Restriction Applied"
+          `${isExclude ? "Excluded" : "Restricted"} ${filteredPlaces.length} place(s) ${isExclude ? "from" : "to"} ${isExclude ? "NOT " : ""}${formatTime(range.startTime)} – ${formatTime(range.endTime)}.`,
+          isExclude ? "Time Window Excluded (NOT)" : "Time Restriction Applied"
         );
       } else {
         toast.info(

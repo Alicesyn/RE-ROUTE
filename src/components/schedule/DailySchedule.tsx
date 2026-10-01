@@ -1276,7 +1276,7 @@ export const DailySchedule: React.FC = React.memo(() => {
                                       label={
                                         isRes
                                           ? `Buffer: ${preWaitMin} min free time before reservation`
-                                          : `Buffer: ${preWaitMin} min wait until opening (${openTimeFormatted})`
+                                          : `Wait ${preWaitMin}m until opening (${openTimeFormatted})`
                                       }
                                       isReservation={isRes}
                                       showLine={!isFirst}
@@ -1400,8 +1400,9 @@ export const DailySchedule: React.FC = React.memo(() => {
                                   );
                                 } else if (stop) {
                                   let mealGapAlert: { gap: number; minGap: number } | null = null;
-                                  const minSpacing = categoryConfigs?.[stop.category]?.minTimeBetween ?? (stop.category === "restaurant" ? 180 : 0);
-                                  if (minSpacing > 0 && stop.category === "restaurant") {
+                                  const minSpacing = categoryConfigs?.[stop.category]?.minTimeBetween ?? (stop.category === "restaurant" ? 150 : 0);
+                                  const isQuickSnack = stop.category === "restaurant" && (stop.estimatedDuration || 60) <= 30;
+                                  if (minSpacing > 0 && stop.category === "restaurant" && !isQuickSnack) {
                                     if (lastMealDepartureTime !== null) {
                                       const gap = stopArrivalTime - lastMealDepartureTime;
                                       if (gap < minSpacing) {
@@ -1426,7 +1427,7 @@ export const DailySchedule: React.FC = React.memo(() => {
                                       mealGapAlert={mealGapAlert}
                                     />
                                   );
-                                  if (stop.category === "restaurant") {
+                                  if (stop.category === "restaurant" && !isQuickSnack) {
                                     lastMealDepartureTime = stopArrivalTime + (stop.estimatedDuration || 60);
                                   }
                                 }

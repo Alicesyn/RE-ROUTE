@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Layers, X, Star, EyeOff, CheckCircle2, Trash2, CalendarDays, Plus, Clock } from "lucide-react";
+import { Layers, X, Star, EyeOff, CheckCircle2, Trash2, CalendarDays, Plus, Clock, Ban } from "lucide-react";
 import type { DayRangeConstraint, TimeRangeConstraint } from "../../types";
-import { formatDayIndexLabel, mergeOverlappingRanges, MAX_DAY_RANGES } from "../../utils/dayRangeUtils";
+import { formatDayIndexLabel, mergeOverlappingRanges, formatMultiRangeBadge, MAX_DAY_RANGES } from "../../utils/dayRangeUtils";
 
 export interface PlaceMassEditBarProps {
   showMassEditBar: boolean;
@@ -14,7 +14,7 @@ export interface PlaceMassEditBarProps {
   onMassStar: () => void;
   allFilteredDisabled: boolean;
   onMassDisabled: () => void;
-  onApplyDayRestriction: (ranges: DayRangeConstraint[] | null) => void;
+  onApplyDayRestriction: (ranges: DayRangeConstraint[] | null, mode?: "allow" | "exclude") => void;
   onApplyTimeRestriction: (range: TimeRangeConstraint | null) => void;
   onMassAssignDay: (targetDay: number | "unassign") => void;
   onMassDelete: () => void;
@@ -46,6 +46,8 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
   }) => {
     const [showDateRangePicker, setShowDateRangePicker] = useState(false);
     const [showTimeRangePicker, setShowTimeRangePicker] = useState(false);
+    const [dayRangeMode, setDayRangeMode] = useState<"allow" | "exclude">("allow");
+    const [timeRangeMode, setTimeRangeMode] = useState<"allow" | "exclude">("allow");
     const [rangeRows, setRangeRows] = useState<RangeRow[]>([
       { startDay: 0, endDay: Math.max(0, days - 1) },
     ]);
@@ -95,7 +97,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
         endDay: Math.max(r.startDay, r.endDay),
       }));
       const merged = mergeOverlappingRanges(constraints);
-      onApplyDayRestriction(merged);
+      onApplyDayRestriction(merged, dayRangeMode);
       setShowDateRangePicker(false);
     };
 
@@ -105,7 +107,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
     };
 
     const handleApplyTimeRange = () => {
-      onApplyTimeRestriction({ startTime: timeStart, endTime: timeEnd });
+      onApplyTimeRestriction({ startTime: timeStart, endTime: timeEnd, mode: timeRangeMode });
       setShowTimeRangePicker(false);
     };
 
@@ -175,10 +177,10 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
                 ? "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 border-indigo-300 dark:border-indigo-700 shadow-xs"
                 : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
             }`}
-            title="Restrict all results to specific date or day ranges"
+            title="Restrict or exclude all results by date ranges (supports NOT)"
           >
             <CalendarDays className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>Restrict Dates</span>
+            <span>Restrict / NOT Dates</span>
           </button>
 
           {/* Restrict Time Window Button */}
@@ -190,10 +192,10 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
                 ? "bg-teal-100 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 border-teal-300 dark:border-teal-700 shadow-xs"
                 : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
             }`}
-            title="Restrict all results to a specific time window"
+            title="Restrict or exclude all results by time window (supports NOT)"
           >
             <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-            <span>Restrict Time</span>
+            <span>Restrict / NOT Time</span>
           </button>
 
           {/* Star All / Unstar All */}
@@ -296,11 +298,28 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
               <div>
                 <span className="font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
-                  <CalendarDays className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  Restrict {filteredPlacesCount} Place{filteredPlacesCount === 1 ? "" : "s"} to Date Ranges
+                  {dayRangeMode === "exclude" ? (
+                    <Ban className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  ) : (
+                    <CalendarDays className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  )}
+                  {dayRangeMode === "exclude"
+                    ? `Exclude Dates (NOT) for ${filteredPlacesCount} Place${filteredPlacesCount === 1 ? "" : "s"}`
+                    : `Restrict ${filteredPlacesCount} Place${filteredPlacesCount === 1 ? "" : "s"} to Date Ranges`}
+                  <span
+                    className={`text-[10px] font-black uppercase px-1.5 py-0.2 rounded ${
+                      dayRangeMode === "exclude"
+                        ? "bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300"
+                        : "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300"
+                    }`}
+                  >
+                    {dayRangeMode === "exclude" ? "NOT / Exclude" : "Allow Only"}
+                  </span>
                 </span>
                 <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5">
-                  Add one or more date ranges. The optimizer will schedule these places within any of the specified windows.
+                  {dayRangeMode === "exclude"
+                    ? "Add one or more date ranges. The optimizer will schedule these places on any trip day EXCEPT the specified blackout windows."
+                    : "Add one or more date ranges. The optimizer will only schedule these places within the specified windows."}
                 </p>
               </div>
               <button
@@ -309,7 +328,33 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
                 className="text-[11px] font-semibold text-red-600 dark:text-red-400 hover:underline self-start sm:self-auto cursor-pointer shrink-0"
                 title="Remove all date range constraints"
               >
-                Clear All Restrictions
+                Clear All Date Restrictions
+              </button>
+            </div>
+
+            {/* Mode Selector: Allow Only vs NOT (Exclude) */}
+            <div className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-200/50 dark:bg-surface-900/60 border border-surface-200 dark:border-surface-700/80">
+              <button
+                type="button"
+                onClick={() => setDayRangeMode("allow")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  dayRangeMode === "allow"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                }`}
+              >
+                <span>✓ Allow Only</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDayRangeMode("exclude")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  dayRangeMode === "exclude"
+                    ? "bg-rose-600 text-white shadow-xs"
+                    : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                }`}
+              >
+                <span>🚫 NOT (Exclude Dates)</span>
               </button>
             </div>
 
@@ -320,15 +365,21 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
                   key={idx}
                   className="flex items-end gap-2 p-2 rounded-lg bg-surface-50/80 dark:bg-surface-800/60 border border-surface-200/80 dark:border-surface-700/60 animate-in fade-in duration-100"
                 >
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 shrink-0 self-center">
-                    <span className="w-5 h-5 rounded bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-black text-[10px]">
+                  <div className="flex items-center gap-1 text-[11px] font-bold shrink-0 self-center">
+                    <span
+                      className={`w-5 h-5 rounded flex items-center justify-center font-black text-[10px] ${
+                        dayRangeMode === "exclude"
+                          ? "bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300"
+                          : "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300"
+                      }`}
+                    >
                       {idx + 1}
                     </span>
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
-                      From
+                      {dayRangeMode === "exclude" ? "Excluded From" : "From"}
                     </label>
                     <select
                       value={row.startDay}
@@ -348,7 +399,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
 
                   <div className="flex-1 min-w-0">
                     <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
-                      To
+                      {dayRangeMode === "exclude" ? "Excluded Until" : "To"}
                     </label>
                     <select
                       value={row.endDay}
@@ -384,21 +435,47 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
               <button
                 type="button"
                 onClick={handleAddRange}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2.5 py-1.5 rounded-lg border border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all cursor-pointer"
+                className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-dashed transition-all cursor-pointer ${
+                  dayRangeMode === "exclude"
+                    ? "text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 border-rose-300 dark:border-rose-700 hover:bg-rose-50/50 dark:hover:bg-rose-950/30"
+                    : "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30"
+                }`}
               >
                 <Plus className="w-3 h-3" />
-                <span>Add another date range ({rangeRows.length}/{MAX_DAY_RANGES})</span>
+                <span>
+                  Add another {dayRangeMode === "exclude" ? "excluded" : "date"} range ({rangeRows.length}/{MAX_DAY_RANGES})
+                </span>
               </button>
             )}
+
+            {/* Live Preview */}
+            <div className="flex items-center gap-1.5 text-[11px] text-surface-500 dark:text-surface-400">
+              <span className="font-medium">Preview:</span>
+              <span
+                className={`font-semibold ${
+                  dayRangeMode === "exclude"
+                    ? "text-rose-700 dark:text-rose-300"
+                    : "text-indigo-700 dark:text-indigo-300"
+                }`}
+              >
+                {formatMultiRangeBadge(rangeRows, startDate, dayTitles, dayRangeMode).fullLabel}
+              </span>
+            </div>
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2 pt-1 border-t border-surface-200/50 dark:border-surface-700/50">
               <button
                 type="button"
                 onClick={handleApplyRanges}
-                className="h-7 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
+                className={`h-7 px-3.5 rounded-lg text-white font-bold cursor-pointer transition-colors shadow-2xs ${
+                  dayRangeMode === "exclude"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : "bg-indigo-600 hover:bg-indigo-700"
+                }`}
               >
-                Apply {rangeRows.length > 1 ? `${rangeRows.length} Ranges` : "Range"}
+                {dayRangeMode === "exclude"
+                  ? `Apply NOT Exclusion (${rangeRows.length > 1 ? `${rangeRows.length} Ranges` : "Range"})`
+                  : `Apply ${rangeRows.length > 1 ? `${rangeRows.length} Ranges` : "Range"}`}
               </button>
               <button
                 type="button"
@@ -422,11 +499,30 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
               <div>
                 <span className="font-bold text-surface-900 dark:text-white flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                  Restrict {filteredPlacesCount} Place{filteredPlacesCount === 1 ? "" : "s"} to Time Window
+                  <Clock
+                    className={`w-3.5 h-3.5 ${
+                      timeRangeMode === "exclude"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-teal-600 dark:text-teal-400"
+                    }`}
+                  />
+                  {timeRangeMode === "exclude"
+                    ? `Exclude Time Window (NOT) for ${filteredPlacesCount} Place${filteredPlacesCount === 1 ? "" : "s"}`
+                    : `Restrict ${filteredPlacesCount} Place${filteredPlacesCount === 1 ? "" : "s"} to Time Window`}
+                  <span
+                    className={`text-[10px] font-black uppercase px-1.5 py-0.2 rounded ${
+                      timeRangeMode === "exclude"
+                        ? "bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300"
+                        : "bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300"
+                    }`}
+                  >
+                    {timeRangeMode === "exclude" ? "NOT / Exclude" : "Allow Only"}
+                  </span>
                 </span>
                 <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5">
-                  The optimizer will only schedule these places within the specified time window each day.
+                  {timeRangeMode === "exclude"
+                    ? "The optimizer will NOT schedule these places during this time window (schedule any time outside this window; venue hours still apply)."
+                    : "The optimizer will only schedule these places within the specified time window each day."}
                 </p>
               </div>
               <button
@@ -439,16 +535,44 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
               </button>
             </div>
 
+            {/* Mode Selector: Allow Only vs NOT (Exclude) */}
+            <div className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-200/50 dark:bg-surface-900/60 border border-surface-200 dark:border-surface-700/80">
+              <button
+                type="button"
+                onClick={() => setTimeRangeMode("allow")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  timeRangeMode === "allow"
+                    ? "bg-teal-600 text-white shadow-xs"
+                    : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                }`}
+              >
+                <span>✓ Allow Only</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeRangeMode("exclude")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  timeRangeMode === "exclude"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+                }`}
+              >
+                <span>🚫 NOT (Exclude Hours)</span>
+              </button>
+            </div>
+
             <div className="flex items-end gap-3 p-2 rounded-lg bg-surface-50/80 dark:bg-surface-800/60 border border-surface-200/80 dark:border-surface-700/60">
               <div className="flex-1 min-w-0">
                 <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
-                  Earliest
+                  {timeRangeMode === "exclude" ? "Excluded Window Start" : "Earliest Arrival"}
                 </label>
                 <input
                   type="time"
                   value={timeStart}
                   onChange={(e) => setTimeStart(e.target.value)}
-                  className="w-full h-7 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-md px-2 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                  className={`w-full h-7 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-md px-2 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 cursor-pointer ${
+                    timeRangeMode === "exclude" ? "focus:ring-amber-500" : "focus:ring-teal-500"
+                  }`}
                   style={{ colorScheme: "dark light" }}
                 />
               </div>
@@ -457,30 +581,45 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
 
               <div className="flex-1 min-w-0">
                 <label className="text-[10px] font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider block mb-0.5">
-                  Latest
+                  {timeRangeMode === "exclude" ? "Excluded Window End" : "Latest Departure"}
                 </label>
                 <input
                   type="time"
                   value={timeEnd}
                   onChange={(e) => setTimeEnd(e.target.value)}
-                  className="w-full h-7 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-md px-2 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                  className={`w-full h-7 text-xs font-semibold bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-md px-2 text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-1 cursor-pointer ${
+                    timeRangeMode === "exclude" ? "focus:ring-amber-500" : "focus:ring-teal-500"
+                  }`}
                   style={{ colorScheme: "dark light" }}
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 text-[11px] text-surface-500 dark:text-surface-400">
-              <span>Preview:</span>
-              <span className="font-semibold text-teal-700 dark:text-teal-300">{formatTimeLabel(timeStart)} – {formatTimeLabel(timeEnd)}</span>
+              <span className="font-medium">Preview:</span>
+              <span
+                className={`font-semibold ${
+                  timeRangeMode === "exclude"
+                    ? "text-amber-700 dark:text-amber-300"
+                    : "text-teal-700 dark:text-teal-300"
+                }`}
+              >
+                {timeRangeMode === "exclude" ? "NOT " : ""}
+                {formatTimeLabel(timeStart)} – {formatTimeLabel(timeEnd)}
+              </span>
             </div>
 
             <div className="flex items-center gap-2 pt-1 border-t border-surface-200/50 dark:border-surface-700/50">
               <button
                 type="button"
                 onClick={handleApplyTimeRange}
-                className="h-7 px-3.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
+                className={`h-7 px-3.5 rounded-lg text-white font-bold cursor-pointer transition-colors shadow-2xs ${
+                  timeRangeMode === "exclude"
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-teal-600 hover:bg-teal-700"
+                }`}
               >
-                Apply Time Window
+                {timeRangeMode === "exclude" ? "Apply NOT Exclusion Window" : "Apply Time Window"}
               </button>
               <button
                 type="button"

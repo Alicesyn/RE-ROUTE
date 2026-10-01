@@ -6,7 +6,7 @@ export const CATEGORY_DEFAULTS: Record<
   { label: string; duration: number; emoji: string; minTimeBetween?: number | null }
 > = {
   museum: { label: "Museum", duration: 120, emoji: "🏛️" },
-  restaurant: { label: "Restaurant", duration: 90, emoji: "🍽️", minTimeBetween: 180 },
+  restaurant: { label: "Restaurant", duration: 90, emoji: "🍽️", minTimeBetween: 150 },
   coffee_shop: { label: "Coffee Shop", duration: 20, emoji: "☕" },
   park: { label: "Park", duration: 60, emoji: "🌳" },
   landmark: { label: "Landmark", duration: 30, emoji: "📸" },

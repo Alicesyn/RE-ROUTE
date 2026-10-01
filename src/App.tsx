@@ -972,34 +972,29 @@ function App() {
                 isOptimizing ||
                 exemptDays.length >= days
               }
-              className="btn-primary flex-1 flex items-center justify-center gap-2 group py-4 text-lg rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary flex-1 flex items-center justify-center gap-2 group py-4 text-lg rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {isOptimizing ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>
-                    Optimizing Route ({places.filter((p) => !p.isDisabled).length} places)...
-                  </span>
-                </>
+                <span key="optimizing" className="flex items-center justify-center gap-2 whitespace-nowrap">
+                  <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                  <span>Optimizing Route...</span>
+                </span>
               ) : (
-                <>
-                  <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                <span key="idle" className="flex items-center justify-center gap-2 whitespace-nowrap">
+                  <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform shrink-0" />
                   <span>
                     {exemptDays.length >= days
                       ? "All Days Exempt (Locked)"
                       : optimizedRoutes.length > 0
                         ? "Re-Optimize Route"
                         : "Optimize Route"}
-                    {exemptDays.length < days && places.some((p) => p.isDisabled)
-                      ? ` (${places.filter((p) => !p.isDisabled).length} active)`
-                      : ""}
                     {exemptDays.length > 0 && exemptDays.length < days && (
                       <span className="ml-1.5 text-xs font-medium opacity-90">
                         ({days - exemptDays.length}/{days} days)
                       </span>
                     )}
                   </span>
-                </>
+                </span>
               )}
             </button>
 

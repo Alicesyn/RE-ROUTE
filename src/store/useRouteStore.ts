@@ -14,7 +14,8 @@ import {
   SyncStatus,
 } from "../types";
 import { solveSingleDay } from "../services/tspSolver";
-import { estimateTime } from "../utils/distance";
+import { estimateTime, getDistance } from "../utils/distance";
+import { isDayAllowedForPlace } from "../utils/dayRangeUtils";
 import { format, addDays, parseISO, differenceInDays } from "date-fns";
 import { CATEGORY_DEFAULTS, ALL_CATEGORIES } from "../utils/categoryConstants";
 import { PlaceCategory } from "../types";
@@ -1424,7 +1425,102 @@ export const useRouteStore = create<RouteState>()(
             newRoutes.sort((a, b) => a.day - b.day);
           }
 
+          const evictedPlaces = dayPlaces.filter(
+            (p) => !result.stops.some((s) => s.id === p.id)
+          );
+
+          // For each unpinned evicted place, try to reassign to another allowed day
+          const reassignedMap = new Map<string, { targetDay: number; order: number }>();
+          for (const evPlace of evictedPlaces) {
+            if (evPlace.pinnedToDay) continue;
+
+            let bestTargetDay = -1;
+            let bestTargetResult: DayRoute | null = null;
+            let bestAddedDist = Infinity;
+
+            for (let tDay = 0; tDay < state.days; tDay++) {
+              if (tDay === dayIndex) continue;
+              if (state.exemptDays?.includes(tDay)) continue;
+              if (!isDayAllowedForPlace(evPlace, tDay, state.days)) continue;
+
+              const targetRoute = newRoutes.find((r) => r.day === tDay);
+              if (!targetRoute) continue;
+
+              // Check distance to target hotel (<= 45km)
+              const targetHotel = state.hotels.find((h) => h.dayIndex === tDay) || state.hotels[0];
+              if (targetHotel) {
+                const dHotel = getDistance(evPlace.lat, evPlace.lng, targetHotel.lat, targetHotel.lng);
+                if (dHotel > 45000) continue;
+              }
+
+              // Category max check
+              const cfg = state.categoryConfigs?.[evPlace.category];
+              const maxCat = cfg?.maxPerDay;
+              const currentCatCount = targetRoute.stops.filter((s) => s.category === evPlace.category).length;
+              if (maxCat != null && currentCatCount >= maxCat) continue;
+
+              // Test solving target day with the added place
+              const testPlaces = [...targetRoute.stops, { ...evPlace, dayIndex: tDay }];
+              try {
+                const testRes = await solveSingleDay(
+                  testPlaces,
+                  state.hotels,
+                  tDay,
+                  state.travelMode,
+                  tDay === 0 && state.showFlights ? state.arrivalFlight?.location : null,
+                  tDay === state.days - 1 && state.showFlights ? state.departureFlight?.location : null,
+                  false,
+                  undefined,
+                  state.startDate,
+                  state.dayStartTime,
+                  state.avoidClosedHours,
+                  tDay === state.days - 1,
+                  tDay === 0 && state.showFlights ? state.arrivalFlight : null,
+                  tDay === state.days - 1 && state.showFlights ? state.departureFlight : null,
+                  state.categoryConfigs,
+                  targetRoute.segments,
+                  state.customTransitTimes,
+                );
+
+                // Verify that BOTH evPlace and ALL previous stops survived without eviction
+                if (testRes.stops.length === testPlaces.length) {
+                  const addedDist = testRes.totalDistance - targetRoute.totalDistance;
+                  if (addedDist < bestAddedDist) {
+                    bestAddedDist = addedDist;
+                    bestTargetDay = tDay;
+                    bestTargetResult = testRes;
+                  }
+                }
+              } catch {
+                // Ignore failure in testing target day
+              }
+            }
+
+            if (bestTargetDay !== -1 && bestTargetResult) {
+              const targetIdx = newRoutes.findIndex((r) => r.day === bestTargetDay);
+              const targetTitle = state.dayTitles[bestTargetDay] || (targetIdx >= 0 ? newRoutes[targetIdx]?.title : undefined);
+              const updatedTargetRoute = { ...bestTargetResult, title: targetTitle };
+              if (targetIdx >= 0) {
+                newRoutes[targetIdx] = updatedTargetRoute;
+              } else {
+                newRoutes.push(updatedTargetRoute);
+              }
+              const order = bestTargetResult.stops.findIndex((s: Place) => s.id === evPlace.id);
+              reassignedMap.set(evPlace.id, { targetDay: bestTargetDay, order: order >= 0 ? order : 0 });
+              toast.info(`Moved "${evPlace.name}" to Day ${bestTargetDay + 1} to avoid schedule conflict on Day ${dayIndex + 1}.`);
+            }
+          }
+
           const updatedPlaces = state.places.map((p) => {
+            const reassigned = reassignedMap.get(p.id);
+            if (reassigned) {
+              return {
+                ...p,
+                dayIndex: reassigned.targetDay,
+                orderInDay: reassigned.order,
+                unfeasibleReason: undefined,
+              };
+            }
             if (p.dayIndex !== dayIndex) return p;
             const stopIdx = result.stops.findIndex((s) => s.id === p.id);
             return stopIdx >= 0
@@ -1433,7 +1529,9 @@ export const useRouteStore = create<RouteState>()(
                 ...p,
                 dayIndex: null,
                 orderInDay: null,
-                unfeasibleReason: "Closed during scheduled visiting hours.",
+                unfeasibleReason: p.pinnedToDay
+                  ? "Closed during scheduled visiting hours on pinned day."
+                  : "Closed during scheduled visiting hours and cannot fit into other allowed days.",
               };
           });
 

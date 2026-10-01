@@ -439,9 +439,9 @@ export const CategorySettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                           min="0"
                           step="15"
                           placeholder="—"
-                          value={localMinSpacing[category] ?? (config.minTimeBetween != null ? config.minTimeBetween : (category === "restaurant" ? 180 : ""))}
+                          value={localMinSpacing[category] ?? (config.minTimeBetween != null ? config.minTimeBetween : (category === "restaurant" ? 150 : ""))}
                           onChange={(e) => handleMinSpacingChange(category, e.target.value)}
-                          title="Minimum minutes between visits of this category on the same day (e.g. 180 min between meals)"
+                          title="Minimum minutes between visits of this category on the same day (e.g. 150 min between meals)"
                           className="w-16 px-2 py-1.5 text-sm font-bold text-center bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-surface-900 dark:text-white placeholder:text-surface-300 dark:placeholder:text-surface-600"
                         />
                         {(localMinSpacing[category] !== "" && (localMinSpacing[category] !== undefined ? localMinSpacing[category] !== "" : (config.minTimeBetween != null || category === "restaurant"))) && (

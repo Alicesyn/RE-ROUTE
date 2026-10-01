@@ -78,7 +78,7 @@ export function getEffectiveCategoryConfig(
 // Time-budget-aware clustering
 // Distributes places across days so no single day exceeds the budget
 // Respects pinnedToDay: pinned places stay on their assigned day
-function clusterPlaces(
+export function clusterPlaces(
   places: Place[],
   hotels: Hotel[],
   days: number,
@@ -196,12 +196,8 @@ function clusterPlaces(
     const endAnchor = endHotelRaw;
 
     if (startAnchor && endAnchor) {
-      const isTransition =
-        "id" in startAnchor && "id" in endAnchor
-          ? startAnchor.id !== endAnchor.id
-          : startAnchor.lat !== endAnchor.lat || startAnchor.lng !== endAnchor.lng;
-      if (isTransition) {
-        const baseInterDist = getDistance(startAnchor.lat, startAnchor.lng, endAnchor.lat, endAnchor.lng);
+      const baseInterDist = getDistance(startAnchor.lat, startAnchor.lng, endAnchor.lat, endAnchor.lng);
+      if (baseInterDist > 500) {
         // Inter-hotel travel between different cities naturally consumes available travel time
         dayTimeUsed[d] += Math.round(estimateTime(baseInterDist, travelMode) / 60);
       }
@@ -302,28 +298,25 @@ function clusterPlaces(
   };
 
   // Computes the detour distance in meters for a place on day d.
-  // User Requirement #1: If start and end hotels differ (transition days),
+  // If start and end hotels differ (transition days > 500m),
   // places in between are NOT penalized as much (measures incremental detour beyond base inter-hotel travel).
+  // If loop day (same hotel morning & night), measures round-trip travel to the place.
   const computeDayDetourMeters = (p: Place, d: number) => {
     const { startAnchor, endAnchor } = getDayAnchors(d);
     if (startAnchor && endAnchor) {
-      const isTransition =
-        "id" in startAnchor && "id" in endAnchor
-          ? startAnchor.id !== endAnchor.id
-          : startAnchor.lat !== endAnchor.lat || startAnchor.lng !== endAnchor.lng;
-
+      const baseInterDist = getDistance(startAnchor.lat, startAnchor.lng, endAnchor.lat, endAnchor.lng);
+      const isTransition = baseInterDist > 500;
       if (isTransition) {
         const dStart = getDistance(p.lat, p.lng, startAnchor.lat, startAnchor.lng);
         const dEnd = getDistance(p.lat, p.lng, endAnchor.lat, endAnchor.lng);
-        const baseInterDist = getDistance(startAnchor.lat, startAnchor.lng, endAnchor.lat, endAnchor.lng);
         return Math.max(0, dStart + dEnd - baseInterDist);
       } else {
-        // Loop day: single base hotel
-        return getDistance(p.lat, p.lng, startAnchor.lat, startAnchor.lng);
+        // Loop day: round-trip travel from hotel/anchor
+        return getDistance(p.lat, p.lng, startAnchor.lat, startAnchor.lng) * 2;
       }
     } else if (startAnchor || endAnchor) {
       const a = (startAnchor || endAnchor)!;
-      return getDistance(p.lat, p.lng, a.lat, a.lng);
+      return getDistance(p.lat, p.lng, a.lat, a.lng) * 2;
     }
     return 0;
   };
@@ -358,9 +351,11 @@ function clusterPlaces(
     const intervals = dayHours.intervals || [{ open: dayHours.open, close: dayHours.close }];
     const window = dayWindows[d] || { start: baseDayStartMin, end: baseDayEndMin };
 
-    // Find locked/custom-timed stops on day d
-    const dayLocked = pinned
-      .filter((p) => p.dayIndex === d && p.customTime)
+    // Find locked/custom-timed stops on day d (both previously pinned and newly assigned)
+    const dayLocked = [
+      ...pinned.filter((p) => p.dayIndex === d && p.customTime),
+      ...toAssign.filter((p) => p.dayIndex === d && p.customTime),
+    ]
       .map((p) => {
         const startMin = parseTimeToMinutes(p.customTime!);
         const dur = p.estimatedDuration || 60;
@@ -423,15 +418,112 @@ function clusterPlaces(
     );
   };
 
+  // 1. Establish Day Cluster Anchors / Gravity Centers:
+  // Pre-seed days with locked reservations or pinned places, and seed remaining days
+  // with geographically separated anchor places (K-Means++ style) to partition the city into distinct daily neighborhood pods.
+  const daySeeds: ({ lat: number; lng: number; name?: string; isReservation?: boolean } | null)[] = Array(days).fill(null);
+
+  for (let d = 0; d < days; d++) {
+    const dayPinnedWithCustom = pinned.find((p) => p.dayIndex === d && p.customTime);
+    if (dayPinnedWithCustom) {
+      daySeeds[d] = { lat: dayPinnedWithCustom.lat, lng: dayPinnedWithCustom.lng, name: dayPinnedWithCustom.name, isReservation: true };
+      continue;
+    }
+    const dayPinned = pinned.find((p) => p.dayIndex === d);
+    if (dayPinned) {
+      daySeeds[d] = { lat: dayPinned.lat, lng: dayPinned.lng, name: dayPinned.name };
+      continue;
+    }
+  }
+
+  // Check if any unassigned place with locked customTime can seed an empty allowed day
+  for (const p of toAssign) {
+    if (p.customTime) {
+      for (let d = 0; d < days; d++) {
+        if (exemptDays.includes(d)) continue;
+        if (!isDayAllowedForPlace(p, d, days)) continue;
+        if (avoidClosedHours && !isPlaceFeasibleOnDay(p, d)) continue;
+        if (daySeeds[d] === null) {
+          daySeeds[d] = { lat: p.lat, lng: p.lng, name: p.name, isReservation: true };
+          break;
+        }
+      }
+    }
+  }
+
+  // For any remaining empty days, seed with unassigned places maximizing geographic separation (K-Means++ style)
+  for (let d = 0; d < days; d++) {
+    if (exemptDays.includes(d)) continue;
+    if (daySeeds[d] !== null) continue;
+
+    const availableCandidates = toAssign.filter(
+      (p) =>
+        isDayAllowedForPlace(p, d, days) &&
+        (!avoidClosedHours || isPlaceFeasibleOnDay(p, d)) &&
+        !daySeeds.some((s) => s && s.lat === p.lat && s.lng === p.lng)
+    );
+    if (availableCandidates.length === 0) continue;
+
+    const activeSeeds = daySeeds.filter((s): s is NonNullable<typeof s> => s !== null);
+    if (activeSeeds.length === 0) {
+      const cand = availableCandidates.find((c) => c.isStarred) || availableCandidates[0];
+      daySeeds[d] = { lat: cand.lat, lng: cand.lng, name: cand.name };
+    } else {
+      let bestCand: Place | null = null;
+      let maxMinDist = -1;
+      const pool = availableCandidates.some((c) => c.isStarred)
+        ? availableCandidates.filter((c) => c.isStarred)
+        : availableCandidates;
+
+      for (const cand of pool) {
+        let minDistToSeed = Infinity;
+        for (const s of activeSeeds) {
+          const dist = getDistance(cand.lat, cand.lng, s.lat, s.lng);
+          if (dist < minDistToSeed) minDistToSeed = dist;
+        }
+        if (minDistToSeed > maxMinDist) {
+          maxMinDist = minDistToSeed;
+          bestCand = cand;
+        }
+      }
+      if (bestCand) {
+        daySeeds[d] = { lat: bestCand.lat, lng: bestCand.lng, name: bestCand.name };
+      }
+    }
+  }
+
+  const getDayCentroid = (d: number): { lat: number; lng: number } | null => {
+    const assignedStops = [
+      ...pinned.filter((p) => p.dayIndex === d),
+      ...toAssign.filter((p) => p.dayIndex === d),
+    ];
+    if (assignedStops.length > 0) {
+      let totalWeight = 0;
+      let sumLat = 0;
+      let sumLng = 0;
+      for (const s of assignedStops) {
+        const weight = s.customTime ? 4 : 1;
+        sumLat += s.lat * weight;
+        sumLng += s.lng * weight;
+        totalWeight += weight;
+      }
+      return { lat: sumLat / totalWeight, lng: sumLng / totalWeight };
+    }
+    if (daySeeds[d]) {
+      return { lat: daySeeds[d]!.lat, lng: daySeeds[d]!.lng };
+    }
+    const hotel = hotels.find((h) => h.dayIndex === d) || hotels[0];
+    if (hotel) return { lat: hotel.lat, lng: hotel.lng };
+    return null;
+  };
+
   // Spatial clustering assignment: balances available budget, excess detour relative to the best candidate day,
-  // neighborhood clustering affinity, and geographic-appropriate category quotas.
+  // neighborhood clustering affinity, reservation gravity centers, and end-of-day progression.
   for (const place of toAssign) {
     let bestDay = -1;
     let maxScore = -Infinity;
 
     // Determine the minimum detour for this place across all allowed, non-exempt candidate days.
-    // This allows day trips (e.g. 50-100km from hotel) without any arbitrary hard distance cap,
-    // while preventing cross-city leakage (e.g. assigning a Tokyo place to Kyoto when Tokyo is 350km closer).
     let minDetourKm = Infinity;
     for (let d = 0; d < days; d++) {
       if (exemptDays.includes(d)) continue;
@@ -510,14 +602,14 @@ function clusterPlaces(
       }
 
       // 1b. Check minTimeBetween feasibility (e.g. minimum time between restaurants)
-      const minSpacing = catConfig?.minTimeBetween ?? (place.category === "restaurant" ? 180 : 0);
+      const isQuickSnack = place.category === "restaurant" && (place.estimatedDuration || 60) <= 30;
+      const minSpacing = isQuickSnack ? 0 : (catConfig?.minTimeBetween ?? (place.category === "restaurant" ? 150 : 0));
       const isUnderMinQuota = minTarget != null && currentCount < minTarget;
 
       if (minSpacing > 0 && currentCount > 0) {
         const duration = place.estimatedDuration || 60;
         const dayWindow = dayWindows[d] || { start: baseDayStartMin, end: baseDayEndMin };
         const availableWindow = dayWindow.end - dayWindow.start;
-        // If fulfilling a user-configured minimum quota, adapt spacing so we don't arbitrarily reject required meals
         const effectiveSpacing = isUnderMinQuota
           ? Math.max(30, Math.min(minSpacing, Math.floor((availableWindow - (currentCount + 1) * duration) / currentCount)))
           : minSpacing;
@@ -527,9 +619,68 @@ function clusterPlaces(
         }
       }
 
+      // 1c. Dinner capacity feasibility check for sit-down restaurants:
+      // Prevents packing multiple dinner-only restaurants into an evening window that cannot accommodate them.
+      if (place.category === "restaurant" && !isQuickSnack && minSpacing > 0) {
+        const dayDate = addDays(parseISO(startDateISO), d);
+        let placeIsDinnerOnly = false;
+        if (place.customTime) {
+          placeIsDinnerOnly = parseTimeToMinutes(place.customTime) >= 990;
+        } else if (place.openingHours && place.openingHours.length > 0) {
+          const dh = getPlaceDayHours(place.openingHours, dayDate);
+          if (typeof dh === "object" && dh !== null) {
+            const invs = dh.intervals || [{ open: dh.open, close: dh.close }];
+            placeIsDinnerOnly = invs.every((inv) => inv.open >= 990); // opens >= 16:30
+          }
+        }
+
+        if (placeIsDinnerOnly) {
+          const existingDayPlaces = [
+            ...pinned.filter((p) => p.dayIndex === d),
+            ...toAssign.filter((p) => p.dayIndex === d),
+          ];
+
+          const existingDinnerMeals = existingDayPlaces.filter((p) => {
+            if (p.category !== "restaurant") return false;
+            if ((p.estimatedDuration || 60) <= 30) return false;
+            if (p.customTime) {
+              return parseTimeToMinutes(p.customTime) >= 990;
+            }
+            if (p.openingHours && p.openingHours.length > 0) {
+              const dh = getPlaceDayHours(p.openingHours, dayDate);
+              if (typeof dh === "object" && dh !== null) {
+                const invs = dh.intervals || [{ open: dh.open, close: dh.close }];
+                return invs.every((inv) => inv.open >= 990);
+              }
+            }
+            return false;
+          });
+
+          // Check if there is a locked dinner reservation on day d
+          const lockedDinner = existingDinnerMeals.find((p) => !!p.customTime);
+          if (lockedDinner && lockedDinner.customTime) {
+            const lockedStart = parseTimeToMinutes(lockedDinner.customTime);
+            const latestAllowedPriorMealEnd = lockedStart - minSpacing;
+            const earliestDinnerStart = 1020; // 17:00 earliest dinner opening
+            const availableDinnerBeforeLocked = latestAllowedPriorMealEnd - earliestDinnerStart;
+
+            const nonLockedExistingDinnerCount = existingDinnerMeals.filter((p) => !p.customTime).length;
+            const neededSpan = (nonLockedExistingDinnerCount + 1) * (place.estimatedDuration || 60) +
+              nonLockedExistingDinnerCount * minSpacing;
+
+            if (neededSpan > availableDinnerBeforeLocked) {
+              continue; // Physically cannot fit another dinner before the locked reservation!
+            }
+          } else {
+            // General evening window (17:00 to midnight = 420 mins). With 150m spacing, max 2 sit-down dinners.
+            if (existingDinnerMeals.length >= 2) {
+              continue;
+            }
+          }
+        }
+      }
+
       // 2. Strict Avoid Closed Hours Check:
-      // If avoidClosedHours is on, NEVER assign unpinned places to days they are closed,
-      // or to days where open hours have zero/insufficient overlap with active day window or locked stops.
       if (avoidClosedHours && !isPlaceFeasibleOnDay(place, d)) {
         continue;
       }
@@ -539,20 +690,7 @@ function clusterPlaces(
       const detourMeters = computeDayDetourMeters(place, d);
       const detourKm = detourMeters / 1000;
       const excessDetourKm = Math.max(0, detourKm - minDetourKm);
-
-      const isTransitionDay =
-        startAnchor &&
-        endAnchor &&
-        ("id" in startAnchor && "id" in endAnchor
-          ? startAnchor.id !== endAnchor.id
-          : startAnchor.lat !== endAnchor.lat || startAnchor.lng !== endAnchor.lng);
-
-      const effectiveTravelMeters = isTransitionDay
-        ? detourMeters
-        : (startAnchor
-            ? getDistance(place.lat, place.lng, startAnchor.lat, startAnchor.lng) * 2
-            : detourMeters);
-      const travelMin = Math.round(estimateTime(effectiveTravelMeters, travelMode) / 60);
+      const travelMin = Math.round(estimateTime(detourMeters, travelMode) / 60);
 
       const totalIfAdded = dayTimeUsed[d] + (place.estimatedDuration ?? 60) + travelMin;
       const remaining = effectiveDayBudgets[d] - totalIfAdded;
@@ -562,7 +700,6 @@ function clusterPlaces(
       const dayIsConstrained = effectiveDayBudgets[d] < baseBudget;
       const forceStrict = strictBudget || dayIsConstrained;
 
-      // If this day is below the user's min target, prioritize fulfilling it!
       // Allow slight budget flexibility for required minimums (e.g. remaining >= -45)
       const canConsiderDay = !forceStrict || remaining >= 0 || (isUnderMinQuota && remaining >= -45);
 
@@ -589,52 +726,104 @@ function clusterPlaces(
           }
         }
 
-        // Spatial clustering affinity to existing stops or base hotel on day d
+        // 1. Day Anchor / Centroid Cohesion:
+        // Places cluster tightly around the day's neighborhood gravity center
+        const dayCentroid = getDayCentroid(d);
+        let centroidBonus = 0;
+        if (dayCentroid) {
+          const distToCentroidKm = getDistance(place.lat, place.lng, dayCentroid.lat, dayCentroid.lng) / 1000;
+          if (distToCentroidKm <= 1.5) {
+            centroidBonus = 1200; // Immediate walking distance / same block
+          } else if (distToCentroidKm <= 3.5) {
+            centroidBonus = 700;  // Same neighborhood/district
+          } else if (distToCentroidKm <= 6.0) {
+            centroidBonus = 250;  // Adjacent neighborhood
+          } else if (distToCentroidKm > 6.0) {
+            // Strict cross-town dispersion penalty to prevent 40-minute transits
+            centroidBonus = -Math.min(3000, Math.round((distToCentroidKm - 6.0) * 200));
+          }
+        }
+
+        // 2. Reservation Gravity Attraction:
+        // If day d has a reservation or locked stop, places close to that reservation get an additional gravity boost!
+        const dayReservations = currentAssignedToDay.filter((p) => !!p.customTime);
+        let reservationGravityBonus = 0;
+        if (dayReservations.length > 0) {
+          let minResDistKm = Infinity;
+          for (const res of dayReservations) {
+            const rd = getDistance(place.lat, place.lng, res.lat, res.lng) / 1000;
+            if (rd < minResDistKm) minResDistKm = rd;
+          }
+          if (minResDistKm <= 1.5) {
+            reservationGravityBonus = 1000; // Immediate walking distance to reservation (< 1.5km)
+          } else if (minResDistKm <= 3.5) {
+            reservationGravityBonus = 500;  // Same district as reservation (< 3.5km)
+          } else if (minResDistKm <= 6.0) {
+            reservationGravityBonus = 150;  // Adjacent district (< 6km)
+          } else if (minResDistKm > 6.0) {
+            reservationGravityBonus = -Math.min(2500, Math.round((minResDistKm - 6.0) * 150));
+          }
+        }
+
+        // 3. Local Nearest Neighbor Affinity:
         let minNeighborDistKm = Infinity;
         for (const existing of currentAssignedToDay) {
           const nd = getDistance(place.lat, place.lng, existing.lat, existing.lng) / 1000;
           if (nd < minNeighborDistKm) minNeighborDistKm = nd;
         }
-        const dayHotel = hotels.find((h) => h.dayIndex === d) || hotels[0];
-        if (dayHotel) {
-          const hd = getDistance(place.lat, place.lng, dayHotel.lat, dayHotel.lng) / 1000;
-          if (hd < minNeighborDistKm) minNeighborDistKm = hd;
-        }
-
-        let clusterBonus = 0;
+        let neighborBonus = 0;
         if (currentAssignedToDay.length > 0 && isFinite(minNeighborDistKm)) {
-          if (minNeighborDistKm <= 2) {
-            clusterBonus = 120; // Walking distance / same neighborhood
-          } else if (minNeighborDistKm <= 5) {
-            clusterBonus = 80;  // Adjacent district
-          } else if (minNeighborDistKm <= 10) {
-            clusterBonus = 40;
-          } else if (minNeighborDistKm > 20) {
-            clusterBonus = -Math.min(150, (minNeighborDistKm - 20) * 5); // Dispersed penalty
+          if (minNeighborDistKm <= 1.0) {
+            neighborBonus = 500;
+          } else if (minNeighborDistKm <= 2.5) {
+            neighborBonus = 250;
           }
         }
 
-        // Category quota bonus: prioritize days needing meals, BUT ONLY within reasonable geographic detour!
+        // 4. End-of-Day Progression (Hotel return or airport departure):
+        // "Also keep in mind hotel return/flight departure at the end of the day as one of the decider ways to determine routing, lower priority than the other deciders."
+        let endProgressionBonus = 0;
+        if (endAnchor) {
+          const distToEndKm = getDistance(place.lat, place.lng, endAnchor.lat, endAnchor.lng) / 1000;
+          if (distToEndKm <= 3.0) {
+            endProgressionBonus = 80;
+          } else if (distToEndKm <= 6.0) {
+            endProgressionBonus = 40;
+          }
+        }
+
+        // 5. Category quota bonus:
         let quotaBonus = 0;
         if (isUnderMinQuota && minTarget != null) {
           const deficit = minTarget - currentCount;
-          // Only apply quota boost if this day is geographically appropriate (excessDetourKm <= 25 km)
-          // Prevents cross-city leakage (e.g. assigning Tokyo restaurants to Kyoto)
           if (excessDetourKm <= 25) {
-            quotaBonus = deficit * 350;
+            quotaBonus = deficit * 600;
             if (hasSpecificDayOverride) {
               quotaBonus += 600;
             }
           }
+        } else if (currentCount >= (minTarget ?? 2)) {
+          // Discourage packing surplus places into days that already met their target
+          // when other valid days might still be under quota
+          quotaBonus = -currentCount * 150;
         } else if (minSpacing > 0 && currentCount > 0) {
           quotaBonus = -currentCount * 40;
         }
 
-        const budgetScore = remaining;
-        const excessDetourPenalty = excessDetourKm * 80;
-        const detourPenalty = detourKm * 4;
+        // 6. Balanced Budget Score:
+        const budgetScore = Math.min(80, remaining * 0.1);
+        const excessDetourPenalty = excessDetourKm * 100;
+        const detourPenalty = detourKm * 6;
 
-        const score = budgetScore - excessDetourPenalty - detourPenalty + clusterBonus + quotaBonus;
+        const score =
+          budgetScore -
+          excessDetourPenalty -
+          detourPenalty +
+          centroidBonus +
+          reservationGravityBonus +
+          neighborBonus +
+          endProgressionBonus +
+          quotaBonus;
 
         if (score > maxScore) {
           maxScore = score;
@@ -647,34 +836,25 @@ function clusterPlaces(
       place.dayIndex = bestDay;
 
       // Update time used
-      const { startAnchor, endAnchor } = getDayAnchors(bestDay);
       const detourMeters = computeDayDetourMeters(place, bestDay);
-      const isTransitionDay =
-        startAnchor &&
-        endAnchor &&
-        ("id" in startAnchor && "id" in endAnchor
-          ? startAnchor.id !== endAnchor.id
-          : startAnchor.lat !== endAnchor.lat || startAnchor.lng !== endAnchor.lng);
-      const effectiveTravelMeters = isTransitionDay
-        ? detourMeters
-        : (startAnchor
-            ? getDistance(place.lat, place.lng, startAnchor.lat, startAnchor.lng) * 2
-            : detourMeters);
-      const travelMin = Math.round(estimateTime(effectiveTravelMeters, travelMode) / 60);
+      const travelMin = Math.round(estimateTime(detourMeters, travelMode) / 60);
       dayTimeUsed[bestDay] += (place.estimatedDuration ?? 60) + travelMin;
       
       // Update category counts
       if (!categoryCounts[bestDay]) categoryCounts[bestDay] = {};
       categoryCounts[bestDay][place.category] = (categoryCounts[bestDay][place.category] || 0) + 1;
     } else {
-      // Starred places must be scheduled — force-assign with spatial affinity
+      // Starred places must be scheduled — force-assign with spatial affinity and displace non-starred if needed
       if (place.isStarred) {
         let forceBestDay = -1;
         let forceMaxScore = -Infinity;
         const hasFeasibleDay = Array.from({ length: days }).some((_, d) =>
-          isDayAllowedForPlace(place, d, days) && (!avoidClosedHours || isPlaceFeasibleOnDay(place, d))
+          !exemptDays.includes(d) && isDayAllowedForPlace(place, d, days) && (!avoidClosedHours || isPlaceFeasibleOnDay(place, d))
         );
         for (let d = 0; d < days; d++) {
+          if (exemptDays.includes(d)) {
+            continue;
+          }
           if (!isDayAllowedForPlace(place, d, days)) {
             continue;
           }
@@ -683,8 +863,15 @@ function clusterPlaces(
           }
           const detourKm = computeDayDetourMeters(place, d) / 1000;
           const excessDetourKm = Math.max(0, detourKm - minDetourKm);
-          const remaining = effectiveDayBudgets[d] - dayTimeUsed[d];
-          let forceScore = remaining - excessDetourKm * 80 - detourKm * 4;
+          let forceScore = -excessDetourKm * 100 - detourKm * 6;
+
+          // Check neighborhood centroid affinity to day d
+          const dayCentroid = getDayCentroid(d);
+          if (dayCentroid) {
+            const distToCentroidKm = getDistance(place.lat, place.lng, dayCentroid.lat, dayCentroid.lng) / 1000;
+            if (distToCentroidKm <= 3.5) forceScore += 500;
+            else if (distToCentroidKm > 6.0) forceScore -= Math.round((distToCentroidKm - 6.0) * 150);
+          }
 
           // If avoidClosedHours, prefer days where the place is actually open
           if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
@@ -700,22 +887,31 @@ function clusterPlaces(
           }
         }
         if (forceBestDay !== -1) {
+          // If the day is over budget, automatically displace the lowest-priority unpinned non-starred place on that day!
+          const unpinnedNonStarredOnDay = toAssign.filter(
+            (p) => p.dayIndex === forceBestDay && !p.isStarred && !p.pinnedToDay && !p.customTime
+          );
+
           place.dayIndex = forceBestDay;
           place.unfeasibleReason = undefined;
-          const { startAnchor, endAnchor } = getDayAnchors(forceBestDay);
+
+          if (dayTimeUsed[forceBestDay] + (place.estimatedDuration ?? 60) > effectiveDayBudgets[forceBestDay] && unpinnedNonStarredOnDay.length > 0) {
+            unpinnedNonStarredOnDay.sort((a, b) => {
+              const aDetour = computeDayDetourMeters(a, forceBestDay);
+              const bDetour = computeDayDetourMeters(b, forceBestDay);
+              return bDetour - aDetour; // highest detour first
+            });
+            const displaced = unpinnedNonStarredOnDay[0];
+            displaced.dayIndex = null;
+            displaced.unfeasibleReason = "Displaced to make room for must-visit starred place.";
+            dayTimeUsed[forceBestDay] -= (displaced.estimatedDuration ?? 60);
+            if (categoryCounts[forceBestDay]?.[displaced.category]) {
+              categoryCounts[forceBestDay][displaced.category]--;
+            }
+          }
+
           const detourMeters = computeDayDetourMeters(place, forceBestDay);
-          const isTransitionDay =
-            startAnchor &&
-            endAnchor &&
-            ("id" in startAnchor && "id" in endAnchor
-              ? startAnchor.id !== endAnchor.id
-              : startAnchor.lat !== endAnchor.lat || startAnchor.lng !== endAnchor.lng);
-          const effectiveTravelMeters = isTransitionDay
-            ? detourMeters
-            : (startAnchor
-                ? getDistance(place.lat, place.lng, startAnchor.lat, startAnchor.lng) * 2
-                : detourMeters);
-          const travelMin = Math.round(estimateTime(effectiveTravelMeters, travelMode) / 60);
+          const travelMin = Math.round(estimateTime(detourMeters, travelMode) / 60);
           dayTimeUsed[forceBestDay] += (place.estimatedDuration ?? 60) + travelMin;
           if (!categoryCounts[forceBestDay]) categoryCounts[forceBestDay] = {};
           categoryCounts[forceBestDay][place.category] = (categoryCounts[forceBestDay][place.category] || 0) + 1;
@@ -864,23 +1060,23 @@ function evaluateRouteCost(
         const conflict = checkTimeConflict(currentTime, duration, place.openingHours, currentDate, place.allowedTimeRange, earlyMins);
         if (conflict.hasConflict) {
           conflicts++;
-          penaltyMinutes += 60;
         }
         if (conflict.effectiveStartTime && conflict.effectiveStartTime > currentTime) {
-          penaltyMinutes += (conflict.effectiveStartTime - currentTime);
           currentTime = conflict.effectiveStartTime;
         } else if (conflict.waitMinutes && conflict.waitMinutes > 0) {
           currentTime += conflict.waitMinutes;
-          penaltyMinutes += conflict.waitMinutes;
+          // Arriving early before opening hours is fine: 0 distance penalty!
+          // We only apply a tiny tie-breaker (0.0005m per wait min) so identical routes pick slightly less waiting
+          penaltyMinutes += conflict.waitMinutes * 0.0005;
         }
       }
 
-      // Spacing check: enforce minimum time between visits of the same category (default 180m for restaurant)
-      // Quick snacks (<= 25 min duration) do not trigger a full sit-down meal gap
-      const isQuickSnack = place.category === "restaurant" && (place.estimatedDuration || 60) <= 25;
+      // Spacing check: enforce minimum time between visits of the same category (default 150m for restaurant)
+      // Quick snacks (<= 30 min duration) do not trigger a full sit-down meal gap
+      const isQuickSnack = place.category === "restaurant" && (place.estimatedDuration || 60) <= 30;
       const minSpacing = isQuickSnack
         ? 0
-        : (categoryConfigs?.[place.category]?.minTimeBetween ?? (place.category === "restaurant" ? 180 : 0));
+        : (categoryConfigs?.[place.category]?.minTimeBetween ?? (place.category === "restaurant" ? 150 : 0));
       if (minSpacing > 0 && lastCategoryDeparture[place.category] !== undefined) {
         const timeSinceLast = currentTime - lastCategoryDeparture[place.category];
         if (timeSinceLast < minSpacing) {
@@ -892,12 +1088,30 @@ function evaluateRouteCost(
       }
 
       currentTime += duration;
-      lastCategoryDeparture[place.category] = currentTime;
+      if (!isQuickSnack) {
+        lastCategoryDeparture[place.category] = currentTime;
+      }
+    }
+  }
+
+  // End-of-day progression decider (lower priority than constraints and neighborhood cohesion):
+  // Favor routes where the final leg to the end anchor (evening hotel or departure airport) is shorter.
+  let endOfDayProgressionPenalty = 0;
+  if (points.length >= 3) {
+    const endAnchor = points[points.length - 1];
+    const isEndAnchor =
+      !("id" in endAnchor && endAnchor.id) ||
+      endAnchor.id === "end-hotel" ||
+      endAnchor.id === "departure";
+    if (isEndAnchor) {
+      const lastStop = points[points.length - 2];
+      const returnDist = getDistance(lastStop.lat, lastStop.lng, endAnchor.lat, endAnchor.lng);
+      endOfDayProgressionPenalty = returnDist * 0.15;
     }
   }
 
   // 1 conflict = 1,000 km penalty to guarantee avoiding closed hours over shortest distance
-  const totalCost = totalDist + conflicts * 1000000 + penaltyMinutes * 1000 + mealSpacingPenalty;
+  const totalCost = totalDist + conflicts * 1000000 + penaltyMinutes * 1000 + mealSpacingPenalty + endOfDayProgressionPenalty;
   return { totalDistance: totalDist, totalCost, conflicts, mealSpacingConflicts };
 }
 
@@ -994,7 +1208,8 @@ function optimize2OptSub(
   // Interleave categories with minSpacing (e.g. restaurant) so the initial order doesn't start with back-to-back meals
   const spacedCategories = new Set<string>();
   places.forEach((p) => {
-    const spacing = categoryConfigs?.[p.category]?.minTimeBetween ?? (p.category === "restaurant" ? 180 : 0);
+    const isQuick = p.category === "restaurant" && (p.estimatedDuration || 60) <= 30;
+    const spacing = isQuick ? 0 : (categoryConfigs?.[p.category]?.minTimeBetween ?? (p.category === "restaurant" ? 150 : 0));
     if (spacing > 0) spacedCategories.add(p.category);
   });
 
@@ -1263,9 +1478,10 @@ function optimizeDayRoute(
       }
 
       // Penalize assigning a restaurant to a window that already has one, or is adjacent to a locked meal
-      const minSpacing = categoryConfigs?.[place.category]?.minTimeBetween ?? (place.category === "restaurant" ? 180 : 0);
+      const isQuick = place.category === "restaurant" && (place.estimatedDuration || 60) <= 30;
+      const minSpacing = isQuick ? 0 : (categoryConfigs?.[place.category]?.minTimeBetween ?? (place.category === "restaurant" ? 150 : 0));
       if (minSpacing > 0) {
-        const hasSameCatInBucket = windowBuckets[w].some((p) => p.category === place.category);
+        const hasSameCatInBucket = windowBuckets[w].some((p) => p.category === place.category && !((p.estimatedDuration || 60) <= 30));
         if (hasSameCatInBucket) {
           score += 1000000;
         }
@@ -1630,6 +1846,31 @@ function evictClosedHourConflicts(
       );
 
       if (!isPinnedOrCustom && conflict.hasConflict) {
+        // If the conflict is purely early arrival ("Closed (opens at X)"), check if the place can be visited
+        // once it opens without violating day end or overlapping subsequent locked reservations.
+        const isEarlyArrivalOnly = conflict.reason?.startsWith("Closed (opens at");
+        if (isEarlyArrivalOnly && conflict.effectiveStartTime) {
+          const visitEnd = conflict.effectiveStartTime + (stop.estimatedDuration || 60);
+          let fitsBeforeEnd = visitEnd <= 24 * 60;
+          if (isLastDay && departureFlight) {
+            const depTotal = parseTimeToMinutes(departureFlight.time) - (departureFlight.buffer ?? 90);
+            fitsBeforeEnd = visitEnd <= depTotal;
+          }
+          const nextLocked = currentPlaces.find(
+            (p) => p.customTime && parseTimeToMinutes(p.customTime) > currTime
+          );
+          let fitsBeforeLocked = true;
+          if (nextLocked && nextLocked.customTime) {
+            const lockedStart = parseTimeToMinutes(nextLocked.customTime);
+            fitsBeforeLocked = visitEnd <= lockedStart;
+          }
+          if (fitsBeforeEnd && fitsBeforeLocked) {
+            // Traveler can wait for opening and visit during open hours without conflict!
+            currTime = visitEnd;
+            continue;
+          }
+        }
+
         conflictedStops.push({
           place: stop,
           reason: conflict.reason || "Closed during visiting hours",
@@ -1647,8 +1888,27 @@ function evictClosedHourConflicts(
       return { route, evicted, remainingPlaces: currentPlaces };
     }
 
-    // Evict the last unpinned conflicted stop
-    const toEvict = conflictedStops[conflictedStops.length - 1];
+    // Prioritize evicting unpinned, non-starred stops to protect must-visit starred places
+    const nonStarredConflicted = conflictedStops.filter((c) => !c.place.isStarred);
+    let toEvict: { place: Place; reason: string };
+
+    if (nonStarredConflicted.length > 0) {
+      toEvict = nonStarredConflicted[nonStarredConflicted.length - 1];
+    } else {
+      // If the conflicted stops are all starred, check if there is any unpinned NON-STARRED stop on the day
+      // whose removal frees up schedule time to resolve the starred stop's conflict!
+      const unpinnedNonStarred = currentPlaces.filter((p) => !p.isStarred && !p.pinnedToDay && !p.customTime);
+      if (unpinnedNonStarred.length > 0) {
+        const placeToDrop = unpinnedNonStarred[unpinnedNonStarred.length - 1];
+        toEvict = {
+          place: placeToDrop,
+          reason: "Displaced to allow must-visit starred place to fit within open hours.",
+        };
+      } else {
+        toEvict = conflictedStops[conflictedStops.length - 1];
+      }
+    }
+
     evicted.push(toEvict);
     currentPlaces = currentPlaces.filter((p) => p.id !== toEvict.place.id);
 
@@ -2105,6 +2365,202 @@ export async function solveTSP(
     }
 
     dayRoutes.push(route);
+  }
+
+  // 2b. Multi-Pass Day Reassignment Loop:
+  // If any place (starred or non-starred) was evicted or left unassigned, systematically attempt
+  // to reassign it across all other allowed candidate days that have available capacity, open hours,
+  // and geographic proximity, without evicting any existing scheduled stops.
+  let reassignmentPass = 0;
+  const maxReassignmentPasses = 5;
+
+  while (reassignmentPass < maxReassignmentPasses) {
+    reassignmentPass++;
+    let reassignedThisPass = 0;
+
+    const unassignedPool = clusteredPlaces.filter(
+      (p) => p.dayIndex === null && !p.pinnedToDay && !p.isDisabled
+    );
+    if (unassignedPool.length === 0) break;
+
+    // Prioritize candidates:
+    // 1. Starred places first (must-visit)
+    // 2. Places whose category is under minPerDay on any allowed day
+    // 3. Smaller estimated duration (easier to pack into available budget headroom)
+    unassignedPool.sort((a, b) => {
+      if (a.isStarred && !b.isStarred) return -1;
+      if (!a.isStarred && b.isStarred) return 1;
+
+      // Check if either place fulfills a category quota deficit on any candidate day
+      let aHasDeficit = false;
+      let bHasDeficit = false;
+      for (let d = 0; d < days; d++) {
+        if (exemptDays.includes(d)) continue;
+        const route = dayRoutes.find((r) => r.day === d);
+        if (!route) continue;
+        if (!aHasDeficit && isDayAllowedForPlace(a, d, days)) {
+          const cfgA = getEffectiveCategoryConfig(categoryConfigs, a.category, d, days);
+          if (cfgA?.minPerDay != null) {
+            const countA = route.stops.filter((s) => s.category === a.category).length;
+            if (countA < cfgA.minPerDay) aHasDeficit = true;
+          }
+        }
+        if (!bHasDeficit && isDayAllowedForPlace(b, d, days)) {
+          const cfgB = getEffectiveCategoryConfig(categoryConfigs, b.category, d, days);
+          if (cfgB?.minPerDay != null) {
+            const countB = route.stops.filter((s) => s.category === b.category).length;
+            if (countB < cfgB.minPerDay) bHasDeficit = true;
+          }
+        }
+      }
+      if (aHasDeficit && !bHasDeficit) return -1;
+      if (!aHasDeficit && bHasDeficit) return 1;
+
+      return (a.estimatedDuration ?? 60) - (b.estimatedDuration ?? 60);
+    });
+
+    for (const place of unassignedPool) {
+      let bestDay = -1;
+      let bestScore = -Infinity;
+      let bestTestConflict: any = null;
+
+      for (let targetDay = 0; targetDay < days; targetDay++) {
+        if (exemptDays.includes(targetDay)) continue;
+        if (!isDayAllowedForPlace(place, targetDay, days)) continue;
+
+        const targetRoute = dayRoutes.find((r) => r.day === targetDay);
+        if (!targetRoute) continue;
+
+        // Category max limit check
+        const cfg = getEffectiveCategoryConfig(categoryConfigs, place.category, targetDay, days);
+        const maxCat = cfg?.maxPerDay;
+        const currentCatCount = targetRoute.stops.filter((s) => s.category === place.category).length;
+        if (maxCat != null && currentCatCount >= maxCat) continue;
+
+        // Distance limit: place must be in reasonable proximity to target day's hotel (<= 45km)
+        const targetHotel = hotels.find((h) => h.dayIndex === targetDay) || hotels[0];
+        const distToHotel = getDistance(place.lat, place.lng, targetHotel.lat, targetHotel.lng);
+        if (distToHotel > 45000) continue;
+
+        // Day trip protection: if place is far from anchor (>= 45 km), don't put it on a day with an incompatible distant day trip
+        if (distToHotel >= 45000) {
+          const hasClashingDayTrip = targetRoute.stops.some((s) => {
+            const sDist = getDistance(s.lat, s.lng, targetHotel.lat, targetHotel.lng);
+            return sDist >= 45000 && getDistance(s.lat, s.lng, place.lat, place.lng) > 35000;
+          });
+          if (hasClashingDayTrip) continue;
+        }
+
+        // Restaurant evening dinner window check:
+        if (place.category === "restaurant") {
+          let placeIsDinnerOnly = false;
+          if (place.openingHours && place.openingHours.length > 0) {
+            const targetDate = addDays(parseISO(startDateISO), targetDay);
+            const dh = getPlaceDayHours(place.openingHours, targetDate);
+            if (typeof dh === "object" && dh !== null) {
+              const invs = dh.intervals || [{ open: dh.open, close: dh.close }];
+              placeIsDinnerOnly = invs.every((inv) => inv.open >= 990);
+            }
+          }
+
+          if (placeIsDinnerOnly) {
+            const existingDinnerCount = targetRoute.stops.filter((s) => {
+              if (s.category !== "restaurant") return false;
+              if ((s.estimatedDuration || 60) <= 30) return false;
+              if (s.customTime) {
+                return parseTimeToMinutes(s.customTime) >= 990;
+              }
+              if (s.openingHours && s.openingHours.length > 0) {
+                const targetDate = addDays(parseISO(startDateISO), targetDay);
+                const dh = getPlaceDayHours(s.openingHours, targetDate);
+                if (typeof dh === "object" && dh !== null) {
+                  const invs = dh.intervals || [{ open: dh.open, close: dh.close }];
+                  return invs.every((inv) => inv.open >= 990);
+                }
+              }
+              return false;
+            }).length;
+
+            if (existingDinnerCount >= 2) {
+              continue;
+            }
+          }
+        }
+
+        // Time budget check
+        const limit = dailyBudgets[targetDay];
+        const baseBudget = Math.max(...dailyBudgets);
+        const forceStrict = strictBudget || limit < baseBudget;
+        const currentVisitMin = targetRoute.stops.reduce((sum, s) => sum + (s.estimatedDuration ?? 60), 0);
+        const currentTravelMin = Math.round(targetRoute.totalTime / 60);
+        const placeDuration = place.estimatedDuration ?? 60;
+
+        if (forceStrict && currentVisitMin + currentTravelMin + placeDuration > limit) {
+          continue;
+        }
+
+        // Test inserting place into target day using evictClosedHourConflicts
+        const testStops = [...targetRoute.stops, { ...place, dayIndex: targetDay }];
+        const testConflict = evictClosedHourConflicts(
+          testStops,
+          hotels,
+          targetDay,
+          travelMode,
+          targetDay === 0 ? arrivalLocation : null,
+          targetDay === days - 1 ? departureLocation : null,
+          dayStartTime,
+          startDateISO,
+          targetDay === days - 1,
+          targetDay === 0 ? arrivalFlight : null,
+          targetDay === days - 1 ? departureFlight : null,
+          categoryConfigs,
+          existingRoutes.find((r) => r.day === targetDay)?.segments,
+          allCustomTimes,
+        );
+
+        // Verify place was accommodated WITHOUT evicting any existing stops on targetDay
+        if (testConflict.remainingPlaces.length === testStops.length) {
+          const testVisitMin = testConflict.remainingPlaces.reduce((sum, s) => sum + (s.estimatedDuration ?? 60), 0);
+          const testTravelMin = Math.round(testConflict.route.totalTime / 60);
+          if (forceStrict && testVisitMin + testTravelMin > limit) {
+            continue;
+          }
+
+          const addedDistKm = (testConflict.route.totalDistance - targetRoute.totalDistance) / 1000;
+          let score = -addedDistKm * 10;
+
+          // Bonus for category quota deficit on target day
+          const minTarget = cfg?.minPerDay ?? 0;
+          if (currentCatCount < minTarget) {
+            const deficit = minTarget - currentCatCount;
+            score += deficit * 500;
+          }
+
+          // Bonus if target day has plenty of budget headroom
+          const remainingHeadroom = limit - (testVisitMin + testTravelMin);
+          score += Math.min(100, remainingHeadroom * 0.2);
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestDay = targetDay;
+            bestTestConflict = testConflict;
+          }
+        }
+      }
+
+      if (bestDay !== -1 && bestTestConflict) {
+        place.dayIndex = bestDay;
+        place.unfeasibleReason = undefined;
+
+        const targetRouteIdx = dayRoutes.findIndex((r) => r.day === bestDay);
+        if (targetRouteIdx !== -1) {
+          dayRoutes[targetRouteIdx] = bestTestConflict.route;
+        }
+        reassignedThisPass++;
+      }
+    }
+
+    if (reassignedThisPass === 0) break;
   }
 
   // 3. Post-process non-exempt routes to use accurate APIs
