@@ -180,7 +180,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
             title="Restrict or exclude all results by date ranges (supports NOT)"
           >
             <CalendarDays className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>Restrict / NOT Dates</span>
+            <span>Restrict Dates</span>
           </button>
 
           {/* Restrict Time Window Button */}
@@ -195,7 +195,7 @@ export const PlaceMassEditBar: React.FC<PlaceMassEditBarProps> = React.memo(
             title="Restrict or exclude all results by time window (supports NOT)"
           >
             <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-            <span>Restrict / NOT Time</span>
+            <span>Restrict Time</span>
           </button>
 
           {/* Star All / Unstar All */}

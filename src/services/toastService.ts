@@ -9,6 +9,8 @@ export interface ToastMessage {
   message: string;
   duration?: number; // in ms. 0 = persistent (does not disappear until dismissed)
   persistent?: boolean;
+  /** Optional inline action button rendered inside the toast */
+  action?: { label: string; onClick: () => void };
 }
 
 type ToastHandler = (toast: ToastMessage) => void;
@@ -47,13 +49,14 @@ export const toast = {
     showToast({ type: "success", message, title, duration }),
   error: (message: string, title?: string, duration: number = 0) =>
     showToast({ type: "error", message, title, duration, persistent: true }),
-  warning: (message: string, title?: string, duration?: number) =>
+  warning: (message: string, title?: string, duration?: number, action?: ToastMessage["action"]) =>
     showToast({
       type: "warning",
       message,
       title,
       duration: duration ?? 12000,
       persistent: duration === 0,
+      action,
     }),
   info: (message: string, title?: string, duration: number = 9000) =>
     showToast({ type: "info", message, title, duration }),

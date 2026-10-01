@@ -124,6 +124,17 @@ const ToastItem: React.FC<{
           <p className={`text-xs font-medium leading-relaxed ${style.text}`}>
             {toast.message}
           </p>
+          {toast.action && (
+            <button
+              onClick={() => {
+                toast.action!.onClick();
+                onDismiss(toast.id);
+              }}
+              className={`mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold underline underline-offset-2 hover:no-underline transition-all ${style.titleColor}`}
+            >
+              {toast.action.label} →
+            </button>
+          )}
         </div>
         <button
           onClick={() => onDismiss(toast.id)}

@@ -1047,10 +1047,17 @@ function evaluateRouteCost(
         }
       }
 
-      // Advance time to reserved arrival time if stop has locked customTime
+      // Advance time to reserved arrival time if stop has locked customTime, enforcing at least 10m early arrival buffer
       if (place.customTime) {
         const customMin = parseTimeToMinutes(place.customTime);
-        if (customMin > currentTime) {
+        const earlyBuffer = Math.max(10, parseEarlyArrivalMinutes(place.reservation?.advanceTime));
+        const requiredArrivalBy = customMin - earlyBuffer;
+        if (currentTime > requiredArrivalBy) {
+          // Late arrival for locked reservation! Severe penalty prevents 2-opt from placing stops before reservation
+          const lateBy = currentTime - requiredArrivalBy;
+          penaltyMinutes += 50000000 + lateBy * 100000;
+          conflicts++;
+        } else {
           currentTime = customMin;
         }
       }
@@ -1373,9 +1380,13 @@ function optimizeDayRoute(
     const wStart = w === 0
       ? baseStartMin
       : parseTimeToMinutes(lockedPlaces[w - 1].customTime!) + (lockedPlaces[w - 1].estimatedDuration || 60);
+    // Enforce 10-minute early arrival buffer before any locked reservation
+    const earlyBuffer = w < numWindows - 1
+      ? Math.max(10, parseEarlyArrivalMinutes(lockedPlaces[w].reservation?.advanceTime))
+      : 0;
     const wEnd = w === numWindows - 1
       ? 24 * 60
-      : parseTimeToMinutes(lockedPlaces[w].customTime!);
+      : parseTimeToMinutes(lockedPlaces[w].customTime!) - earlyBuffer;
     windowStartTimes.push(wStart);
     windowEndTimes.push(wEnd);
   }
@@ -1406,17 +1417,30 @@ function optimizeDayRoute(
       let score = dist;
 
       if (w < numWindows - 1) {
-        // Window ends at a locked reservation (e.g. Shibuya Sky at 10:00 AM)
-        // Hard constraint: do not cram stops into this window if they would cause arrival past the reservation
-        const estTransitPadding = (windowBuckets[w].length + 1) * 15; // ~15 min transit per leg
-        const totalTimeNeeded = currentBucketDuration + duration + estTransitPadding;
+        // Window ends at a locked reservation (e.g. Hozugawa Kudari at 11:00 AM)
+        // Hard constraint: do not cram stops into this window if they would cause arrival past the reservation (with buffer)
+        const transitToReservationSec = endAnchor
+          ? estimateTime(getDistance(place.lat, place.lng, endAnchor.lat, endAnchor.lng), travelMode)
+          : 0;
+        const transitToReservationMin = Math.max(10, Math.round(transitToReservationSec / 60));
 
-        if (currentBucketDuration + duration > wCapacity) {
-          // Hard overflow: Impossible to visit and still arrive on time even with 0 travel time
-          score += 10000000 + (currentBucketDuration + duration - wCapacity) * 50000;
+        // Realistic transit from origin/hotel to the first stop, or between stops in this bucket
+        const transitFromStartSec = startAnchor
+          ? estimateTime(getDistance(startAnchor.lat, startAnchor.lng, place.lat, place.lng), travelMode)
+          : 0;
+        const transitFromStartMin = Math.max(15, Math.round(transitFromStartSec / 60));
+        const prevTransitPadding = windowBuckets[w].length > 0
+          ? windowBuckets[w].length * 15 + transitFromStartMin
+          : transitFromStartMin;
+
+        const totalTimeNeeded = currentBucketDuration + duration + prevTransitPadding + transitToReservationMin;
+
+        if (currentBucketDuration + duration + transitToReservationMin + transitFromStartMin > wCapacity) {
+          // Hard overflow: Impossible to visit and still arrive on time even with minimal travel
+          score += 50000000 + (currentBucketDuration + duration + transitToReservationMin + transitFromStartMin - wCapacity) * 50000;
         } else if (totalTimeNeeded > wCapacity) {
           // Tight overflow: Place duration technically fits, but transit travel time would cause late arrival
-          score += 3000000 + (totalTimeNeeded - wCapacity) * 20000;
+          score += 20000000 + (totalTimeNeeded - wCapacity) * 30000;
         }
       } else {
         // Last window of the day (after all locked reservations)
@@ -1825,9 +1849,39 @@ function evictClosedHourConflicts(
       }
 
       // 2. Reserved stop with locked customTime:
-      // Jump arrival time to the reserved time (same as DailySchedule.tsx and excelExportService.ts)
+      // Verify traveler arrives on time with at least 10m early buffer before the reservation
       if (stop.customTime) {
         const customMin = parseTimeToMinutes(stop.customTime);
+        const earlyArrivalBuffer = Math.max(10, parseEarlyArrivalMinutes(stop.reservation?.advanceTime));
+        const requiredArrivalBy = customMin - earlyArrivalBuffer;
+
+        if (currTime > requiredArrivalBy) {
+          // Late arrival for locked reservation!
+          const lateBy = currTime - requiredArrivalBy;
+
+          // Find preceding unpinned stops in this physical route that caused the delay
+          const precedingStops = route.stops.slice(0, sIdx);
+          const unpinnedPreceding = precedingStops.filter((p) => !p.pinnedToDay && !p.customTime);
+
+          if (unpinnedPreceding.length > 0) {
+            // Prioritize evicting non-starred preceding stops first, or the last one closest to reservation
+            const nonStarredPreceding = unpinnedPreceding.filter((p) => !p.isStarred);
+            const offendingStop = nonStarredPreceding.length > 0
+              ? nonStarredPreceding[nonStarredPreceding.length - 1]
+              : unpinnedPreceding[unpinnedPreceding.length - 1];
+
+            conflictedStops.push({
+              place: offendingStop,
+              reason: `Displaced to ensure on-time arrival (${earlyArrivalBuffer}m buffer) for locked reservation at ${stop.name} (arrival would be ${lateBy}m late)`,
+            });
+          } else if (!stop.pinnedToDay) {
+            conflictedStops.push({
+              place: stop,
+              reason: `Cannot reach locked reservation on time (${lateBy}m late even directly from start)`,
+            });
+          }
+        }
+
         if (customMin > currTime) {
           currTime = customMin;
         }
@@ -1888,11 +1942,14 @@ function evictClosedHourConflicts(
       return { route, evicted, remainingPlaces: currentPlaces };
     }
 
-    // Prioritize evicting unpinned, non-starred stops to protect must-visit starred places
+    // Prioritize evicting reservation conflicts and unpinned non-starred stops
+    const reservationConflict = conflictedStops.find((c) => c.reason.includes("locked reservation"));
     const nonStarredConflicted = conflictedStops.filter((c) => !c.place.isStarred);
     let toEvict: { place: Place; reason: string };
 
-    if (nonStarredConflicted.length > 0) {
+    if (reservationConflict) {
+      toEvict = reservationConflict;
+    } else if (nonStarredConflicted.length > 0) {
       toEvict = nonStarredConflicted[nonStarredConflicted.length - 1];
     } else {
       // If the conflicted stops are all starred, check if there is any unpinned NON-STARRED stop on the day

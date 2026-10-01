@@ -7,6 +7,7 @@ import { TripSettings } from "./components/trip-builder/TripSettings";
 import { DailySchedule } from "./components/schedule/DailySchedule";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { ToastContainer } from "./components/layout/ToastContainer";
+import { DurationWarningModal } from "./components/layout/DurationWarningModal";
 import { toast } from "./services/toastService";
 import { useRouteStore } from "./store/useRouteStore";
 import { clearMapsCache, fetchFreshPhoto } from "./services/mapsService";
@@ -53,6 +54,7 @@ function App() {
   const [showMobileMap, setShowMobileMap] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [showExemptPopover, setShowExemptPopover] = useState(false);
+  const [durationWarningPlaceIds, setDurationWarningPlaceIds] = useState<string[]>([]);
 
   // Apply dark mode
   useEffect(() => {
@@ -458,9 +460,12 @@ function App() {
             u.updates.aiEstimatedDuration > getDefaultDuration(u.updates.category || "other") + 30
         );
         if (longPlaces.length > 0) {
+          const flaggedIds = longPlaces.map((u) => u.id);
           toast.warning(
-            `AI flagged ${longPlaces.length} place(s) as potentially taking >30m longer than category defaults. Category defaults were assigned; see place cards to review warnings.`,
-            "Visit Duration Warning"
+            `AI flagged ${longPlaces.length} place(s) as potentially taking >30m longer than category defaults.`,
+            "Visit Duration Warning",
+            undefined,
+            { label: "Review Places", onClick: () => setDurationWarningPlaceIds(flaggedIds) }
           );
         }
         toast.success(`Generated AI descriptions for ${updates.length} places!`, "AI Descriptions Ready");
@@ -695,9 +700,12 @@ function App() {
             u.updates.aiEstimatedDuration > getDefaultDuration(u.updates.category || "other") + 30
         );
         if (longPlaces.length > 0) {
+          const flaggedIds = longPlaces.map((u) => u.id);
           toast.warning(
-            `AI flagged ${longPlaces.length} place(s) as potentially taking >30m longer than category defaults. Category defaults were assigned; see place cards to review warnings.`,
-            "Visit Duration Warning"
+            `AI flagged ${longPlaces.length} place(s) as potentially taking >30m longer than category defaults.`,
+            "Visit Duration Warning",
+            undefined,
+            { label: "Review Places", onClick: () => setDurationWarningPlaceIds(flaggedIds) }
           );
         }
         toast.success(
@@ -794,6 +802,12 @@ function App() {
             onClose={() => setIsResetOpen(false)}
           />
         </React.Suspense>
+      )}
+      {durationWarningPlaceIds.length > 0 && (
+        <DurationWarningModal
+          placeIds={durationWarningPlaceIds}
+          onClose={() => setDurationWarningPlaceIds([])}
+        />
       )}
 
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 w-full custom-scrollbar">
