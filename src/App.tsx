@@ -10,7 +10,7 @@ import { ToastContainer } from "./components/layout/ToastContainer";
 import { DurationWarningModal } from "./components/layout/DurationWarningModal";
 import { toast } from "./services/toastService";
 import { useRouteStore } from "./store/useRouteStore";
-import { clearMapsCache, fetchFreshPhoto } from "./services/mapsService";
+import { clearPhotosCache, fetchFreshPhoto } from "./services/mapsService";
 import { analyticsService } from "./services/analyticsService";
 import { Wand2, Sparkles, RefreshCw, Loader2, MapPin, RotateCcw, Trash2, Lock, X } from "lucide-react";
 import { format, addDays, parseISO } from "date-fns";
@@ -66,7 +66,16 @@ function App() {
     }
   }, [theme]);
 
-  const upgradedPhotoPlaceIdsRef = useRef<Set<string>>(new Set());
+  const upgradedPhotoPlaceIdsRef = useRef<Set<string>>(
+    (() => {
+      try {
+        const stored = localStorage.getItem("reroute_checked_photos_v1");
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+      } catch {
+        return new Set();
+      }
+    })()
+  );
 
   // Auto-upgrade any legacy or missing photo URLs to fresh direct Google CDN URLs
   useEffect(() => {
@@ -83,6 +92,9 @@ function App() {
     if (placesNeedingPhotos.length === 0) return;
 
     placesNeedingPhotos.forEach((p) => upgradedPhotoPlaceIdsRef.current.add(p.id));
+    try {
+      localStorage.setItem("reroute_checked_photos_v1", JSON.stringify([...upgradedPhotoPlaceIdsRef.current]));
+    } catch {}
 
     const upgradeLegacyPhotos = async () => {
       const updates: { id: string; updates: { photoUrl?: string } }[] = [];
@@ -735,7 +747,11 @@ function App() {
     if (places.length === 0 || isSyncingPhotos) return;
     setIsSyncingPhotos(true);
     try {
-      clearMapsCache();
+      clearPhotosCache();
+      try {
+        localStorage.removeItem("reroute_checked_photos_v1");
+      } catch {}
+      upgradedPhotoPlaceIdsRef.current.clear();
 
       const updates: { id: string; updates: any }[] = [];
       await Promise.all(

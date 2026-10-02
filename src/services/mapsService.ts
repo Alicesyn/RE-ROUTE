@@ -15,33 +15,87 @@ let searchCache: Record<string, any[]> = JSON.parse(
   localStorage.getItem(CACHE_KEY) || "{}"
 );
 
-export const clearMapsCache = () => {
-  searchCache = {};
-  localStorage.removeItem(CACHE_KEY);
-  localStorage.removeItem("reroute_search_cache_v2");
-  localStorage.removeItem("reroute_search_cache");
-  photoUrlCache = {};
-  localStorage.removeItem(PHOTO_URL_CACHE_KEY);
+// Cache capacity limits (optimized for multi-week itineraries with ~1 MB localStorage budget)
+const MAX_SEARCH_CACHE = 1000;
+const MAX_PHOTO_CACHE = 2000;
+const MAX_ROUTES_CACHE = 3000;
+const NO_PHOTO_CACHE_KEY = "reroute_no_photo_cache_v1";
+
+// Persistent negative photo cache to avoid repeatedly checking places with no Google Maps photos
+let noPhotoCache: Record<string, boolean> = {};
+try {
+  noPhotoCache = JSON.parse(localStorage.getItem(NO_PHOTO_CACHE_KEY) || "{}");
+} catch {
+  noPhotoCache = {};
+}
+
+// In-flight request deduplication maps
+const pendingRouteRequests = new Map<string, Promise<any>>();
+const pendingPhotoRequests = new Map<string, Promise<string | undefined>>();
+
+export const clearRoutesCache = () => {
+  for (const k of Object.keys(routesCache)) {
+    delete routesCache[k];
+  }
   localStorage.removeItem(ROUTES_CACHE_KEY);
   localStorage.removeItem("reroute_routes_cache_v3");
   localStorage.removeItem("reroute_routes_cache_v2");
 };
 
-const MAX_SEARCH_CACHE = 150;
-const MAX_PHOTO_CACHE = 200;
-const MAX_ROUTES_CACHE = 150;
+export const clearPhotosCache = () => {
+  for (const k of Object.keys(photoUrlCache)) {
+    delete photoUrlCache[k];
+  }
+  for (const k of Object.keys(noPhotoCache)) {
+    delete noPhotoCache[k];
+  }
+  localStorage.removeItem(PHOTO_URL_CACHE_KEY);
+  localStorage.removeItem(NO_PHOTO_CACHE_KEY);
+};
 
-const pruneCache = (cache: Record<string, any>, maxItems: number) => {
-  const keys = Object.keys(cache);
-  if (keys.length > maxItems) {
-    const toRemove = keys.slice(0, keys.length - maxItems);
-    toRemove.forEach((k) => delete cache[k]);
+export const clearSearchCache = () => {
+  for (const k of Object.keys(searchCache)) {
+    delete searchCache[k];
+  }
+  localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem("reroute_search_cache_v2");
+  localStorage.removeItem("reroute_search_cache");
+};
+
+export const clearMapsCache = () => {
+  clearSearchCache();
+  clearPhotosCache();
+  clearRoutesCache();
+};
+
+const pruneLruCache = (cache: Record<string, any>, maxItems: number) => {
+  const entries = Object.entries(cache);
+  if (entries.length > maxItems) {
+    entries.sort((a, b) => {
+      const timeA = a[1]?.lastUsedAt || a[1]?.savedAt || 0;
+      const timeB = b[1]?.lastUsedAt || b[1]?.savedAt || 0;
+      return timeA - timeB;
+    });
+    const toRemoveCount = entries.length - maxItems;
+    for (let i = 0; i < toRemoveCount; i++) {
+      delete cache[entries[i][0]];
+    }
+  }
+};
+
+const saveNoPhoto = (key: string) => {
+  noPhotoCache[key] = true;
+  pruneLruCache(noPhotoCache, MAX_PHOTO_CACHE);
+  try {
+    localStorage.setItem(NO_PHOTO_CACHE_KEY, JSON.stringify(noPhotoCache));
+  } catch (e) {
+    console.warn("No-photo cache persistence failed:", e);
   }
 };
 
 const saveToCache = (query: string, results: any[]) => {
   searchCache[query] = results;
-  pruneCache(searchCache, MAX_SEARCH_CACHE);
+  pruneLruCache(searchCache, MAX_SEARCH_CACHE);
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(searchCache));
   } catch (e) {
@@ -57,7 +111,7 @@ let photoUrlCache: Record<string, string> = JSON.parse(
 
 const savePhotoUrl = (photoName: string, url: string) => {
   photoUrlCache[photoName] = url;
-  pruneCache(photoUrlCache, MAX_PHOTO_CACHE);
+  pruneLruCache(photoUrlCache, MAX_PHOTO_CACHE);
   try {
     localStorage.setItem(PHOTO_URL_CACHE_KEY, JSON.stringify(photoUrlCache));
   } catch (e) {
@@ -95,9 +149,20 @@ export const resolvePhotoUrl = async (photoName: string, apiKey?: string): Promi
 };
 
 const ROUTES_CACHE_KEY = "reroute_routes_cache_v4";
-const ROUTES_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ROUTES_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
-type CachedRoute = { distanceM: number; durationS: number; savedAt?: number };
+type CachedRoute = {
+  distanceM: number;
+  durationS: number;
+  isHeuristic?: boolean;
+  heuristicReason?: string;
+  stationFrom?: string;
+  stationTo?: string;
+  transitUrl?: string;
+  transitDetails?: TransitLegBreakdown;
+  savedAt?: number;
+  lastUsedAt?: number;
+};
 const routesCache: Record<string, CachedRoute> = {};
 
 // Hydrate routes cache, evicting stale entries on load
@@ -113,9 +178,14 @@ try {
   console.warn("Routes cache load failed:", e);
 }
 
-const saveToRoutesCache = (key: string, result: { distanceM: number; durationS: number }) => {
-  routesCache[key] = { ...result, savedAt: Date.now() };
-  pruneCache(routesCache, MAX_ROUTES_CACHE);
+const saveToRoutesCache = (key: string, result: any, symmetricKey?: string) => {
+  const now = Date.now();
+  const entry: CachedRoute = { ...result, savedAt: now, lastUsedAt: now };
+  routesCache[key] = entry;
+  if (symmetricKey && symmetricKey !== key) {
+    routesCache[symmetricKey] = { ...entry };
+  }
+  pruneLruCache(routesCache, MAX_ROUTES_CACHE);
   try {
     localStorage.setItem(ROUTES_CACHE_KEY, JSON.stringify(routesCache));
   } catch (e) {
@@ -264,7 +334,7 @@ export const fetchRouteSegment = async (
   if (mode === "transit") travelMode = "TRANSIT";
   if (mode === "walking") travelMode = "WALK";
 
-  // Cache key: round coords to 4 decimals + travel mode + departure time bucket for transit
+  // Cache key: round coords to 4 decimals (~11m precision) + travel mode + departure time bucket for transit
   const oLat = origin.lat.toFixed(4);
   const oLng = origin.lng.toFixed(4);
   const dLat = destination.lat.toFixed(4);
@@ -275,111 +345,157 @@ export const fetchRouteSegment = async (
     ? (departureTime.getHours() < 12 ? "AM" : departureTime.getHours() < 18 ? "PM" : "EVE")
     : "ANY";
   const cacheKey = `${oLat},${oLng}_${dLat},${dLng}_${travelMode}_${timeBucket}`;
+  const reverseCacheKey = mode === "walking"
+    ? `${dLat},${dLng}_${oLat},${oLng}_${travelMode}_${timeBucket}`
+    : undefined;
 
+  // 1. Check forward cache
   if (routesCache[cacheKey]) {
+    routesCache[cacheKey].lastUsedAt = Date.now();
     apiUsageService.recordCacheHit();
     return routesCache[cacheKey];
   }
-
-  // Handle Japan Transit via Ekispert Station-Aware Modeling
-  if (mode === "transit" && isJapanCoordinate(origin.lat, origin.lng) && isJapanCoordinate(destination.lat, destination.lng)) {
-    try {
-      const ekispertResult = await calculateJapanStationTransit(origin, destination);
-      if (ekispertResult) {
-        saveToRoutesCache(cacheKey, ekispertResult);
-        return ekispertResult;
-      }
-    } catch (err) {
-      console.warn("Station transit calculation error, falling back to geometric estimate:", err);
-    }
+  // 2. Check symmetric reverse cache for walking (A->B has identical distance and walking speed to B->A)
+  if (reverseCacheKey && routesCache[reverseCacheKey]) {
+    routesCache[reverseCacheKey].lastUsedAt = Date.now();
+    apiUsageService.recordCacheHit();
+    return routesCache[reverseCacheKey];
   }
 
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    const dist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
-    const durationS = Math.round(estimateTime(dist, mode));
-    return {
-      distanceM: Math.round(dist),
-      durationS,
-      isHeuristic: true,
-      heuristicReason: mode === "transit"
-        ? "No Google Maps API key; transit calculated using geometric velocity heuristic."
-        : "Estimated geometrically without live API.",
-    };
+  // 3. Deduplicate in-flight concurrent requests for the exact same segment across days
+  if (pendingRouteRequests.has(cacheKey)) {
+    return await pendingRouteRequests.get(cacheKey)!;
+  }
+  if (reverseCacheKey && pendingRouteRequests.has(reverseCacheKey)) {
+    return await pendingRouteRequests.get(reverseCacheKey)!;
   }
 
-  try {
-    apiUsageService.recordCall("maps_route");
-    const body: any = {
-      origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
-      destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
-      travelMode: travelMode,
-      ...(travelMode === "DRIVE" && { routingPreference: "TRAFFIC_AWARE" }),
-    };
-
-    if (travelMode === "TRANSIT" && departureTime) {
-      body.departureTime = departureTime.toISOString();
-    }
-
-    const response = await fetch(`https://routes.googleapis.com/directions/v2:computeRoutes`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      let errorMessage = "Failed to fetch route";
-      let isQuota = false;
+  const fetchPromise = (async () => {
+    // Handle Japan Transit via Ekispert Station-Aware Modeling
+    if (mode === "transit" && (isJapanCoordinate(origin.lat, origin.lng) || isJapanCoordinate(destination.lat, destination.lng))) {
       try {
-        const errorData = await response.json();
-        errorMessage = errorData.error?.message || errorMessage;
-        isQuota = response.status === 429 && errorMessage.toLowerCase().includes("quota");
-      } catch (e) {}
-      emitApiError({ source: "google-maps", message: errorMessage, isQuota });
-      throw new Error(errorMessage);
+        const ekispertResult = await calculateJapanStationTransit(origin, destination);
+        if (ekispertResult) {
+          saveToRoutesCache(cacheKey, ekispertResult);
+          return ekispertResult;
+        }
+      } catch (err) {
+        console.warn("Station transit calculation error, falling back to geometric estimate:", err);
+      }
+
+      // Google Maps transit API strictly returns ZERO_RESULTS in Japan (developer licensing blackout).
+      // Never call routes.googleapis.com for Japan transit — fall back immediately and cache to protect API quota.
+      const dist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
+      const durationS = Math.round(estimateTime(dist, "transit"));
+      const fallbackResult = {
+        distanceM: Math.round(dist),
+        durationS,
+        isHeuristic: true,
+        heuristicReason: "Japan transit estimated via regional railway velocity (Google Maps API does not license Japan transit data).",
+      };
+      saveToRoutesCache(cacheKey, fallbackResult);
+      return fallbackResult;
     }
 
-    const data = await response.json();
-    const route = data.routes?.[0];
-    if (!route) {
-      if (mode === "transit") {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      const dist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
+      const durationS = Math.round(estimateTime(dist, mode));
+      const fallbackResult = {
+        distanceM: Math.round(dist),
+        durationS,
+        isHeuristic: true,
+        heuristicReason: mode === "transit"
+          ? "No Google Maps API key; transit calculated using geometric velocity heuristic."
+          : "Estimated geometrically without live API.",
+      };
+      saveToRoutesCache(cacheKey, fallbackResult, reverseCacheKey);
+      return fallbackResult;
+    }
+
+    try {
+      apiUsageService.recordCall("maps_route");
+      const body: any = {
+        origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
+        destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
+        travelMode: travelMode,
+        ...(travelMode === "DRIVE" && { routingPreference: "TRAFFIC_AWARE" }),
+      };
+
+      if (travelMode === "TRANSIT" && departureTime) {
+        body.departureTime = departureTime.toISOString();
+      }
+
+      const response = await fetch(`https://routes.googleapis.com/directions/v2:computeRoutes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "Failed to fetch route";
+        let isQuota = false;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error?.message || errorMessage;
+          isQuota = response.status === 429 && errorMessage.toLowerCase().includes("quota");
+        } catch (e) {}
+        emitApiError({ source: "google-maps", message: errorMessage, isQuota });
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      const route = data.routes?.[0];
+      if (!route) {
         const dist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
-        const durationS = Math.round(estimateTime(dist, "transit"));
+        const durationS = Math.round(estimateTime(dist, mode));
         const fallbackResult = {
           distanceM: Math.round(dist),
           durationS,
           isHeuristic: true,
-          heuristicReason: "Live transit routing unavailable; estimated using regional transit velocity."
+          heuristicReason: mode === "transit"
+            ? "Live transit routing unavailable; estimated using regional transit velocity."
+            : "No route found; estimated geometrically.",
         };
-        saveToRoutesCache(cacheKey, fallbackResult);
+        saveToRoutesCache(cacheKey, fallbackResult, reverseCacheKey);
         return fallbackResult;
       }
-      throw new Error("No route found");
-    }
 
-    const distanceM = route.distanceMeters || 0;
-    const durationS = route.duration ? parseInt(route.duration.replace("s", "")) : 0;
+      const distanceM = route.distanceMeters || 0;
+      const durationS = route.duration ? parseInt(route.duration.replace("s", "")) : 0;
 
-    const result = { distanceM, durationS, isHeuristic: false };
-    saveToRoutesCache(cacheKey, result);
-    return result;
-  } catch (error) {
-    console.error("Maps Routes Error:", error);
-    if (mode === "transit") {
+      const result = { distanceM, durationS, isHeuristic: false };
+      saveToRoutesCache(cacheKey, result, reverseCacheKey);
+      return result;
+    } catch (error) {
+      console.error("Maps Routes Error:", error);
       const dist = getDistance(origin.lat, origin.lng, destination.lat, destination.lng);
-      const durationS = Math.round(estimateTime(dist, "transit"));
-      return {
+      const durationS = Math.round(estimateTime(dist, mode));
+      const fallbackResult = {
         distanceM: Math.round(dist),
         durationS,
         isHeuristic: true,
-        heuristicReason: "Live transit routing unavailable; estimated using regional transit velocity."
+        heuristicReason: mode === "transit"
+          ? "Live transit routing unavailable; estimated using regional transit velocity."
+          : "Routing error; estimated geometrically.",
       };
+      saveToRoutesCache(cacheKey, fallbackResult, reverseCacheKey);
+      return fallbackResult;
     }
-    throw error;
+  })();
+
+  pendingRouteRequests.set(cacheKey, fetchPromise);
+  if (reverseCacheKey) pendingRouteRequests.set(reverseCacheKey, fetchPromise);
+
+  try {
+    return await fetchPromise;
+  } finally {
+    pendingRouteRequests.delete(cacheKey);
+    if (reverseCacheKey) pendingRouteRequests.delete(reverseCacheKey);
   }
 };
 
@@ -395,61 +511,85 @@ export const fetchFreshPhoto = async (place: {
   const apiKey = getApiKey();
   if (!apiKey || apiKey === "undefined") return undefined;
 
-  // 1. Direct photoReference resolution if already available (saves an extra Place Details API call)
-  if (place.photoReference) {
-    try {
-      const directUrl = await resolvePhotoUrl(place.photoReference, apiKey);
-      if (directUrl) return directUrl;
-    } catch (e) {
-      console.warn("Direct photoReference resolution failed:", e);
-    }
-  }
-
-  // 2. Lookup photo reference via Google Place Details
   const rawGoogleId = place.googlePlaceId || place.id;
-  const googleId = rawGoogleId && !rawGoogleId.startsWith("p_") ? rawGoogleId : undefined;
+  const placeKey = (rawGoogleId && !rawGoogleId.startsWith("p_") ? rawGoogleId : place.name).replace(/^places\//, "");
 
-  let photoName: string | undefined = undefined;
-  if (googleId) {
+  // Check negative photo cache (places previously verified to have no photo)
+  if (noPhotoCache[placeKey]) {
+    return undefined;
+  }
+
+  // Deduplicate in-flight concurrent requests for the same place
+  if (pendingPhotoRequests.has(placeKey)) {
+    return await pendingPhotoRequests.get(placeKey);
+  }
+
+  const photoPromise = (async () => {
+    // 1. Direct photoReference resolution if already available (saves an extra Place Details API call)
+    if (place.photoReference) {
+      try {
+        const directUrl = await resolvePhotoUrl(place.photoReference, apiKey);
+        if (directUrl) return directUrl;
+      } catch (e) {
+        console.warn("Direct photoReference resolution failed:", e);
+      }
+    }
+
+    // 2. Lookup photo reference via Google Place Details
+    const googleId = rawGoogleId && !rawGoogleId.startsWith("p_") ? rawGoogleId : undefined;
+
+    let photoName: string | undefined = undefined;
+    if (googleId) {
+      try {
+        apiUsageService.recordCall("maps_photo");
+        const cleanGoogleId = googleId.replace(/^places\//, "");
+        const r = await fetch(`https://places.googleapis.com/v1/places/${cleanGoogleId}`, {
+          headers: {
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": "id,photos",
+          },
+        });
+        if (r.ok) {
+          const d = await r.json();
+          photoName = d.photos?.[0]?.name;
+        }
+      } catch (e) {
+        console.warn("Place details photo lookup failed:", e);
+      }
+    }
+
+    if (photoName) {
+      const directUrl = await resolvePhotoUrl(photoName, apiKey);
+      if (directUrl) return directUrl;
+    }
+
+    // 3. Fallback: Search Places by name & location and resolve the top result's photo reference
     try {
-      apiUsageService.recordCall("maps_photo");
-      const cleanGoogleId = googleId.replace(/^places\//, "");
-      const r = await fetch(`https://places.googleapis.com/v1/places/${cleanGoogleId}`, {
-        headers: {
-          "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask": "id,photos",
-        },
-      });
-      if (r.ok) {
-        const d = await r.json();
-        photoName = d.photos?.[0]?.name;
+      const queryStr = place.address ? `${place.name} ${place.address}` : place.name;
+      const searchResults = await searchPlaces(
+        queryStr,
+        place.lat && place.lng ? { lat: place.lat, lng: place.lng } : undefined
+      );
+      if (searchResults && searchResults.length > 0) {
+        const topResult = searchResults[0];
+        if (topResult.photoReference) {
+          const directUrl = await resolvePhotoUrl(topResult.photoReference, apiKey);
+          if (directUrl) return directUrl;
+        }
       }
     } catch (e) {
-      console.warn("Place details photo lookup failed:", e);
+      console.warn("Search fallback photo lookup failed:", e);
     }
-  }
 
-  if (photoName) {
-    const directUrl = await resolvePhotoUrl(photoName, apiKey);
-    if (directUrl) return directUrl;
-  }
+    // Mark as no photo available so subsequent sessions never waste API calls checking again
+    saveNoPhoto(placeKey);
+    return undefined;
+  })();
 
-  // 3. Fallback: Search Places by name & location and resolve the top result's photo reference
+  pendingPhotoRequests.set(placeKey, photoPromise);
   try {
-    const queryStr = place.address ? `${place.name} ${place.address}` : place.name;
-    const searchResults = await searchPlaces(
-      queryStr,
-      place.lat && place.lng ? { lat: place.lat, lng: place.lng } : undefined
-    );
-    if (searchResults && searchResults.length > 0) {
-      const topResult = searchResults[0];
-      if (topResult.photoReference) {
-        return await resolvePhotoUrl(topResult.photoReference, apiKey);
-      }
-    }
-  } catch (e) {
-    console.warn("Search fallback photo lookup failed:", e);
+    return await photoPromise;
+  } finally {
+    pendingPhotoRequests.delete(placeKey);
   }
-
-  return undefined;
 };
