@@ -9,6 +9,7 @@ import {
   Check,
   Coins,
   AlertTriangle,
+  X,
 } from "lucide-react";
 import { useRouteStore } from "../../store/useRouteStore";
 import { MOCK_PLACES } from "../../services/mockData";
@@ -45,7 +46,10 @@ export const PlaceSearch: React.FC = React.memo(() => {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let isCancelled = false;
+
     if (appMode !== "real") {
+      setIsLoading(false);
       if (query.length > 0) {
         setResults(
           MOCK_PLACES.filter((p) =>
@@ -63,9 +67,11 @@ export const PlaceSearch: React.FC = React.memo(() => {
     // Real mode with debounce
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
-    if (query.length < 2) {
+    if (query.trim().length < 2) {
       setResults([]);
       setIsOpen(false);
+      setIsLoading(false);
+      setError(null);
       return;
     }
 
@@ -87,17 +93,22 @@ export const PlaceSearch: React.FC = React.memo(() => {
         }
 
         const mapsResults = await searchPlaces(query, biasLocation);
+        if (isCancelled) return;
         setResults(mapsResults);
         setIsOpen(true);
       } catch (err) {
+        if (isCancelled) return;
         setError("Failed to search locations. Check your API key.");
         setResults([]);
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }, 500);
 
     return () => {
+      isCancelled = true;
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [query, appMode]);
@@ -282,8 +293,24 @@ export const PlaceSearch: React.FC = React.memo(() => {
                 ? "Search real places with Google..."
                 : "Search for a place to add..."
             }
-            className="input-base rounded-xl py-3 pl-12 pr-4"
+            className={`input-base rounded-xl py-3 pl-12 ${query.length > 0 ? "pr-10" : "pr-4"}`}
           />
+          {query.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setResults([]);
+                setIsOpen(false);
+                setIsLoading(false);
+                setError(null);
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 transition-colors"
+              title="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <button

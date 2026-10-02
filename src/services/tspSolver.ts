@@ -335,21 +335,78 @@ export function clusterPlaces(
   };
 
   const isPlaceFeasibleOnDay = (place: Place, d: number): boolean => {
-    if (!avoidClosedHours || !place.openingHours || place.openingHours.length === 0) {
+    if (!avoidClosedHours || (!place.openingHours?.length && !place.allowedTimeRange?.startTime)) {
       return true;
     }
+    const duration = place.estimatedDuration || 60;
     const dayDate = addDays(parseISO(startDateISO), d);
-    const dayHours = getPlaceDayHours(place.openingHours, dayDate);
-    if (dayHours === "closed") {
-      return false;
-    }
-    if (typeof dayHours !== "object" || dayHours === null) {
-      return true;
+    let intervals: { open: number; close: number }[] = [{ open: 0, close: 24 * 60 }];
+
+    if (place.openingHours && place.openingHours.length > 0) {
+      const dayHours = getPlaceDayHours(place.openingHours, dayDate);
+      if (dayHours === "closed") {
+        return false;
+      }
+      if (dayHours === "24hours") {
+        intervals = [{ open: 0, close: 24 * 60 }];
+      } else if (typeof dayHours === "object" && dayHours !== null) {
+        intervals = (dayHours.intervals || [{ open: dayHours.open, close: dayHours.close }]).slice();
+      }
     }
 
-    const duration = place.estimatedDuration || 60;
-    const intervals = dayHours.intervals || [{ open: dayHours.open, close: dayHours.close }];
+    // Intersect or exclude user-specified allowedTimeRange
+    if (place.allowedTimeRange?.startTime && place.allowedTimeRange?.endTime) {
+      const isExclude = place.allowedTimeRange.mode === "exclude";
+      const rangeStart = parseTimeToMinutes(place.allowedTimeRange.startTime);
+      let rangeEnd = parseTimeToMinutes(place.allowedTimeRange.endTime);
+      if (rangeEnd === 0) rangeEnd = 24 * 60;
+      else if (rangeEnd < rangeStart) rangeEnd += 24 * 60;
+
+      if (isExclude) {
+        const remainingIntervals: { open: number; close: number }[] = [];
+        for (const inv of intervals) {
+          if (inv.close <= rangeStart || inv.open >= rangeEnd) {
+            remainingIntervals.push(inv);
+          } else {
+            if (inv.open < rangeStart) {
+              remainingIntervals.push({ open: inv.open, close: rangeStart });
+            }
+            if (inv.close > rangeEnd) {
+              remainingIntervals.push({ open: rangeEnd, close: inv.close });
+            }
+          }
+        }
+        intervals = remainingIntervals;
+      } else {
+        const remainingIntervals: { open: number; close: number }[] = [];
+        for (const inv of intervals) {
+          const overlapStart = Math.max(inv.open, rangeStart);
+          const overlapEnd = Math.min(inv.close, rangeEnd);
+          if (overlapEnd - overlapStart >= duration) {
+            remainingIntervals.push({ open: overlapStart, close: overlapEnd });
+          }
+        }
+        intervals = remainingIntervals;
+      }
+    }
+
+    if (intervals.length === 0) {
+      return false;
+    }
+
     const window = dayWindows[d] || { start: baseDayStartMin, end: baseDayEndMin };
+    const { startAnchor } = getDayAnchors(d);
+    const transitFromStart = startAnchor ? getTransitMin(startAnchor, place) : 0;
+
+    // If the place has an explicit early preferred window (e.g. 07:00 AM), allow morning departure to adjust down
+    let dayStartCandidate = window.start;
+    if (place.allowedTimeRange?.startTime && place.allowedTimeRange.mode !== "exclude") {
+      const prefStart = parseTimeToMinutes(place.allowedTimeRange.startTime);
+      if (prefStart < dayStartCandidate) {
+        dayStartCandidate = prefStart;
+      }
+    }
+    const earliestArrival = dayStartCandidate + transitFromStart;
 
     // Find locked/custom-timed stops on day d (both previously pinned and newly assigned)
     const dayLocked = [
@@ -370,7 +427,7 @@ export function clusterPlaces(
     // If no locked stops, simple window overlap check
     if (dayLocked.length === 0) {
       return intervals.some((inv) => {
-        const overlapStart = Math.max(inv.open, window.start);
+        const overlapStart = Math.max(inv.open, earliestArrival);
         const overlapEnd = Math.min(inv.close, window.end);
         return overlapEnd - overlapStart >= duration;
       });
@@ -381,10 +438,11 @@ export function clusterPlaces(
 
     // 1. Block before first locked stop
     const firstLocked = dayLocked[0];
+    const earlyArrivalBuffer = Math.max(10, parseEarlyArrivalMinutes(firstLocked.place.reservation?.advanceTime));
     const transitToFirst = getTransitMin(place, firstLocked.place);
-    const block1End = firstLocked.start - transitToFirst;
-    if (block1End > window.start) {
-      freeBlocks.push({ start: window.start, end: block1End });
+    const block1End = firstLocked.start - earlyArrivalBuffer - transitToFirst;
+    if (block1End > earliestArrival) {
+      freeBlocks.push({ start: earliestArrival, end: block1End });
     }
 
     // 2. Blocks between consecutive locked stops
@@ -1376,9 +1434,18 @@ function optimizeDayRoute(
   const windowStartTimes: number[] = [];
   const windowEndTimes: number[] = [];
 
+  // If Window 0 has unlocked places with early preferred morning start times, allow Window 0 to start early
+  const earliestAllowedStart = unlockedPlaces.reduce((min, p) => {
+    if (p.allowedTimeRange?.startTime && p.allowedTimeRange.mode !== "exclude") {
+      const s = parseTimeToMinutes(p.allowedTimeRange.startTime);
+      return Math.min(min, s);
+    }
+    return min;
+  }, baseStartMin);
+
   for (let w = 0; w < numWindows; w++) {
     const wStart = w === 0
-      ? baseStartMin
+      ? earliestAllowedStart
       : parseTimeToMinutes(lockedPlaces[w - 1].customTime!) + (lockedPlaces[w - 1].estimatedDuration || 60);
     // Enforce 10-minute early arrival buffer before any locked reservation
     const earlyBuffer = w < numWindows - 1
@@ -1808,6 +1875,13 @@ function evictClosedHourConflicts(
 
     // Compute arrival time at each stop using actual segment durations (including custom transit times)
     let currTime = dayStartTotal;
+    const firstStopInRoute = route.stops[0];
+    if (firstStopInRoute?.allowedTimeRange?.startTime && firstStopInRoute.allowedTimeRange.mode !== "exclude") {
+      const prefStart = parseTimeToMinutes(firstStopInRoute.allowedTimeRange.startTime);
+      if (prefStart < currTime) {
+        currTime = prefStart;
+      }
+    }
     const conflictedStops: { place: Place; reason: string }[] = [];
 
     for (let sIdx = 0; sIdx < route.stops.length; sIdx++) {
@@ -2201,8 +2275,12 @@ export async function solveTSP(
   exemptDays: number[] = [],
   existingRoutes: DayRoute[] = [],
   customTransitTimes?: Record<string, number>,
+  onProgress?: (status: string) => void,
 ): Promise<OptimizationResult> {
   const startTime = performance.now();
+
+  onProgress?.("Clustering places into daily regions...");
+  await new Promise((resolve) => setTimeout(resolve, 0));
 
   // Index all known custom transit times across existing routes and passed dictionary
   const allCustomTimes: Record<string, number> = { ...(customTransitTimes ?? {}) };
@@ -2241,6 +2319,10 @@ export async function solveTSP(
   let totalTripTime = 0;
 
   for (let d = 0; d < days; d++) {
+    onProgress?.(days > 1 ? `Optimizing Day ${d + 1} of ${days}...` : "Optimizing daily route...");
+    // Yield to the browser main thread so the UI remains fluid and the loading spinner keeps animating smoothly
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
     // If day is exempt and already has a route, preserve it completely
     if (exemptDays.includes(d)) {
       const existing = existingRoutes.find((r) => r.day === d);
@@ -2286,7 +2368,14 @@ export async function solveTSP(
         if (matched) {
           matched.dayIndex = null;
           matched.orderInDay = null;
-          matched.unfeasibleReason = `Closed during scheduled visiting hours (${ev.reason}).`;
+          matched.unfeasibleReason =
+            ev.reason.startsWith("Outside preferred hours") ||
+            ev.reason.startsWith("Within excluded hours") ||
+            ev.reason.startsWith("Displaced to ensure on-time arrival") ||
+            ev.reason.startsWith("Cannot reach locked reservation") ||
+            ev.reason.startsWith("Closed")
+              ? `${ev.reason}.`
+              : `Closed during scheduled visiting hours (${ev.reason}).`;
         }
       }
     } else {
@@ -2389,7 +2478,14 @@ export async function solveTSP(
             if (m) {
               m.dayIndex = null;
               m.orderInDay = null;
-              m.unfeasibleReason = `Closed during scheduled visiting hours (${ev.reason}).`;
+              m.unfeasibleReason =
+                ev.reason.startsWith("Outside preferred hours") ||
+                ev.reason.startsWith("Within excluded hours") ||
+                ev.reason.startsWith("Displaced to ensure on-time arrival") ||
+                ev.reason.startsWith("Cannot reach locked reservation") ||
+                ev.reason.startsWith("Closed")
+                  ? `${ev.reason}.`
+                  : `Closed during scheduled visiting hours (${ev.reason}).`;
             }
           }
         } else {
@@ -2429,7 +2525,7 @@ export async function solveTSP(
   // to reassign it across all other allowed candidate days that have available capacity, open hours,
   // and geographic proximity, without evicting any existing scheduled stops.
   let reassignmentPass = 0;
-  const maxReassignmentPasses = 5;
+  const maxReassignmentPasses = 2;
 
   while (reassignmentPass < maxReassignmentPasses) {
     reassignmentPass++;
@@ -2439,6 +2535,9 @@ export async function solveTSP(
       (p) => p.dayIndex === null && !p.pinnedToDay && !p.isDisabled
     );
     if (unassignedPool.length === 0) break;
+
+    onProgress?.(`Rebalancing schedule & quotas (pass ${reassignmentPass}/${maxReassignmentPasses})...`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     // Prioritize candidates:
     // 1. Starred places first (must-visit)
@@ -2477,6 +2576,9 @@ export async function solveTSP(
     });
 
     for (const place of unassignedPool) {
+      // Yield to the browser between unassigned candidates
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
       let bestDay = -1;
       let bestScore = -Infinity;
       let bestTestConflict: any = null;
@@ -2544,7 +2646,7 @@ export async function solveTSP(
           }
         }
 
-        // Time budget check
+        // Time budget check: skip days that cannot physically fit this place
         const limit = dailyBudgets[targetDay];
         const baseBudget = Math.max(...dailyBudgets);
         const forceStrict = strictBudget || limit < baseBudget;
@@ -2552,8 +2654,16 @@ export async function solveTSP(
         const currentTravelMin = Math.round(targetRoute.totalTime / 60);
         const placeDuration = place.estimatedDuration ?? 60;
 
-        if (forceStrict && currentVisitMin + currentTravelMin + placeDuration > limit) {
+        const effectiveLimit = forceStrict ? limit : limit * 1.05;
+        if (currentVisitMin + currentTravelMin + placeDuration > effectiveLimit) {
           continue;
+        }
+
+        // Closed day check: skip days where place is closed all day
+        if (avoidClosedHours && place.openingHours && place.openingHours.length > 0) {
+          const targetDate = addDays(parseISO(startDateISO), targetDay);
+          const dh = getPlaceDayHours(place.openingHours, targetDate);
+          if (dh === "closed") continue;
         }
 
         // Test inserting place into target day using evictClosedHourConflicts
@@ -2621,6 +2731,9 @@ export async function solveTSP(
   }
 
   // 3. Post-process non-exempt routes to use accurate APIs
+  onProgress?.("Calculating accurate transit times...");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
   const finalRoutes = await Promise.all(
     dayRoutes.map((r) => {
       if (exemptDays.includes(r.day) && existingRoutes.some((er) => er.day === r.day)) {
@@ -2632,6 +2745,9 @@ export async function solveTSP(
 
   totalTripDistance = finalRoutes.reduce((sum, r) => sum + r.totalDistance, 0);
   totalTripTime = finalRoutes.reduce((sum, r) => sum + r.totalTime, 0);
+
+  onProgress?.("Finalizing schedule...");
+  await new Promise((resolve) => setTimeout(resolve, 0));
 
   const endTime = performance.now();
   console.log(`solveTSP completed in ${Math.round(endTime - startTime)}ms`);

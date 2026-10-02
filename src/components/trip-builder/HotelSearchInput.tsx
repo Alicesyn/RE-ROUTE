@@ -27,7 +27,10 @@ export const HotelSearchInput: React.FC<HotelSearchInputProps> = ({
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let isCancelled = false;
+
     if (appMode !== "real") {
+      setIsLoading(false);
       if (query.length > 0) {
         setResults(
           MOCK_HOTELS.filter((h) =>
@@ -44,9 +47,10 @@ export const HotelSearchInput: React.FC<HotelSearchInputProps> = ({
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
-    if (query.length < 2) {
+    if (query.trim().length < 2) {
       setResults([]);
       setIsOpen(false);
+      setIsLoading(false);
       return;
     }
 
@@ -55,17 +59,22 @@ export const HotelSearchInput: React.FC<HotelSearchInputProps> = ({
       try {
         // Specifically search for hotels/lodging
         const mapsResults = await searchPlaces(`${query} hotel`);
+        if (isCancelled) return;
         setResults(mapsResults);
         setIsOpen(true);
         updateDropdownPosition();
       } catch (err) {
+        if (isCancelled) return;
         console.error("Hotel search error:", err);
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }, 500);
 
     return () => {
+      isCancelled = true;
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [query, appMode]);

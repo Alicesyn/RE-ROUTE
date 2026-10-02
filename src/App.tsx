@@ -51,6 +51,7 @@ function App() {
   const startDate = useRouteStore((s) => s.startDate);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizingStatus, setOptimizingStatus] = useState("Optimizing Route...");
   const [showMobileMap, setShowMobileMap] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [showExemptPopover, setShowExemptPopover] = useState(false);
@@ -151,6 +152,9 @@ function App() {
     }
 
     setIsOptimizing(true);
+    setOptimizingStatus("Analyzing places & daily budgets...");
+    // Yield execution to the browser so the loading spinner paints immediately
+    await new Promise((resolve) => setTimeout(resolve, 50));
     try {
       const state = useRouteStore.getState();
       const {
@@ -226,6 +230,7 @@ function App() {
         exemptDays,
         optimizedRoutes,
         customTransitTimes,
+        (status) => setOptimizingStatus(status),
       );
 
       if (result.success) {
@@ -314,6 +319,7 @@ function App() {
       );
     } finally {
       setIsOptimizing(false);
+      setOptimizingStatus("Optimizing Route...");
     }
   };
 
@@ -980,18 +986,23 @@ function App() {
           {/* Optimize Button & Clear Schedule */}
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={handleOptimize}
-              disabled={
-                places.filter((p) => !p.isDisabled).length === 0 ||
-                isOptimizing ||
-                exemptDays.length >= days
-              }
-              className="btn-primary flex-1 flex items-center justify-center gap-2 group py-4 text-lg rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              disabled={!isOptimizing && (places.filter((p) => !p.isDisabled).length === 0 || exemptDays.length >= days)}
+              aria-busy={isOptimizing}
+              aria-disabled={isOptimizing || places.filter((p) => !p.isDisabled).length === 0 || exemptDays.length >= days}
+              className={`flex-1 flex items-center justify-center gap-2 py-4 text-lg font-medium rounded-xl whitespace-nowrap shadow-sm select-none ${
+                isOptimizing
+                  ? "bg-primary-600 dark:bg-primary-600 text-white cursor-wait pointer-events-none"
+                  : "btn-primary group transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              }`}
             >
               {isOptimizing ? (
-                <span key="optimizing" className="flex items-center justify-center gap-2 whitespace-nowrap">
-                  <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                  <span>Optimizing Route...</span>
+                <span key="optimizing" className="flex items-center justify-center gap-2 whitespace-nowrap text-white">
+                  <Loader2 className="w-5 h-5 animate-spin shrink-0 text-white" />
+                  <span className="truncate max-w-[280px] sm:max-w-none transition-all duration-150">
+                    {optimizingStatus}
+                  </span>
                 </span>
               ) : (
                 <span key="idle" className="flex items-center justify-center gap-2 whitespace-nowrap">

@@ -34,10 +34,16 @@ export const PlaceSearchInput: React.FC<PlaceSearchInputProps> = ({
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let isCancelled = false;
+
     // Only search when the user is actively typing, not after a selection
-    if (!isEditing) return;
+    if (!isEditing) {
+      setIsLoading(false);
+      return;
+    }
 
     if (appMode !== "real") {
+      setIsLoading(false);
       // Simple mock for airports/stations
       const mockPlaces = [
         {
@@ -73,9 +79,10 @@ export const PlaceSearchInput: React.FC<PlaceSearchInputProps> = ({
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
-    if (query.length < 2) {
+    if (query.trim().length < 2) {
       setResults([]);
       setIsOpen(false);
+      setIsLoading(false);
       return;
     }
 
@@ -83,14 +90,23 @@ export const PlaceSearchInput: React.FC<PlaceSearchInputProps> = ({
     debounceTimerRef.current = setTimeout(async () => {
       try {
         const mapsResults = await searchPlaces(query);
+        if (isCancelled) return;
         setResults(mapsResults);
         setIsOpen(true);
       } catch (error) {
+        if (isCancelled) return;
         console.error("Place search failed:", error);
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }, 500);
+
+    return () => {
+      isCancelled = true;
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
   }, [query, appMode, isEditing]);
 
   const IconComponent = () => {

@@ -45,8 +45,8 @@ const isValidCoord = (val: any): val is number => {
 };
 
 // A component to auto-fit map bounds only when coordinates actually change
-const MapBounds: React.FC<{ places: any[]; hotels: any[] }> = React.memo(
-  ({ places, hotels }) => {
+const MapBounds: React.FC<{ places: any[]; hotels: any[]; routes?: any[] }> = React.memo(
+  ({ places, hotels, routes }) => {
     const map = useMap();
     const prevPointsSignatureRef = useRef<string>("");
 
@@ -91,14 +91,33 @@ const MapBounds: React.FC<{ places: any[]; hotels: any[] }> = React.memo(
     }, [pointsSignature, validPlaces, validHotels, map]);
 
     useEffect(() => {
-      map.invalidateSize();
-      const t1 = setTimeout(() => map.invalidateSize(), 150);
-      const t2 = setTimeout(() => map.invalidateSize(), 500);
+      const container = map.getContainer();
+      if (!container) return;
+
+      const handleResize = () => {
+        try {
+          map.invalidateSize({ pan: false });
+        } catch (e) {
+          // ignore
+        }
+      };
+
+      const resizeObserver = new ResizeObserver(handleResize);
+      resizeObserver.observe(container);
+
+      // Invalidate on initial setup and when routes change
+      handleResize();
+      const rAF = requestAnimationFrame(handleResize);
+      const t1 = setTimeout(handleResize, 150);
+      const t2 = setTimeout(handleResize, 500);
+
       return () => {
+        resizeObserver.disconnect();
+        cancelAnimationFrame(rAF);
         clearTimeout(t1);
         clearTimeout(t2);
       };
-    }, [map]);
+    }, [map, routes]);
 
     return null;
   },
@@ -142,7 +161,7 @@ export const MapView: React.FC = React.memo(() => {
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
         />
 
-        <MapBounds places={activePlaces.length > 0 ? activePlaces : places} hotels={hotels} />
+        <MapBounds places={activePlaces.length > 0 ? activePlaces : places} hotels={hotels} routes={optimizedRoutes} />
 
         {/* Draw Markers for Unoptimized Places (Active only) */}
         {optimizedRoutes.length === 0 &&

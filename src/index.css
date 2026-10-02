@@ -29,7 +29,7 @@
 
   /* UI Elements */
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 disabled:bg-surface-300 dark:disabled:bg-surface-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all;
+    @apply bg-primary-600 hover:bg-primary-700 disabled:bg-surface-300 dark:disabled:bg-surface-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-colors duration-150;
   }
 
   .btn-secondary {
