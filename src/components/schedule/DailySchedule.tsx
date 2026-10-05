@@ -18,9 +18,15 @@ import {
   Minimize2,
   Lock,
   Unlock,
+  MapPin,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "../../services/toastService";
 import { RouteSegment, CustomBuffer, Place } from "../../types";
+import {
+  buildDayGoogleMapsRoute,
+  PhysicalLocation,
+} from "../../utils/googleMapsRouteUtils";
 import { format, addDays, parseISO } from "date-fns";
 import { checkTimeConflict } from "../../utils/timeUtils";
 import { isWalkSegment } from "../../utils/distance";
@@ -86,6 +92,7 @@ export const DailySchedule: React.FC = React.memo(() => {
   const setDayTitle = useRouteStore((s) => s.setDayTitle);
   const exemptDays = useRouteStore((s) => s.exemptDays);
   const toggleDayExemption = useRouteStore((s) => s.toggleDayExemption);
+  const travelMode = useRouteStore((s) => s.travelMode);
 
   const [editingDayTitleIndex, setEditingDayTitleIndex] = useState<number | null>(null);
   const [editingDayTitleText, setEditingDayTitleText] = useState<string>("");
@@ -857,6 +864,62 @@ export const DailySchedule: React.FC = React.memo(() => {
             const isExpanded = expandedDays.has(i);
             const isDayExempt = exemptDays.includes(i);
 
+            const dayPhysicalLocations: PhysicalLocation[] = [];
+            for (const it of itemScheduleList) {
+              if (it.itemId === "arrival") {
+                if (showFlights && isFirstDay && arrivalFlight?.location) {
+                  dayPhysicalLocations.push({
+                    name: arrivalFlight.location.name,
+                    address: arrivalFlight.location.address,
+                    lat: arrivalFlight.location.lat,
+                    lng: arrivalFlight.location.lng,
+                  });
+                }
+              } else if (it.itemId === "start-hotel") {
+                if (route.startHotel) {
+                  dayPhysicalLocations.push({
+                    name: route.startHotel.name,
+                    address: route.startHotel.address,
+                    lat: route.startHotel.lat,
+                    lng: route.startHotel.lng,
+                  });
+                }
+              } else if (it.itemId === "end-hotel") {
+                if (route.endHotel && !isLastDay) {
+                  dayPhysicalLocations.push({
+                    name: route.endHotel.name,
+                    address: route.endHotel.address,
+                    lat: route.endHotel.lat,
+                    lng: route.endHotel.lng,
+                  });
+                }
+              } else if (it.itemId === "departure") {
+                if (showFlights && isLastDay && departureFlight?.location) {
+                  dayPhysicalLocations.push({
+                    name: departureFlight.location.name,
+                    address: departureFlight.location.address,
+                    lat: departureFlight.location.lat,
+                    lng: departureFlight.location.lng,
+                  });
+                }
+              } else if (it.stop) {
+                dayPhysicalLocations.push({
+                  name: it.stop.name,
+                  address: it.stop.address,
+                  lat: it.stop.lat,
+                  lng: it.stop.lng,
+                });
+              }
+            }
+
+            if (dayPhysicalLocations.length === 0 && route.stops.length > 0) {
+              if (route.startHotel) dayPhysicalLocations.push(route.startHotel);
+              route.stops.forEach((s) => dayPhysicalLocations.push(s));
+              if (route.endHotel && !isLastDay) dayPhysicalLocations.push(route.endHotel);
+            }
+
+            const googleRouteData = buildDayGoogleMapsRoute(dayPhysicalLocations, travelMode);
+
             return (
               <div
                 key={i}
@@ -1155,6 +1218,51 @@ export const DailySchedule: React.FC = React.memo(() => {
                         </button>
                       </div>
                     </div>
+
+                    {googleRouteData && (
+                      <div className="mb-2.5 flex items-center justify-between gap-1.5 flex-wrap">
+                        {googleRouteData.parts.length === 1 ? (
+                          <a
+                            href={googleRouteData.primaryUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800/60 transition-all shadow-2xs group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500"
+                            title={`Open Day ${i + 1} route in Google Maps (${googleRouteData.totalStops} stops in generated order)`}
+                            aria-label={`Open Day ${i + 1} route in Google Maps`}
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+                            <span>Google Maps Route</span>
+                            <span className="text-[10px] font-normal opacity-80">
+                              ({googleRouteData.totalStops} {googleRouteData.totalStops === 1 ? "stop" : "stops"})
+                            </span>
+                            <ExternalLink className="w-3 h-3 opacity-60 ml-0.5 shrink-0" />
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-bold text-surface-600 dark:text-surface-300 flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span>Google Maps:</span>
+                            </span>
+                            {googleRouteData.parts.map((part, pIdx) => (
+                              <a
+                                key={pIdx}
+                                href={part.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 hover:bg-blue-100/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800/60 transition-all shadow-2xs group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500"
+                                title={`Open ${part.label} in Google Maps (${part.stopCount} stops in generated order)`}
+                                aria-label={`Open ${part.label} in Google Maps`}
+                              >
+                                <span>{part.label}</span>
+                                <ExternalLink className="w-2.5 h-2.5 opacity-60 shrink-0" />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-tight flex-wrap">
