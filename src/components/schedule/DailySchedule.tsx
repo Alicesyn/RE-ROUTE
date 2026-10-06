@@ -428,17 +428,17 @@ export const DailySchedule: React.FC = React.memo(() => {
 
   return (
     <>
-      <div className="schedule-container">
-        <div className="px-6 py-3 border-b border-surface-100 dark:border-surface-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-50 dark:bg-surface-800 shrink-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-lg font-bold text-surface-900 dark:text-white">
+      <div className="schedule-container w-full max-w-full overflow-hidden">
+        <div className="px-3 sm:px-6 py-3 border-b border-surface-100 dark:border-surface-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-surface-50 dark:bg-surface-800 shrink-0 max-w-full overflow-hidden">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 max-w-full">
+            <h2 className="text-base sm:text-lg font-bold text-surface-900 dark:text-white shrink-0">
               Optimized Schedule
             </h2>
 
             {hasHeuristicTransit && (
               <button
                 onClick={() => setIsBannerDismissed((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${!isBannerDismissed
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer shrink-0 ${!isBannerDismissed
                   ? "bg-amber-100/90 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700/80 shadow-2xs hover:bg-amber-200/80 dark:hover:bg-amber-900/70"
                   : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/80 hover:bg-amber-100/80 dark:hover:bg-amber-900/60 shadow-2xs"
                   }`}
@@ -461,7 +461,7 @@ export const DailySchedule: React.FC = React.memo(() => {
             <button
               type="button"
               onClick={toggleAllExpanded}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all shadow-2xs cursor-pointer ${isAllExpanded
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all shadow-2xs cursor-pointer shrink-0 ${isAllExpanded
                 ? "bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300 border-primary-300 dark:border-primary-700 hover:bg-primary-100/80 dark:hover:bg-primary-900/60"
                 : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
                 }`}
@@ -482,31 +482,33 @@ export const DailySchedule: React.FC = React.memo(() => {
             </button>
 
             {showClearConfirm ? (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/80 rounded-lg animate-in fade-in zoom-in-95 duration-150">
+              <div className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/80 rounded-lg animate-in fade-in zoom-in-95 duration-150 max-w-full flex-wrap shrink-0">
                 <span className="text-xs font-semibold text-red-700 dark:text-red-300">
-                  {exemptDays.length > 0 ? "Clear all except for locked days?" : "Clear all days?"}
+                  {exemptDays.length > 0 ? "Clear unlocked days?" : "Clear all days?"}
                 </span>
-                <button
-                  type="button"
-                  onClick={handleClearSchedule}
-                  className="px-2 py-0.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded transition-colors shadow-2xs cursor-pointer"
-                >
-                  Yes, Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowClearConfirm(false)}
-                  className="px-2 py-0.5 text-xs font-medium text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700 rounded transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleClearSchedule}
+                    className="px-2 py-0.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded transition-colors shadow-2xs cursor-pointer"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowClearConfirm(false)}
+                    className="px-2 py-0.5 text-xs font-medium text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700 rounded transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={() => setShowClearConfirm(true)}
                 disabled={isAllDaysLocked}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100/90 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800/60 transition-all shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100/90 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800/60 transition-all shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 title={
                   isAllDaysLocked
                     ? "All days are locked"
@@ -516,14 +518,19 @@ export const DailySchedule: React.FC = React.memo(() => {
                 }
                 aria-label={exemptDays.length > 0 ? "Clear all except for locked days" : "Clear schedule"}
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{exemptDays.length > 0 ? "Clear Unlocked Days" : "Clear Schedule"}</span>
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline sm:inline">
+                  {exemptDays.length > 0 ? "Clear Unlocked Days" : "Clear Schedule"}
+                </span>
+                <span className="xs:hidden">
+                  {exemptDays.length > 0 ? "Clear Unlocked" : "Clear"}
+                </span>
               </button>
             )}
           </div>
 
           {/* Day Quick Navigation */}
-          <div className="flex items-center gap-1.5 overflow-hidden min-w-0 flex-1 sm:justify-end">
+          <div className="flex items-center gap-1.5 overflow-hidden min-w-0 w-full sm:w-auto flex-1 sm:justify-end">
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs font-bold text-surface-400 uppercase tracking-wider whitespace-nowrap">
                 Jump to:

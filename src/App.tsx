@@ -832,7 +832,7 @@ function App() {
         />
       )}
 
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 w-full custom-scrollbar">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 w-full custom-scrollbar">
         <div className="max-w-[1600px] mx-auto space-y-8 pb-16 safe-pb">
           {/* Top Row: Trip Settings & Map */}
           <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -1000,51 +1000,51 @@ function App() {
           </div>
 
           {/* Optimize Button & Clear Schedule */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full min-w-0 max-w-full">
             <button
               type="button"
               onClick={handleOptimize}
               disabled={!isOptimizing && (places.filter((p) => !p.isDisabled).length === 0 || exemptDays.length >= days)}
               aria-busy={isOptimizing}
               aria-disabled={isOptimizing || places.filter((p) => !p.isDisabled).length === 0 || exemptDays.length >= days}
-              className={`flex-1 flex items-center justify-center gap-2 py-4 text-lg font-medium rounded-xl whitespace-nowrap shadow-sm select-none ${
+              className={`flex-1 min-w-0 flex items-center justify-center gap-2 py-3.5 sm:py-4 px-3 sm:px-6 text-sm sm:text-lg font-medium rounded-xl shadow-sm select-none ${
                 isOptimizing
                   ? "bg-primary-600 dark:bg-primary-600 text-white cursor-wait pointer-events-none"
                   : "btn-primary group transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               }`}
             >
               {isOptimizing ? (
-                <span key="optimizing" className="flex items-center justify-center gap-2 whitespace-nowrap text-white">
+                <span key="optimizing" className="flex items-center justify-center gap-2 truncate text-white">
                   <Loader2 className="w-5 h-5 animate-spin shrink-0 text-white" />
                   <span className="truncate max-w-[280px] sm:max-w-none transition-all duration-150">
                     {optimizingStatus}
                   </span>
                 </span>
               ) : (
-                <span key="idle" className="flex items-center justify-center gap-2 whitespace-nowrap">
-                  <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform shrink-0" />
-                  <span>
+                <span key="idle" className="flex items-center justify-center gap-1.5 sm:gap-2 truncate min-w-0">
+                  <Wand2 className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-12 transition-transform shrink-0" />
+                  <span className="truncate">
                     {exemptDays.length >= days
-                      ? "All Days Exempt (Locked)"
+                      ? "All Days Locked"
                       : optimizedRoutes.length > 0
-                        ? "Re-Optimize Route"
+                        ? "Re-Optimize"
                         : "Optimize Route"}
-                    {exemptDays.length > 0 && exemptDays.length < days && (
-                      <span className="ml-1.5 text-xs font-medium opacity-90">
-                        ({days - exemptDays.length}/{days} days)
-                      </span>
-                    )}
                   </span>
+                  {exemptDays.length > 0 && exemptDays.length < days && (
+                    <span className="hidden xs:inline text-xs font-medium opacity-90 shrink-0">
+                      ({days - exemptDays.length}/{days})
+                    </span>
+                  )}
                 </span>
               )}
             </button>
 
             {/* Exempt Days Toggle Popover Button */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setShowExemptPopover((v) => !v)}
-                className={`flex items-center gap-2 py-4 px-3.5 sm:px-4 text-sm font-bold border rounded-xl transition-all shadow-2xs cursor-pointer shrink-0 ${
+                className={`flex items-center gap-1.5 sm:gap-2 py-3.5 sm:py-4 px-3 sm:px-4 text-xs sm:text-sm font-bold border rounded-xl transition-all shadow-2xs cursor-pointer shrink-0 ${
                   exemptDays.length > 0
                     ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 text-amber-800 dark:text-amber-200 hover:bg-amber-100/80 dark:hover:bg-amber-900/60"
                     : "bg-white dark:bg-surface-800 border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700"
@@ -1136,7 +1136,7 @@ function App() {
                 type="button"
                 onClick={handleClearOptimizedSchedule}
                 disabled={isOptimizing || (exemptDays.length >= optimizedRoutes.length && optimizedRoutes.length > 0)}
-                className="flex items-center justify-center gap-2 py-4 px-5 text-base font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800/60 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-2 py-3.5 sm:py-4 px-3 sm:px-5 text-sm sm:text-base font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800/60 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 title={
                   exemptDays.length >= optimizedRoutes.length && optimizedRoutes.length > 0
                     ? "All days are locked"
@@ -1144,9 +1144,10 @@ function App() {
                     ? `Clear unlocked days and return places to unassigned pool (${exemptDays.length} locked ${exemptDays.length === 1 ? "day" : "days"} preserved)`
                     : "Clear optimized schedule and unassign all places back to pool"
                 }
+                aria-label={exemptDays.length > 0 ? "Clear all except for locked days" : "Clear schedule"}
               >
-                <Trash2 className="w-5 h-5" />
-                <span className="hidden sm:inline">
+                <Trash2 className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="hidden md:inline">
                   {exemptDays.length > 0 ? "Clear Unlocked Days" : "Clear Schedule"}
                 </span>
               </button>
