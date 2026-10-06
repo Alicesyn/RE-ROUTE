@@ -42,9 +42,15 @@ export function formatLocationQuery(loc: PhysicalLocation): string {
   return "";
 }
 
+const routeCache = new Map<string, DayGoogleMapsRouteResult | null>();
+const MAX_CACHE_SIZE = 300;
+
 /**
  * Constructs a Google Maps directions URL (or search URL if single stop)
  * for a sequence of stops in the order provided.
+ *
+ * Utilizes an in-memory LRU cache to prevent redundant URL string allocations
+ * during drag-and-drop or viewport re-renders.
  *
  * Handles Google Maps' 10-stop limit by chunking routes with > 10 stops into continuous parts
  * (e.g. Part 1: Stops 1–10, Part 2: Stops 10–15).
@@ -54,6 +60,36 @@ export function formatLocationQuery(loc: PhysicalLocation): string {
  * - Transit is applied only when stops === 2, because Google Maps does not support multi-stop transit directions.
  */
 export function buildDayGoogleMapsRoute(
+  rawLocations: PhysicalLocation[],
+  travelMode?: TravelMode
+): DayGoogleMapsRouteResult | null {
+  if (!rawLocations || rawLocations.length === 0) {
+    return null;
+  }
+
+  // Fast cache key calculation
+  let cacheKey = travelMode || "none";
+  for (let i = 0; i < rawLocations.length; i++) {
+    const loc = rawLocations[i];
+    cacheKey += `~${loc.name || ""},${loc.address || ""},${loc.lat ?? ""},${loc.lng ?? ""}`;
+  }
+
+  if (routeCache.has(cacheKey)) {
+    return routeCache.get(cacheKey)!;
+  }
+
+  const result = computeDayGoogleMapsRoute(rawLocations, travelMode);
+
+  if (routeCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = routeCache.keys().next().value;
+    if (firstKey) routeCache.delete(firstKey);
+  }
+  routeCache.set(cacheKey, result);
+
+  return result;
+}
+
+function computeDayGoogleMapsRoute(
   rawLocations: PhysicalLocation[],
   travelMode?: TravelMode
 ): DayGoogleMapsRouteResult | null {

@@ -669,7 +669,7 @@ export const DailySchedule: React.FC = React.memo(() => {
 
         <div
           ref={scrollContainerRef}
-          className="p-6 overflow-x-auto custom-scrollbar flex gap-6 snap-x snap-proximity overscroll-x-contain items-start"
+          className="p-3 sm:p-6 overflow-x-auto custom-scrollbar flex gap-4 sm:gap-6 snap-x snap-proximity overscroll-x-contain items-start"
         >
           {optimizedRoutes.map((route, i) => {
             const currentDate = addDays(parseISO(startDate), i);
@@ -924,7 +924,11 @@ export const DailySchedule: React.FC = React.memo(() => {
               <div
                 key={i}
                 id={`schedule-day-${i}`}
-                className="flex-shrink-0 w-80 md:w-96 snap-start"
+                className="flex-shrink-0 w-[calc(100vw-2rem)] xs:w-80 md:w-96 max-w-[384px] snap-start"
+                style={{
+                  contentVisibility: i >= 2 ? "auto" : undefined,
+                  containIntrinsicSize: i >= 2 ? "auto 320px auto 650px" : undefined,
+                }}
               >
                 <div
                   className={`bg-white dark:bg-surface-800 rounded-2xl border ${isDayExempt
@@ -933,7 +937,7 @@ export const DailySchedule: React.FC = React.memo(() => {
                     } shadow-xl overflow-hidden flex flex-col ${isExpanded ? "h-auto max-h-none" : "h-full max-h-[780px]"
                     }`}
                 >
-                  <div className="p-4 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">
+                  <div className="p-3.5 sm:p-4 border-b border-surface-100 dark:border-surface-700 bg-surface-50/50 dark:bg-surface-800/50">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex-1 min-w-0 pr-2">
                         {editingDayTitleIndex === i ? (
@@ -1018,7 +1022,7 @@ export const DailySchedule: React.FC = React.memo(() => {
                           })()
                         )}
                       </div>
-                      <div className="flex items-center gap-2 relative">
+                      <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
                         <button
                           type="button"
                           onClick={() => {
@@ -1227,38 +1231,40 @@ export const DailySchedule: React.FC = React.memo(() => {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800/60 transition-all shadow-2xs group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500"
+                            className="w-full sm:w-auto justify-center sm:justify-start inline-flex items-center gap-2 px-3 py-1.5 min-h-[36px] sm:min-h-[32px] rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100/90 active:bg-blue-200/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 dark:active:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800/60 transition-all shadow-2xs group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 touch-manipulation active:scale-[0.98] select-none"
                             title={`Open Day ${i + 1} route in Google Maps (${googleRouteData.totalStops} stops in generated order)`}
                             aria-label={`Open Day ${i + 1} route in Google Maps`}
                           >
                             <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
                             <span>Google Maps Route</span>
-                            <span className="text-[10px] font-normal opacity-80">
+                            <span className="text-[10px] font-semibold opacity-75">
                               ({googleRouteData.totalStops} {googleRouteData.totalStops === 1 ? "stop" : "stops"})
                             </span>
                             <ExternalLink className="w-3 h-3 opacity-60 ml-0.5 shrink-0" />
                           </a>
                         ) : (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[11px] font-bold text-surface-600 dark:text-surface-300 flex items-center gap-1">
+                          <div className="flex items-center gap-1.5 flex-wrap w-full">
+                            <span className="text-[11px] font-bold text-surface-600 dark:text-surface-300 flex items-center gap-1 shrink-0">
                               <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                               <span>Google Maps:</span>
                             </span>
-                            {googleRouteData.parts.map((part, pIdx) => (
-                              <a
-                                key={pIdx}
-                                href={part.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 hover:bg-blue-100/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800/60 transition-all shadow-2xs group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500"
-                                title={`Open ${part.label} in Google Maps (${part.stopCount} stops in generated order)`}
-                                aria-label={`Open ${part.label} in Google Maps`}
-                              >
-                                <span>{part.label}</span>
-                                <ExternalLink className="w-2.5 h-2.5 opacity-60 shrink-0" />
-                              </a>
-                            ))}
+                            <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                              {googleRouteData.parts.map((part, pIdx) => (
+                                <a
+                                  key={pIdx}
+                                  href={part.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex-1 sm:flex-initial text-center justify-center inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] sm:min-h-[30px] rounded-md text-[11px] font-bold bg-blue-50 hover:bg-blue-100/90 active:bg-blue-200/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800/60 transition-all shadow-2xs group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 touch-manipulation active:scale-[0.98] select-none"
+                                  title={`Open ${part.label} in Google Maps (${part.stopCount} stops in generated order)`}
+                                  aria-label={`Open ${part.label} in Google Maps`}
+                                >
+                                  <span>{part.label}</span>
+                                  <ExternalLink className="w-2.5 h-2.5 opacity-60 shrink-0" />
+                                </a>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
