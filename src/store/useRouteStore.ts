@@ -67,6 +67,7 @@ interface RouteState extends ModeData {
   customBuffers: CustomBuffer[];
   dayTitles: Record<number, string>;
   exemptDays: number[];
+  hiddenScheduleDays: number[];
   customTransitTimes: Record<string, number>;
   optimizedRoutes: DayRoute[];
   savedTrips: ItinerarySnapshot[];
@@ -183,6 +184,9 @@ interface RouteState extends ModeData {
   reorderDayStops: (dayIndex: number, activeId: string, overId: string) => void;
   toggleDayExemption: (dayIndex: number) => void;
   setExemptDays: (days: number[]) => void;
+  toggleDayHidden: (dayIndex: number) => void;
+  setHiddenScheduleDays: (days: number[]) => void;
+  showAllDays: () => void;
 
   // Trips & Export/Import
   saveTrip: (customTitle?: string) => void;
@@ -363,6 +367,7 @@ export const useRouteStore = create<RouteState>()(
       customBuffers: [],
       dayTitles: {},
       exemptDays: [],
+      hiddenScheduleDays: [],
       customTransitTimes: {},
       optimizedRoutes: [],
       savedTrips: [],
@@ -423,12 +428,14 @@ export const useRouteStore = create<RouteState>()(
             "yyyy-MM-dd",
           );
           const newExemptDays = state.exemptDays.filter((d) => d < days);
+          const newHiddenScheduleDays = (state.hiddenScheduleDays || []).filter((d) => d < days);
           return {
             days,
             hotels: newHotels,
             places: newPlaces,
             endDate: newEndDate,
             exemptDays: newExemptDays,
+            hiddenScheduleDays: newHiddenScheduleDays,
           };
         }),
       setStartDate: (startDate) =>
@@ -933,6 +940,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: [],
             dayTitles: {},
             exemptDays: [],
+            hiddenScheduleDays: [],
             customTransitTimes: {},
             mockData: state.appMode === "real" ? state.mockData : emptyModeData,
             realData: state.appMode === "real" ? emptyModeData : state.realData,
@@ -1254,6 +1262,20 @@ export const useRouteStore = create<RouteState>()(
 
       setExemptDays: (days: number[]) =>
         set({ exemptDays: [...days].sort((a, b) => a - b) }),
+
+      toggleDayHidden: (dayIndex: number) =>
+        set((state) => {
+          const isHidden = (state.hiddenScheduleDays || []).includes(dayIndex);
+          const newHidden = isHidden
+            ? (state.hiddenScheduleDays || []).filter((d) => d !== dayIndex)
+            : [...(state.hiddenScheduleDays || []), dayIndex].sort((a, b) => a - b);
+          return { hiddenScheduleDays: newHidden };
+        }),
+
+      setHiddenScheduleDays: (days: number[]) =>
+        set({ hiddenScheduleDays: [...days].sort((a, b) => a - b) }),
+
+      showAllDays: () => set({ hiddenScheduleDays: [] }),
 
       setOptimizedRoutes: (optimizedRoutes) =>
         set((state) => ({
@@ -1698,6 +1720,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: state.customBuffers,
             dayTitles: state.dayTitles,
             exemptDays: state.exemptDays,
+            hiddenScheduleDays: state.hiddenScheduleDays || [],
             customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
@@ -1764,6 +1787,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: trip.customBuffers || [],
             dayTitles: trip.dayTitles || {},
             exemptDays: trip.exemptDays || [],
+            hiddenScheduleDays: trip.hiddenScheduleDays || [],
             customTransitTimes: trip.customTransitTimes || (() => {
               const times: Record<string, number> = {};
               trip.optimizedRoutes?.forEach((r) => {
@@ -1822,6 +1846,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: trip.customBuffers || [],
             dayTitles: trip.dayTitles || {},
             exemptDays: trip.exemptDays || [],
+            hiddenScheduleDays: trip.hiddenScheduleDays || [],
             customTransitTimes: trip.customTransitTimes || (() => {
               const times: Record<string, number> = {};
               trip.optimizedRoutes?.forEach((r) => {
@@ -1870,6 +1895,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: state.customBuffers,
             dayTitles: state.dayTitles,
             exemptDays: state.exemptDays,
+            hiddenScheduleDays: state.hiddenScheduleDays || [],
             customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
@@ -1929,6 +1955,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: state.customBuffers,
             dayTitles: state.dayTitles,
             exemptDays: state.exemptDays,
+            hiddenScheduleDays: state.hiddenScheduleDays || [],
             customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
@@ -1976,6 +2003,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: state.customBuffers,
             dayTitles: state.dayTitles,
             exemptDays: state.exemptDays,
+            hiddenScheduleDays: state.hiddenScheduleDays || [],
             customTransitTimes: state.customTransitTimes,
             optimizedRoutes: state.optimizedRoutes,
             savedAt: Date.now(),
@@ -2052,6 +2080,7 @@ export const useRouteStore = create<RouteState>()(
             customBuffers: Array.isArray(trip.customBuffers) ? trip.customBuffers : [],
             dayTitles: trip.dayTitles && typeof trip.dayTitles === "object" ? trip.dayTitles : {},
             exemptDays: Array.isArray(trip.exemptDays) ? trip.exemptDays : [],
+            hiddenScheduleDays: Array.isArray(trip.hiddenScheduleDays) ? trip.hiddenScheduleDays : [],
             customTransitTimes: trip.customTransitTimes || {},
             optimizedRoutes: Array.isArray(trip.optimizedRoutes)
               ? trip.optimizedRoutes
@@ -2160,6 +2189,7 @@ export const useRouteStore = create<RouteState>()(
           customBuffers: state.customBuffers,
           dayTitles: state.dayTitles,
           exemptDays: state.exemptDays,
+          hiddenScheduleDays: state.hiddenScheduleDays || [],
           customTransitTimes: state.customTransitTimes,
           optimizedRoutes: state.optimizedRoutes,
           savedAt: now,
@@ -2217,6 +2247,7 @@ export const useRouteStore = create<RouteState>()(
           customBuffers: trip.customBuffers || [],
           dayTitles: trip.dayTitles || {},
           exemptDays: trip.exemptDays || [],
+          hiddenScheduleDays: trip.hiddenScheduleDays || [],
           customTransitTimes: trip.customTransitTimes || {},
           optimizedRoutes: trip.optimizedRoutes || [],
         });
@@ -2273,6 +2304,7 @@ export const useRouteStore = create<RouteState>()(
           customBuffers: state.customBuffers,
           dayTitles: state.dayTitles,
           exemptDays: state.exemptDays,
+          hiddenScheduleDays: state.hiddenScheduleDays || [],
           customTransitTimes: state.customTransitTimes,
           optimizedRoutes: state.optimizedRoutes,
           savedAt: Date.now(),
@@ -2380,6 +2412,7 @@ export const useRouteStore = create<RouteState>()(
         customBuffers: state.customBuffers,
         dayTitles: state.dayTitles,
         exemptDays: state.exemptDays,
+        hiddenScheduleDays: state.hiddenScheduleDays || [],
         customTransitTimes: state.customTransitTimes,
         places: state.places,
         hotels: state.hotels,

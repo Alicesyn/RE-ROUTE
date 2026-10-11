@@ -20,6 +20,9 @@ import {
   Unlock,
   MapPin,
   ExternalLink,
+  Eye,
+  EyeOff,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "../../services/toastService";
 import { RouteSegment, CustomBuffer, Place } from "../../types";
@@ -92,7 +95,33 @@ export const DailySchedule: React.FC = React.memo(() => {
   const setDayTitle = useRouteStore((s) => s.setDayTitle);
   const exemptDays = useRouteStore((s) => s.exemptDays);
   const toggleDayExemption = useRouteStore((s) => s.toggleDayExemption);
+  const hiddenScheduleDays = useRouteStore((s) => s.hiddenScheduleDays) || [];
+  const toggleDayHidden = useRouteStore((s) => s.toggleDayHidden);
+  const showAllDays = useRouteStore((s) => s.showAllDays);
   const travelMode = useRouteStore((s) => s.travelMode);
+
+  const [isVisibilityOpen, setIsVisibilityOpen] = useState(false);
+  const visibilityMenuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isVisibilityOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (visibilityMenuRef.current && !visibilityMenuRef.current.contains(e.target as Node)) {
+        setIsVisibilityOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsVisibilityOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isVisibilityOpen]);
 
   const [editingDayTitleIndex, setEditingDayTitleIndex] = useState<number | null>(null);
   const [editingDayTitleText, setEditingDayTitleText] = useState<string>("");
@@ -424,12 +453,26 @@ export const DailySchedule: React.FC = React.memo(() => {
     }
   };
 
+  const handleJumpToDay = (dayIndex: number) => {
+    if (hiddenScheduleDays.includes(dayIndex)) {
+      toggleDayHidden(dayIndex);
+      toast.success(`Day ${dayIndex + 1} is now visible.`, "Day Shown");
+      setTimeout(() => {
+        scrollToDay(dayIndex);
+      }, 50);
+    } else {
+      scrollToDay(dayIndex);
+    }
+  };
+
+  const visibleCount = optimizedRoutes.filter((_, idx) => !hiddenScheduleDays.includes(idx)).length;
+
   if (optimizedRoutes.length === 0) return null;
 
   return (
     <>
-      <div className="schedule-container w-full max-w-full overflow-hidden">
-        <div className="px-3 sm:px-6 py-3 border-b border-surface-100 dark:border-surface-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-surface-50 dark:bg-surface-800 shrink-0 max-w-full overflow-hidden">
+      <div className="schedule-container w-full max-w-full">
+        <div className="relative z-30 px-3 sm:px-6 py-3 border-b border-surface-100 dark:border-surface-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-surface-50 dark:bg-surface-800 shrink-0 max-w-full">
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 max-w-full">
             <h2 className="text-base sm:text-lg font-bold text-surface-900 dark:text-white shrink-0">
               Optimized Schedule
@@ -481,6 +524,140 @@ export const DailySchedule: React.FC = React.memo(() => {
               )}
             </button>
 
+            {/* Day Visibility Filter Menu */}
+            <div className="relative shrink-0" ref={visibilityMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsVisibilityOpen((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all shadow-2xs cursor-pointer shrink-0 ${
+                  hiddenScheduleDays.length > 0
+                    ? "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700/80 hover:bg-amber-100/80 dark:hover:bg-amber-900/60"
+                    : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700"
+                }`}
+                title={
+                  hiddenScheduleDays.length > 0
+                    ? `${hiddenScheduleDays.length} of ${optimizedRoutes.length} days hidden. Click to manage visibility.`
+                    : "Manage which days are visible in schedule"
+                }
+                aria-label="Manage schedule day visibility"
+                aria-expanded={isVisibilityOpen}
+              >
+                {hiddenScheduleDays.length > 0 ? (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>
+                      Days ({optimizedRoutes.length - hiddenScheduleDays.length}/{optimizedRoutes.length})
+                    </span>
+                    <span className="text-[10px] font-bold bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded-full">
+                      {hiddenScheduleDays.length} hidden
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5 text-surface-500 dark:text-surface-400 shrink-0" />
+                    <span>Hide Days</span>
+                  </>
+                )}
+              </button>
+
+              {isVisibilityOpen && (
+                <div className="absolute left-0 mt-1.5 w-72 max-w-[calc(100vw-2rem)] bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl shadow-2xl z-50 p-2 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between px-2 py-1.5 border-b border-surface-100 dark:border-surface-700 mb-1">
+                    <span className="text-xs font-bold text-surface-800 dark:text-surface-200">
+                      Visible Days ({optimizedRoutes.length - hiddenScheduleDays.length}/{optimizedRoutes.length})
+                    </span>
+                    {hiddenScheduleDays.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          showAllDays();
+                          toast.success("All days are now visible.", "Schedule Updated");
+                        }}
+                        className="text-[11px] font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors cursor-pointer"
+                      >
+                        Show All
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 py-1">
+                    {optimizedRoutes.map((route, i) => {
+                      const isHidden = hiddenScheduleDays.includes(i);
+                      const customName = route.title || dayTitles[i];
+                      const routeDate = addDays(parseISO(startDate), i);
+                      const dayLabel = customName
+                        ? `Day ${i + 1}: ${customName}`
+                        : dateMode === "fixed"
+                          ? `Day ${i + 1} (${format(routeDate, "EEE, MMM d")})`
+                          : `Day ${i + 1}`;
+
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            toggleDayHidden(i);
+                            if (isHidden) {
+                              toast.success(`Day ${i + 1} is now visible.`, "Day Shown");
+                            } else {
+                              toast.info(`Day ${i + 1} is now hidden.`, "Day Hidden");
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                            isHidden
+                              ? "text-surface-400 dark:text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700/60"
+                              : "text-surface-800 dark:text-surface-200 hover:bg-primary-50 dark:hover:bg-primary-950/40"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={!isHidden}
+                              readOnly
+                              className="rounded border-surface-300 text-primary-600 focus:ring-primary-500 pointer-events-none shrink-0"
+                            />
+                            <span
+                              className={`truncate font-medium ${
+                                isHidden ? "line-through text-surface-400 dark:text-surface-500" : ""
+                              }`}
+                            >
+                              {dayLabel}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 text-[10px] text-surface-400">
+                            <span>
+                              {route.stops.length} {route.stops.length === 1 ? "stop" : "stops"}
+                            </span>
+                            {isHidden ? (
+                              <EyeOff className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5 text-surface-400 shrink-0" />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {hiddenScheduleDays.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  showAllDays();
+                  toast.success("All days are now visible.", "Schedule Updated");
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200 dark:border-primary-800/60 transition-all shadow-2xs cursor-pointer shrink-0"
+                title="Unhide all hidden days"
+              >
+                <RotateCcw className="w-3 h-3 text-primary-600 dark:text-primary-400" />
+                <span className="hidden sm:inline">Unhide All</span>
+                <span className="sm:hidden">Unhide</span>
+              </button>
+            )}
+
             {showClearConfirm ? (
               <div className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/80 rounded-lg animate-in fade-in zoom-in-95 duration-150 max-w-full flex-wrap shrink-0">
                 <span className="text-xs font-semibold text-red-700 dark:text-red-300">
@@ -519,10 +696,10 @@ export const DailySchedule: React.FC = React.memo(() => {
                 aria-label={exemptDays.length > 0 ? "Clear all except for locked days" : "Clear schedule"}
               >
                 <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden xs:inline sm:inline">
+                <span className="hidden sm:inline">
                   {exemptDays.length > 0 ? "Clear Unlocked Days" : "Clear Schedule"}
                 </span>
-                <span className="xs:hidden">
+                <span className="sm:hidden">
                   {exemptDays.length > 0 ? "Clear Unlocked" : "Clear"}
                 </span>
               </button>
@@ -544,7 +721,7 @@ export const DailySchedule: React.FC = React.memo(() => {
                   max={optimizedRoutes.length}
                   onChange={(e) => {
                     const val = parseInt(e.target.value);
-                    if (!isNaN(val)) scrollToDay(val - 1);
+                    if (!isNaN(val)) handleJumpToDay(val - 1);
                   }}
                   className="w-20 bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-md px-2 py-0.5 text-xs font-bold text-primary-600 outline-none focus:ring-1 focus:ring-primary-500 text-center"
                 />
@@ -574,32 +751,52 @@ export const DailySchedule: React.FC = React.memo(() => {
               {optimizedRoutes.map((route, i) => {
                 const btnDate = addDays(parseISO(startDate), i);
                 const customName = route.title || dayTitles[i];
+                const isHidden = hiddenScheduleDays.includes(i);
                 return (
                   <button
                     key={i}
-                    onClick={() => scrollToDay(i)}
+                    onClick={() => handleJumpToDay(i)}
                     title={
-                      customName
-                        ? `${customName} (Day ${i + 1})`
-                        : dateMode === "fixed"
-                          ? `${format(btnDate, "EEE, MMM d")} (Day ${i + 1})`
-                          : `Day ${i + 1}`
+                      isHidden
+                        ? `Day ${i + 1} (Hidden - click to unhide and jump)`
+                        : customName
+                          ? `${customName} (Day ${i + 1})`
+                          : dateMode === "fixed"
+                            ? `${format(btnDate, "EEE, MMM d")} (Day ${i + 1})`
+                            : `Day ${i + 1}`
                     }
-                    className={`px-3 py-1.5 rounded-lg bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 font-bold text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600 transition-all whitespace-nowrap flex flex-col items-center justify-center min-w-[60px] max-w-[120px] ${dateMode === "fixed" ? "text-[10px]" : "text-xs"}`}
+                    className={`px-3 py-1.5 rounded-lg border font-bold transition-all whitespace-nowrap flex flex-col items-center justify-center min-w-[60px] max-w-[120px] ${dateMode === "fixed" ? "text-[10px]" : "text-xs"} ${
+                      isHidden
+                        ? "bg-surface-100/60 dark:bg-surface-800/50 border-dashed border-surface-300 dark:border-surface-600 text-surface-400 dark:text-surface-500 hover:border-primary-400 hover:text-primary-600 opacity-70"
+                        : "bg-white dark:bg-surface-700 border-surface-200 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:border-primary-500 hover:text-primary-600"
+                    }`}
                   >
                     {customName ? (
                       <>
-                        <span className="truncate w-full font-black text-primary-600 dark:text-primary-400 text-center">{customName}</span>
-                        <span className="text-[9px] opacity-60">Day {i + 1}{dateMode === "fixed" ? ` • ${format(btnDate, "EEE, MMM d")}` : ""}</span>
+                        <span className={`truncate w-full font-black text-center ${isHidden ? "line-through text-surface-400 dark:text-surface-500" : "text-primary-600 dark:text-primary-400"}`}>
+                          {customName}
+                        </span>
+                        <span className="text-[9px] opacity-60 flex items-center gap-0.5">
+                          {isHidden && <EyeOff className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
+                          <span>Day {i + 1}{dateMode === "fixed" ? ` • ${format(btnDate, "EEE, MMM d")}` : ""}</span>
+                        </span>
                       </>
                     ) : (
                       dateMode === "fixed" ? (
                         <>
-                          <span className="font-bold text-surface-900 dark:text-white">{format(btnDate, "EEE, MMM d")}</span>
-                          <span className="text-[9px] opacity-60">Day {i + 1}</span>
+                          <span className={`font-bold ${isHidden ? "line-through text-surface-400 dark:text-surface-500" : "text-surface-900 dark:text-white"}`}>
+                            {format(btnDate, "EEE, MMM d")}
+                          </span>
+                          <span className="text-[9px] opacity-60 flex items-center gap-0.5">
+                            {isHidden && <EyeOff className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
+                            <span>Day {i + 1}</span>
+                          </span>
                         </>
                       ) : (
-                        <span>Day {i + 1}</span>
+                        <span className="flex items-center gap-1">
+                          {isHidden && <EyeOff className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
+                          <span className={isHidden ? "line-through" : ""}>Day {i + 1}</span>
+                        </span>
                       )
                     )}
                   </button>
@@ -678,7 +875,32 @@ export const DailySchedule: React.FC = React.memo(() => {
           ref={scrollContainerRef}
           className="p-3 sm:p-6 overflow-x-auto custom-scrollbar flex gap-4 sm:gap-6 snap-x snap-proximity overscroll-x-contain items-start"
         >
-          {optimizedRoutes.map((route, i) => {
+          {visibleCount === 0 ? (
+            <div className="w-full flex flex-col items-center justify-center py-12 px-4 text-center border-2 border-dashed border-surface-200 dark:border-surface-700 rounded-2xl bg-surface-50/50 dark:bg-surface-800/30">
+              <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mb-3">
+                <EyeOff className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <h3 className="text-base font-bold text-surface-900 dark:text-white mb-1">
+                All days are currently hidden
+              </h3>
+              <p className="text-xs text-surface-500 dark:text-surface-400 max-w-sm mb-4">
+                You have hidden all {optimizedRoutes.length} days from the schedule view. Unhide days to view and organize their itineraries.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  showAllDays();
+                  toast.success("All days are now visible.", "Schedule Updated");
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 shadow-sm transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Show All Days</span>
+              </button>
+            </div>
+          ) : (
+            optimizedRoutes.map((route, i) => {
+              if (hiddenScheduleDays.includes(i)) return null;
             const currentDate = addDays(parseISO(startDate), i);
             const isFirstDay = i === 0;
             const isLastDay = i === optimizedRoutes.length - 1;
@@ -1227,6 +1449,22 @@ export const DailySchedule: React.FC = React.memo(() => {
                             <Unlock className="w-4 h-4" />
                           )}
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toggleDayHidden(i);
+                            toast.info(
+                              `Day ${i + 1} hidden. You can unhide it from the Days menu or Jump bar.`,
+                              "Day Hidden",
+                            );
+                          }}
+                          className="p-1.5 rounded-lg border bg-white dark:bg-surface-700 border-surface-200 dark:border-surface-600 text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-600 transition-all cursor-pointer"
+                          title={`Hide Day ${i + 1} from schedule`}
+                          aria-label={`Hide Day ${i + 1}`}
+                        >
+                          <EyeOff className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
 
@@ -1588,7 +1826,7 @@ export const DailySchedule: React.FC = React.memo(() => {
                 </div>
               </div>
             );
-          })}
+          }))}
         </div>
       </div>
       {editingPlaceId && (

@@ -206,6 +206,7 @@ export interface ItinerarySnapshot {
   customBuffers?: CustomBuffer[];
   dayTitles?: Record<number, string>;
   exemptDays?: number[];
+  hiddenScheduleDays?: number[];
   customTransitTimes?: Record<string, number>;
   optimizedRoutes: DayRoute[];
   savedAt: number;
